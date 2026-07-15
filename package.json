@@ -1,0 +1,28 @@
+{
+  "name": "gemihub-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.1.2",
+    "fflate": "^0.8.2",
+    "highlight.js": "^11.11.1",
+    "js-yaml": "^4.1.0",
+    "lucide-react": "^0.563.0",
+    "mermaid": "^11.12.2",
+    "pdfjs-dist": "^6.1.200",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "vite": "^7.1.7",
+    "wysimark-lite": "^0.27.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^6.0.3"
+  }
+}

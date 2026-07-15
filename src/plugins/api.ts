@@ -1,0 +1,128 @@
+import React from "react";
+import ReactDOM from "react-dom";
+import {
+  createDirectory,
+  deleteFile,
+  fetchManagedPluginAsset,
+  listFileTree,
+  readFile,
+  renameFile,
+  searchFiles,
+  writeFile,
+  writeBinaryFile,
+} from "../lib/wailsBackend";
+import type { PluginAPI, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
+import { registerDashboardWidget as registerDashboardWidgetDefinition } from "../dashboard/widgetRegistry";
+
+export interface PluginRegistrationCallbacks {
+  onRegisterView: (view: PluginView) => void;
+  onRegisterSettingsTab: (tab: PluginSettingsTab) => void;
+  onRegisterSlashCommand: (command: PluginSlashCommand) => void;
+  onLLMChat?: (messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }) => Promise<string>;
+}
+
+function safePluginId(pluginId: string): string {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(pluginId)) throw new Error("Invalid plugin id");
+  return pluginId;
+}
+
+export function createPluginAPI(
+  pluginId: string,
+  language: string,
+  permissions: PluginPermission[] | undefined,
+  callbacks: PluginRegistrationCallbacks,
+): PluginAPI {
+  safePluginId(pluginId);
+  const has = (permission: PluginPermission) => {
+    if (!permissions) return true;
+    if (permission === "files") return permissions.includes("files") || permissions.includes("drive");
+    if (permission === "llm") return permissions.includes("llm") || permissions.includes("gemini");
+    return permissions.includes(permission);
+  };
+  const registerWidget = (widget: Parameters<PluginAPI["registerDashboardWidget"]>[0]) => {
+    registerDashboardWidgetDefinition({ ...widget, type: `${pluginId}:${widget.type}` });
+  };
+  const api: PluginAPI = {
+    language,
+    registerView(view) {
+      callbacks.onRegisterView({ ...view, id: `${pluginId}:${view.id}`, pluginId });
+    },
+    registerSettingsTab(tab) {
+      callbacks.onRegisterSettingsTab({ ...tab, pluginId });
+    },
+    registerSlashCommand(command) {
+      callbacks.onRegisterSlashCommand({ ...command, pluginId });
+    },
+    registerDashboardWidget: registerWidget,
+    registerWidget,
+    onActiveFileChanged(callback) {
+      const listener = (event: Event) => callback((event as CustomEvent<{ path: string | null; name: string | null }>).detail);
+      window.addEventListener("llm-hub:active-file", listener);
+      return () => window.removeEventListener("llm-hub:active-file", listener);
+    },
+    selectFile(path) {
+      window.dispatchEvent(new CustomEvent("llm-hub:select-file", { detail: { path } }));
+    },
+    React,
+    ReactDOM,
+    assets: { fetch: (name) => fetchManagedPluginAsset(pluginId, name) },
+  };
+
+  if (has("files")) {
+    api.files = {
+      async read(path) {
+        const result = await readFile(path);
+        if (!result) throw new Error(`File not found: ${path}`);
+        return result.content;
+      },
+      search: searchFiles,
+      tree: listFileTree,
+      async create(path, content) {
+        if (content instanceof ArrayBuffer) {
+          const bytes = new Uint8Array(content);
+          let binary = "";
+          for (const byte of bytes) binary += String.fromCharCode(byte);
+          await writeBinaryFile(path, btoa(binary));
+        } else await writeFile(path, content);
+      },
+      async update(path, content) {
+        if (content instanceof ArrayBuffer) {
+          const bytes = new Uint8Array(content);
+          let binary = "";
+          for (const byte of bytes) binary += String.fromCharCode(byte);
+          await writeBinaryFile(path, btoa(binary));
+        } else await writeFile(path, content);
+      },
+      createDirectory,
+      rename: renameFile,
+      delete: deleteFile,
+    };
+  }
+  if (has("llm") && callbacks.onLLMChat) {
+    api.llm = { chat: callbacks.onLLMChat };
+    api.gemini = api.llm;
+  }
+
+  if (has("storage")) {
+    const storagePath = `.llm-hub/plugin-data/${safePluginId(pluginId)}.json`;
+    const readAll = async (): Promise<Record<string, unknown>> => {
+      try {
+        const result = await readFile(storagePath);
+        return result?.content ? JSON.parse(result.content) as Record<string, unknown> : {};
+      } catch {
+        return {};
+      }
+    };
+    api.storage = {
+      async get(key) { return (await readAll())[key]; },
+      async set(key, value) {
+        const current = await readAll();
+        current[key] = value;
+        await writeFile(storagePath, JSON.stringify(current, null, 2));
+      },
+      getAll: readAll,
+    };
+  }
+
+  return api;
+}

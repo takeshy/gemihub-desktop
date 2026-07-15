@@ -1,0 +1,131 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func testDirectoryApp(t *testing.T) (*App, string) {
+	t.Helper()
+	dir := t.TempDir()
+	app := NewApp()
+	if _, err := app.SetDirectoryBase(dir); err != nil {
+		t.Fatal(err)
+	}
+	return app, dir
+}
+
+func TestDirectoryBaseFileOperations(t *testing.T) {
+	app, _ := testDirectoryApp(t)
+	if err := app.WriteFile("notes/hello.md", "hello DirectoryBase"); err != nil {
+		t.Fatal(err)
+	}
+	read, err := app.ReadFile("notes/hello.md")
+	if err != nil || read.Content != "hello DirectoryBase" {
+		t.Fatalf("unexpected read: %#v, %v", read, err)
+	}
+	tree, err := app.ListFileTree()
+	if err != nil || len(tree) != 1 || !tree[0].IsDir || len(tree[0].Children) != 1 {
+		t.Fatalf("unexpected tree: %#v, %v", tree, err)
+	}
+	results, err := app.SearchFiles("directorybase", 10)
+	if err != nil || len(results) != 1 || results[0].Path != "notes/hello.md" {
+		t.Fatalf("unexpected search: %#v, %v", results, err)
+	}
+	if err := app.RenameFile("notes/hello.md", "notes/renamed.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.DeleteFile("notes/renamed.md"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriteFileCannotReplaceBinaryWithDataURLText(t *testing.T) {
+	app, dir := testDirectoryApp(t)
+	target := filepath.Join(dir, "document.pdf")
+	original := []byte("%PDF-1.7\noriginal binary")
+	if err := os.WriteFile(target, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.WriteFile("document.pdf", "data:application/pdf;base64,JVBERi0xLjc="); err == nil {
+		t.Fatal("expected text write to a binary file to be rejected")
+	}
+	after, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(original) {
+		t.Fatalf("binary file changed: %q", after)
+	}
+}
+
+func TestDirectoryBaseRejectsTraversalAndSymlinkEscape(t *testing.T) {
+	app, dir := testDirectoryApp(t)
+	if err := app.WriteFile("../escape.md", "no"); err == nil {
+		t.Fatal("expected traversal to be rejected")
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dir, "outside")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := app.WriteFile("outside/escape.md", "no"); err == nil {
+		t.Fatal("expected symlink escape to be rejected")
+	}
+}
+
+func TestFileInventoryExcludesApplicationMetadata(t *testing.T) {
+	app, dir := testDirectoryApp(t)
+	if err := app.WriteFile("visible.md", "visible"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".llm-hub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".llm-hub", "secret.json"), []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, err := app.FileInventory()
+	if err != nil || len(files) != 1 || files[0].Path != "visible.md" || files[0].MD5 == "" {
+		t.Fatalf("unexpected inventory: %#v, %v", files, err)
+	}
+}
+
+func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
+	app, _ := testDirectoryApp(t)
+	if err := app.WriteFile("notes/item.md", "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WriteFile("notes/item.md", "two"); err != nil {
+		t.Fatal(err)
+	}
+	history, err := app.ListFileHistory("notes/item.md")
+	if err != nil || len(history) != 1 {
+		t.Fatalf("unexpected history: %#v %v", history, err)
+	}
+	if err := app.RestoreFileHistory("notes/item.md", history[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	read, _ := app.ReadFile("notes/item.md")
+	if read.Content != "one" {
+		t.Fatalf("restore got %q", read.Content)
+	}
+	copyPath, err := app.DuplicateFile("notes/item.md")
+	if err != nil || copyPath != "notes/item copy.md" {
+		t.Fatalf("duplicate: %q %v", copyPath, err)
+	}
+	if err := app.TrashFile(copyPath); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := app.ListTrash()
+	if err != nil || len(trash) != 1 {
+		t.Fatalf("trash: %#v %v", trash, err)
+	}
+	if err := app.RestoreTrash(trash[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.ReadFile(copyPath); err != nil {
+		t.Fatal(err)
+	}
+}

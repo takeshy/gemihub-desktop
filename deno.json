@@ -1,0 +1,23 @@
+{
+  "tasks": {
+    "generate:builtin-okf": "deno run --allow-read --allow-write scripts/generate-builtin-okf.mjs",
+    "dev": "deno task generate:builtin-okf && vite --host 127.0.0.1",
+    "build": "deno task generate:builtin-okf && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "desktop": "go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 dev",
+    "desktop:build": "go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build -devtools",
+    "check": "deno check src/main.tsx"
+  },
+  "nodeModulesDir": "auto",
+  "unstable": [
+    "detect-cjs",
+    "node-globals",
+    "unsafe-proto",
+    "sloppy-imports"
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "lib": ["dom", "dom.iterable", "deno.ns"]
+  }
+}
