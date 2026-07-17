@@ -65,7 +65,9 @@ Use OpenAI-compatible APIs, Gemini, Vertex AI, Anthropic, or local CLIs. Extend 
 - Multi-pane document workspace with row and column layouts
 - Markdown Preview, WYSIWYG, and Raw editing modes
 - Anchored memos for Markdown, PDF, EPUB, HTML, and text
-- Dashboards with File, Base, Kanban, Timeline, Workflow, Web Embed, Secret Manager, and Memo List widgets
+- Dashboards with File, Base, Kanban, Timeline, Calendar, Workflow, Web Embed, Secret Manager, and Memo List widgets
+- Shared Calendar, Timeline, and Kanban status history compatible with the GemiHub Obsidian workspace format
+- Optional memo-to-Timeline history with source links and quoted evidence
 - AI Chat with file context, selection context, local RAG, and confirmed file operations
 - YAML-based workflows with automation and execution history
 - JSON Canvas, portable Bases, and Markdown-backed Kanban boards

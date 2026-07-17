@@ -44,6 +44,7 @@ export interface KanbanDefinition {
   >;
   filter?: unknown;
   cardOrder?: string[];
+  timelineName?: string;
   limit?: number;
   [key: string]: unknown;
 }

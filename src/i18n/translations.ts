@@ -25,6 +25,8 @@ export interface TranslationStrings {
   "settings.externalEditor": string;
   "settings.memoDirectory": string;
   "settings.memoDirectoryHint": string;
+  "settings.memoSyncTimeline": string;
+  "settings.memoSyncTimelineHint": string;
   "settings.language": string;
   "settings.languageSystem": string;
 
@@ -168,6 +170,8 @@ const en: TranslationStrings = {
   "settings.externalEditor": "External editor path",
   "settings.memoDirectory": "Memo directory",
   "settings.memoDirectoryHint": "Directory where per-document memo (Timeline) files are stored. It is independent of the active Project and working directory; the memo feature stays disabled until this is set.",
+  "settings.memoSyncTimeline": "Memo sync Timeline",
+  "settings.memoSyncTimelineHint": "Append new memo posts to this Timeline. Leave blank to disable. Edits and deletions are not synchronized.",
   "settings.language": "Language",
   "settings.languageSystem": "System",
 
@@ -302,6 +306,8 @@ const ja: TranslationStrings = {
   "settings.externalEditor": "外部エディタのパス",
   "settings.memoDirectory": "メモディレクトリ",
   "settings.memoDirectoryHint": "ドキュメントごとのメモ (Timeline) を保存するディレクトリ。Projectや作業ディレクトリとは独立しており、未設定の間はメモ機能は無効です。",
+  "settings.memoSyncTimeline": "メモ同期先Timeline",
+  "settings.memoSyncTimelineHint": "新規メモをこのTimelineにも追記します。空欄なら無効です。編集と削除は同期しません。",
   "settings.language": "言語",
   "settings.languageSystem": "システム",
 

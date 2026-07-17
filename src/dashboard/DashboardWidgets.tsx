@@ -94,6 +94,7 @@ import { BaseViewRenderer } from "./BaseViewRenderer";
 import type { DashboardWidget } from "./types";
 import { KanbanCardModal } from "./KanbanCardModal";
 import { WidgetDialog } from "./WidgetDialog";
+import { appendTimelineEntry } from "./timelineEvents";
 
 function configText(
   config: Record<string, unknown>,
@@ -1024,7 +1025,8 @@ export function KanbanDashboardWidget(
     status: string,
     target = dropTarget,
   ) => {
-    const parsed = parseFrontmatter(row.content),
+    const oldStatus = String(row.frontmatter[statusKey] ?? ""),
+      parsed = parseFrontmatter(row.content),
       frontmatter = { ...parsed.frontmatter, [statusKey]: status };
     await writeFile(
       row.path,
@@ -1032,6 +1034,14 @@ export function KanbanDashboardWidget(
         yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd()
       }\n---\n${parsed.body.replace(/^\s+/, "")}`,
     );
+    const timelineName = configText(definition, "timelineName");
+    if (timelineName && oldStatus !== status) {
+      const oldLabel = boardColumns.find((column) => column.value === oldStatus)?.label || oldStatus || "Unspecified";
+      const nextLabel = boardColumns.find((column) => column.value === status)?.label || status || "Unspecified";
+      const kanbanName = configText(definition, "title", baseName(configText(config, "kanban")).replace(/\.kanban$/i, "") || "Kanban");
+      const title = String(row.frontmatter[titleKey] || row.name);
+      await appendTimelineEntry(timelineName, `> [!info] Kanban · ${kanbanName}\n> [[${row.path}|${title}]]\n> \`${oldLabel}\` → \`${nextLabel}\``);
+    }
     const currentOrder = Array.isArray(config.cardOrder)
         ? config.cardOrder.filter((item): item is string =>
           typeof item === "string"

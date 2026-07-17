@@ -70,6 +70,7 @@ import {
 } from "./DashboardWidgets";
 import { WidgetPalette } from "./WidgetPalette";
 import { WidgetSettingsPanel } from "./WidgetSettingsPanel";
+import { CalendarDashboardWidget } from "./CalendarDashboardWidget";
 import {
   dashboardWidgetDefinition,
   dashboardWidgetHasSettings,
@@ -519,6 +520,7 @@ export function DashboardView({
   openFilePickerRequest,
   externalEditorPath,
   memoDirPath,
+  memoSyncTimeline,
   onOpenSettings,
   openPathRequest,
   onHistoryCheckpoint,
@@ -555,6 +557,7 @@ export function DashboardView({
   openFilePickerRequest: number;
   externalEditorPath: string;
   memoDirPath: string;
+  memoSyncTimeline: string;
   onOpenSettings: () => void;
   openPathRequest: {
     id: number;
@@ -2735,6 +2738,7 @@ export function DashboardView({
                         onConfigChange={(config) =>
                           updateFileWidget(widget.id, config)}
                         memoDirPath={memoDirPath}
+                        memoSyncTimeline={memoSyncTimeline}
                         onOpenPath={(path) => void openPathAsWidget(path)}
                         onNavigatePath={(path) =>
                           void navigateWidgetToPath(widget.id, path)}
@@ -2771,6 +2775,14 @@ export function DashboardView({
                         settings={chatSettings}
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
+                      />
+                    )}
+                    {widget.type === "calendar" && (
+                      <CalendarDashboardWidget
+                        config={widget.config}
+                        isDark={isDark}
+                        onOpenPath={(path) =>
+                          void openKnownPathInLastActiveWidget(path)}
                       />
                     )}
                     {widget.type === "kanban" && (

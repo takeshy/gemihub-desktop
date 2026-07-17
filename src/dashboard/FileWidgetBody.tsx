@@ -39,6 +39,7 @@ import { KanbanFileView } from "./KanbanFileView";
 import { CanvasFileView } from "../canvas/CanvasFileView";
 import { docKindFor } from "./documentKind";
 import type { ActiveSelection } from "../llm/selection";
+import { appendTimelineEntry, memoTimelineBody } from "./timelineEvents";
 
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
@@ -177,6 +178,7 @@ export function FileWidgetBody({
   isDark,
   onConfigChange,
   memoDirPath,
+  memoSyncTimeline,
   onOpenPath,
   onNavigatePath,
   onActivate,
@@ -188,6 +190,7 @@ export function FileWidgetBody({
   isDark: boolean;
   onConfigChange: (config: Record<string, unknown>) => void;
   memoDirPath: string;
+  memoSyncTimeline: string;
   onOpenPath: (path: string) => void;
   onNavigatePath: (path: string) => void;
   onActivate: () => void;
@@ -313,8 +316,17 @@ export function FileWidgetBody({
       // a pure suffix so existing bytes stay untouched.
       await appendMemoFile(memoFilePath, `\n\n---\n\n${block}\n`);
     }
+    if (memoSyncTimeline.trim()) {
+      try {
+        await appendTimelineEntry(memoSyncTimeline, memoTimelineBody(filePath, fileName, postDraft?.quote || "", body));
+      } catch (error) {
+        // The memo is already durable. Do not make a sync failure invite a
+        // retry that would duplicate the source memo.
+        console.warn("Could not sync memo post to Timeline.", error);
+      }
+    }
     await reloadMemo();
-  }, [filePath, memoFilePath, reloadMemo]);
+  }, [fileName, filePath, memoFilePath, memoSyncTimeline, reloadMemo]);
 
   const rewriteMemo = useCallback(async (mutate: (content: string) => string | null) => {
     if (!memoFilePath) throw new Error("memo path is not configured");

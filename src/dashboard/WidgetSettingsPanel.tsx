@@ -932,6 +932,15 @@ export function WidgetSettingsPanel({
                             </label>
                           </div>
                           <label>
+                            <span>Timeline for status history</span>
+                            <input
+                              value={typeof kanbanDefinition.timelineName === "string" ? kanbanDefinition.timelineName : ""}
+                              onChange={(event) => updateKanbanDefinition({ ...kanbanDefinition, timelineName: event.target.value })}
+                              placeholder="Timeline (leave blank to disable)"
+                            />
+                            <small>Card moves are appended to the selected Timeline.</small>
+                          </label>
+                          <label>
                             <span>Columns (`value: Label`, one per line)</span>
                             <textarea
                               rows={7}
@@ -1068,6 +1077,19 @@ export function WidgetSettingsPanel({
                   />
                 </label>
               </div>
+            </>
+          )}
+          {widget.type === "calendar" && (
+            <>
+              <label>
+                <span>Timeline name</span>
+                <input value={text(widget.config, "timelineName") || "Timeline"} onChange={(event) => set("timelineName", event.target.value)} />
+                <small>Events and posts use Dashboards/Timeline/&lt;name&gt;.</small>
+              </label>
+              <label className="check">
+                <span>Show locally created files</span>
+                <input type="checkbox" checked={widget.config.showCreatedFiles !== false} onChange={(event) => set("showCreatedFiles", event.target.checked)} />
+              </label>
             </>
           )}
           {widget.type === "secret-manager" && fileInput("folder", "Secrets")}

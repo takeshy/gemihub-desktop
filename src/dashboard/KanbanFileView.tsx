@@ -65,6 +65,7 @@ function KanbanDefinitionEditor({ definition, onChange, onClose }: {
         <label><span>Folder</span><input value={definition.folder || ""} onChange={(event) => patch({ folder: event.target.value })} placeholder="Tasks" /></label>
         <label><span>Status property</span><input value={definition.statusProperty || "status"} onChange={(event) => patch({ statusProperty: event.target.value })} /></label>
         <label><span>Title property</span><input value={definition.titleProperty || "title"} onChange={(event) => patch({ titleProperty: event.target.value })} /></label>
+        <label><span>Timeline for status history</span><input value={definition.timelineName || ""} onChange={(event) => patch({ timelineName: event.target.value })} placeholder="Timeline (leave blank to disable)" /></label>
         <section>
           <strong>Columns</strong>
           {columns.map((column, index) => (

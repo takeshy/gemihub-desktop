@@ -8,6 +8,8 @@ timestamp: 2026-07-15T00:00:00+09:00
 
 Kanbanは `.kanban` 定義とMarkdownフォルダを組み合わせるボードです。各Markdownファイルがカードになり、指定したfrontmatter property（既定は `status`）の値で列を決めます。カードを別の列へ移動すると、元Markdownのstatus propertyへ反映されます。
 
+`.kanban` 定義の `timelineName` にTimeline名を設定すると、カードを別の列へ移動した履歴が `Dashboards/Timeline/<name>/YYYY-MM-DD.md` に追記されます。履歴にはボード名、カードへのWiki Link、移動前後の列が保存され、同じTimelineを参照するCalendarにも表示されます。空欄の場合は履歴を記録しません。
+
 # 設定
 
 * board title

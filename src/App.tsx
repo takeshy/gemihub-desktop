@@ -170,6 +170,7 @@ const STORAGE_KEY = "gemihub-desktop:document";
 const NAME_KEY = "gemihub-desktop:fileName";
 const EXTERNAL_EDITOR_KEY = "gemihub-desktop:externalEditorPath";
 const MEMO_DIRECTORY_KEY = "gemihub-desktop:memoDirectory";
+const MEMO_SYNC_TIMELINE_KEY = "gemihub-desktop:memoSyncTimeline";
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
 const LANGUAGE_KEY = "gemihub-desktop:language";
 const DIRECTORY_BASE_KEY = "llm-hub:directoryBase";
@@ -851,6 +852,9 @@ export default function App() {
   const [memoDirPath, setMemoDirPath] = useState(() =>
     readStored(MEMO_DIRECTORY_KEY, "")
   );
+  const [memoSyncTimeline, setMemoSyncTimeline] = useState(() =>
+    readStored(MEMO_SYNC_TIMELINE_KEY, "")
+  );
   const [languageSetting, setLanguageSetting] = useState<LanguageSetting>(
     () => {
       const stored = readStored(LANGUAGE_KEY, "system");
@@ -1170,6 +1174,14 @@ export default function App() {
       console.warn("Could not persist memo directory.", error);
     }
   }, [memoDirPath]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MEMO_SYNC_TIMELINE_KEY, memoSyncTimeline);
+    } catch (error) {
+      console.warn("Could not persist memo Timeline sync setting.", error);
+    }
+  }, [memoSyncTimeline]);
 
   useEffect(() => {
     localStorage.setItem(AI_ENABLED_KEY, String(aiEnabled));
@@ -1843,6 +1855,7 @@ export default function App() {
                   openFilePickerRequest={openFilePickerRequest}
                   externalEditorPath={externalEditorPath}
                   memoDirPath={memoDirPath}
+                  memoSyncTimeline={memoSyncTimeline}
                   onOpenSettings={() => setSettingsOpen(true)}
                   openPathRequest={openPathRequest}
                   onHistoryCheckpoint={requestHistoryCheckpoint}
@@ -2133,6 +2146,17 @@ export default function App() {
                         </div>
                         <small className="settings-hint">
                           {tr("settings.memoDirectoryHint")}
+                        </small>
+                      </label>
+                      <label className="settings-field">
+                        <span>{tr("settings.memoSyncTimeline")}</span>
+                        <input
+                          value={memoSyncTimeline}
+                          onChange={(event) => setMemoSyncTimeline(event.target.value)}
+                          placeholder="Timeline"
+                        />
+                        <small className="settings-hint">
+                          {tr("settings.memoSyncTimelineHint")}
                         </small>
                       </label>
                     </>

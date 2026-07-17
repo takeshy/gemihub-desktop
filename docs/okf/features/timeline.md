@@ -10,6 +10,12 @@ Timeline widgetは、短い記録を時系列で残す個人用Markdownマイク
 
 Timelineは日々のログや進捗メモのように「投稿時刻順で記録を積む」用途に向きます。特定ドキュメントの引用位置と紐づけたい場合は、別機能の[引用付きメモ](/features/document-memos.md)を使います。複数の文書メモを横断して確認する場合はMemo List widgetを使います。
 
+# Calendar・Kanbanとの同期
+
+TimelineはCalendarとKanbanの同期先でもあります。Calendarの予定とKanbanのステータス変更履歴は通常の投稿と同じ `Dashboards/Timeline/<name>/YYYY-MM-DD.md` に保存され、GemiHubのObsidian版とDesktop版から同じデータを利用できます。
+
+Calendar widgetでは月表示から日付を選び、Timeline投稿、予定、ローカルで作成されたファイルをまとめて確認できます。予定は追加後に別の日付へ移動できます。widget settingsの `timelineName` で参照先を指定し、`showCreatedFiles` で作成ファイルの表示を切り替えます。
+
 # 保存の仕組みとタグ
 
 投稿は`Dashboards/Timeline/<Timeline名>/`配下にMarkdownとして保存され、[引用付きメモ](/features/document-memos.md)と同じ投稿ファイル形式を共有しています。本文中に書いた`#タグ`は自動的に抽出され、絞り込み用のタグ一覧に使われます（frontmatterのtagsではなく本文中の記法です）。長い投稿は行数・文字数のしきい値を超えると折りたたまれ、「もっと見る」で展開します。

@@ -20,6 +20,7 @@ const core: DashboardWidgetDefinition[] = [
   { type: "markdown", label: "File", description: "Legacy File widget alias", defaultConfig: { path: "", showHeader: true, showProperties: true }, defaultSize: { w: 6, h: 4 }, hidden: true, filePathKey: "path", configurable: true },
   { type: "kanban", label: "Kanban", description: "Board backed by a .kanban definition and Markdown folder", defaultConfig: { kanban: "", folder: "", statusProperty: "status", titleProperty: "title", columns: [{ value: "todo", label: "To do" }, { value: "doing", label: "Doing" }, { value: "done", label: "Done" }] }, defaultSize: { w: 8, h: 5 }, filePathKey: "kanban", configurable: true },
   { type: "timeline", label: "Timeline", description: "Personal Markdown microblog", defaultConfig: { name: "", latestCount: 20, composerMode: "raw" }, defaultSize: { w: 6, h: 6 }, configurable: true },
+  { type: "calendar", label: "Calendar", description: "Timeline events and locally created files", defaultConfig: { timelineName: "Timeline", showCreatedFiles: true }, defaultSize: { w: 6, h: 6 }, configurable: true },
   { type: "workflow", label: "Workflow", description: "Run a workflow and display one output variable", defaultConfig: { workflow: "", outputVariable: "result", output: "table", limit: 50, showHeader: true }, defaultSize: { w: 6, h: 5 }, filePathKey: "workflow", configurable: true },
   { type: "web", label: "Web Embed", description: "Embed an external HTTPS page", defaultConfig: { url: "", showHeader: true }, defaultSize: { w: 6, h: 4 }, configurable: true },
   { type: "memo-list", label: "Memo List", description: "Browse all document memo files", defaultConfig: {}, defaultSize: { w: 4, h: 5 } },
@@ -61,6 +62,8 @@ export function isDashboardWidgetConfigured(widget: DashboardWidget): boolean {
       return stringValue("path").length > 0 || stringValue("filePath").length > 0;
     case "timeline":
       return stringValue("name").length > 0 || stringValue("path").length > 0;
+    case "calendar":
+      return stringValue("timelineName").length > 0;
     case "web":
       return stringValue("url").length > 0;
     case "workflow":

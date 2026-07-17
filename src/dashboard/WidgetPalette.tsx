@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { Database, FileText, Globe, KanbanSquare, KeyRound, List, MessageCircle, Workflow, X } from "lucide-react";
+import { CalendarDays, Database, FileText, Globe, KanbanSquare, KeyRound, List, MessageCircle, Workflow, X } from "lucide-react";
 import { dashboardWidgetDefinitions } from "./widgetRegistry";
 
-const icons = { base: Database, file: FileText, kanban: KanbanSquare, timeline: MessageCircle, workflow: Workflow, web: Globe, "memo-list": List, "secret-manager": KeyRound } as const;
+const icons = { base: Database, file: FileText, kanban: KanbanSquare, timeline: MessageCircle, calendar: CalendarDays, workflow: Workflow, web: Globe, "memo-list": List, "secret-manager": KeyRound } as const;
 const paletteOrder = ["base", "file", "kanban"];
 
 export function WidgetPalette({ onSelect, onClose }: { onSelect: (type: string) => void; onClose: () => void }) {
