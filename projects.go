@@ -50,8 +50,17 @@ func (a *App) defaultWorkspacePath(configDir string) (string, error) {
 
 var projectResourceDirectories = []string{"Dashboards", "Memos", "Secrets", "skills", "workflows"}
 
+var projectDefaultDirectories = []string{
+	filepath.Join("Dashboards", "Timeline", "Timeline"),
+}
+
 func ensureProjectLayout(path string) error {
 	for _, dir := range projectResourceDirectories {
+		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
+			return err
+		}
+	}
+	for _, dir := range projectDefaultDirectories {
 		if err := os.MkdirAll(filepath.Join(path, dir), 0o755); err != nil {
 			return err
 		}

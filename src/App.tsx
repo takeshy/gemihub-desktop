@@ -107,6 +107,7 @@ import {
   switchChatProvider,
 } from "./llm/settings";
 import type { ActiveSelection } from "./llm/selection";
+import { ModelProviderManager } from "./llm/ModelProviderManager";
 import { McpHttpClient, McpHttpError } from "./mcp/httpClient";
 import { McpStdioClient } from "./mcp/stdioClient";
 import { getWorkflowSpecTool } from "./workflow/workflowSpec";
@@ -2214,8 +2215,9 @@ export default function App() {
                       </section>
                       {aiEnabled && (
                         <>
+                          <ModelProviderManager settings={chatSettings} onChange={setChatSettings} />
                           <label className="settings-field">
-                        <span>Provider</span>
+                        <span>Selected provider</span>
                         <select
                           className="settings-select"
                           value={chatSettings.provider}
@@ -2474,8 +2476,19 @@ export default function App() {
                           </p>
                         </div>
                       </section>
+                      <section className="model-provider-list">
+                        <header><div><strong>CLI providers</strong><small>Each verified CLI appears as a separate Chat model.</small></div></header>
+                        <div className="model-provider-cards">
+                          {(Object.entries(cliNames) as [CLIType, string][]).map(([type, label]) => (
+                            <button type="button" key={type} className={`model-provider-card ${chatSettings.cliType === type ? "selected" : ""}`} onClick={() => { setCLIStatus(""); setChatSettings((current) => ({ ...current, provider: "cli", cliType: type })); }}>
+                              <span><strong>{label}</strong><small>{chatSettings.cliPaths[type] || "Auto-detect from PATH"}</small></span>
+                              <i className={chatSettings.verifiedCliTypes.includes(type) ? "configured" : ""}>{chatSettings.verifiedCliTypes.includes(type) ? "Verified" : "Not verified"}</i>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
                       <label className="settings-field">
-                        <span>CLI</span>
+                        <span>Selected CLI</span>
                         <select
                           className="settings-select"
                           value={chatSettings.cliType}

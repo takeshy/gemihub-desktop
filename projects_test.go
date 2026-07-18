@@ -28,6 +28,9 @@ func TestSingleProjectInitializeAndChangeDirectory(t *testing.T) {
 			t.Fatalf("missing project directory %s", dir)
 		}
 	}
+	if info, err := os.Stat(filepath.Join(state.Projects[0].Path, "Dashboards", "Timeline", "Timeline")); err != nil || !info.IsDir() {
+		t.Fatalf("missing default Timeline directory")
+	}
 	projectPath := filepath.Join(config, "custom")
 	state, err := app.SetProjectDirectory(projectPath)
 	if err != nil {

@@ -2,6 +2,7 @@ import { fileInventory, readFile, writeFile } from "../lib/wailsBackend";
 import { appendEntryBlock, buildEntryBlock, deleteEntry, parseMemoFile, uniqueEntryId } from "../lib/memoTimeline";
 
 export const TIMELINE_ROOT = "Dashboards/Timeline";
+export const DEFAULT_TIMELINE_NAME = "Timeline";
 const EVENT_MARKER_RE = /<!--\s*calendar-event:\s*(\d{4}-\d{2}-\d{2})\s*-->/i;
 
 export interface TimelineCalendarPost {
@@ -16,7 +17,7 @@ export interface TimelineCalendarPost {
 
 export function sanitizeTimelineName(value: string): string {
   return value.trim().replace(/\.md$/i, "").replace(/[\\/:*?"<>|#[\]\n\r\t]+/g, "-")
-    .replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "Timeline";
+    .replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || DEFAULT_TIMELINE_NAME;
 }
 
 export function localDayKey(date = new Date()): string {
