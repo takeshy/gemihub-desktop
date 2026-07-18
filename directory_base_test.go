@@ -16,6 +16,35 @@ func testDirectoryApp(t *testing.T) (*App, string) {
 	return app, dir
 }
 
+func TestProjectFileAPIUsesEntireActiveProject(t *testing.T) {
+	workspace := t.TempDir()
+	project := t.TempDir()
+	app := NewApp()
+	if _, err := app.SetDirectoryBase(workspace); err != nil {
+		t.Fatal(err)
+	}
+	app.projectState = ProjectState{ActiveProjectID: "one", Projects: []Project{{ID: "one", Name: "One", Path: project}}}
+	if err := app.WriteProjectFile("notes/readme.md", "project data"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(project, "notes", "readme.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "notes", "readme.md")); !os.IsNotExist(err) {
+		t.Fatalf("project file leaked into workspace: %v", err)
+	}
+	files, err := app.ListProjectFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Path != "notes/readme.md" {
+		t.Fatalf("unexpected project inventory: %#v", files)
+	}
+	if _, err := app.ReadProjectFile("../outside.md"); err == nil {
+		t.Fatal("project path traversal was accepted")
+	}
+}
+
 func TestDirectoryBaseFileOperations(t *testing.T) {
 	app, _ := testDirectoryApp(t)
 	if err := app.WriteFile("notes/hello.md", "hello DirectoryBase"); err != nil {
@@ -58,6 +87,14 @@ func TestWriteFileCannotReplaceBinaryWithDataURLText(t *testing.T) {
 	}
 	if string(after) != string(original) {
 		t.Fatalf("binary file changed: %q", after)
+	}
+}
+
+func TestAudioScoreFormatsUseBinaryProjectIO(t *testing.T) {
+	for _, name := range []string{"track.mp3", "track.wav", "track.aac", "track.wma", "score.mid", "score.midi"} {
+		if !shouldReadAsDataURL(name) {
+			t.Errorf("%s was not classified as binary", name)
+		}
 	}
 }
 

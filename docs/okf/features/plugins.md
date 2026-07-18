@@ -8,6 +8,8 @@ timestamp: 2026-07-15T00:00:00+09:00
 
 Pluginは `.llm-hub/plugins/{id}` へ手動配置するか、GemiHub DesktopのPlugin管理画面からGitHub Release assetを取得してインストールします。Pluginはview、command、Dashboard widget、Chat連携などを追加できます。
 
+`files` permissionを宣言したPluginはworkspace file APIに加えて`api.projectFiles`を利用できます。`projectFiles.current()`でactive projectを確認し、`inventory/read/create/update/rename/delete`でそのproject全体をproject相対pathとして扱います。projectを外部サービスと同期するPluginは、接続時のproject IDを保存し、別projectへの切替後に誤同期しないよう照合してください。`network` permissionを宣言したPluginは`api.network.request()`でDesktopのHTTPS transportを利用できます。
+
 # 権限と更新
 
 Pluginはmanifestで必要なpermissionを宣言します。宣言できる種類は`files`、`storage`、`network`、`llm`、`drive`、`gemini`、`calendar`、`gmail`、`sheets`です（`drive`はfile toolへのアクセスも暗黙に含みます）。管理インストールではplugin ID、version、host compatibility、file integrity、permission変更を検証し、成功した場合だけatomicに差し替えます。uninstallも管理画面から行えます。

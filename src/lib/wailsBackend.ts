@@ -364,6 +364,13 @@ interface WailsAppApi {
   GetDirectoryBase: () => Promise<string>;
   ListFileTree: () => Promise<FileTreeNode[]>;
   ListProjectTree: () => Promise<FileTreeNode[]>;
+  ListProjectFiles: () => Promise<DirectoryFileEntry[]>;
+  ReadProjectFile: (path: string) => Promise<LocalFileResult>;
+  WriteProjectFile: (path: string, content: string) => Promise<void>;
+  WriteProjectBinaryFile: (path: string, contentBase64: string) => Promise<void>;
+  CreateProjectDirectory: (path: string) => Promise<void>;
+  RenameProjectFile: (oldPath: string, newPath: string) => Promise<void>;
+  DeleteProjectFile: (path: string) => Promise<void>;
   ReadFile: (path: string) => Promise<LocalFileResult>;
   WriteFile: (path: string, content: string) => Promise<void>;
   ReadProjectStateFile: (name: string) => Promise<string>;
@@ -595,6 +602,45 @@ export async function listFileTree(): Promise<FileTreeNode[]> {
 
 export async function listProjectTree(): Promise<FileTreeNode[]> {
   return await appApi()?.ListProjectTree() ?? [];
+}
+
+export async function listProjectFiles(): Promise<DirectoryFileEntry[]> {
+  return await appApi()?.ListProjectFiles() ?? [];
+}
+
+export async function readProjectFile(path: string): Promise<LocalFileResult | null> {
+  if (!path) return null;
+  return await appApi()?.ReadProjectFile(path) ?? null;
+}
+
+export async function writeProjectFile(path: string, content: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Project file writes require the desktop app.");
+  await api.WriteProjectFile(path, content);
+}
+
+export async function writeProjectBinaryFile(path: string, contentBase64: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Project binary writes require the desktop app.");
+  await api.WriteProjectBinaryFile(path, contentBase64);
+}
+
+export async function createProjectDirectory(path: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Project directory creation requires the desktop app.");
+  await api.CreateProjectDirectory(path);
+}
+
+export async function renameProjectFile(oldPath: string, newPath: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Project file rename requires the desktop app.");
+  await api.RenameProjectFile(oldPath, newPath);
+}
+
+export async function deleteProjectFile(path: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Project file deletion requires the desktop app.");
+  await api.DeleteProjectFile(path);
 }
 
 export async function readFile(path: string): Promise<LocalFileResult | null> {

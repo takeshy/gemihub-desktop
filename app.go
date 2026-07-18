@@ -290,7 +290,7 @@ func readLocalFile(path string) (*LocalFileResult, error) {
 
 func shouldReadAsDataURL(fileName string) bool {
 	switch stringsToLower(filepath.Ext(fileName)) {
-	case ".avif", ".bmp", ".epub", ".gif", ".jpg", ".jpeg", ".pdf", ".png", ".svg", ".webp", ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".mp4", ".webm", ".mov":
+	case ".avif", ".bmp", ".epub", ".gif", ".jpg", ".jpeg", ".pdf", ".png", ".svg", ".webp", ".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".wma", ".mid", ".midi", ".mp4", ".webm", ".mov":
 		return true
 	default:
 		return false

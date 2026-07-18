@@ -2,14 +2,23 @@ import React from "react";
 import ReactDOM from "react-dom";
 import {
   createDirectory,
+  createProjectDirectory,
+  deleteProjectFile,
   deleteFile,
+  externalHTTPRequest,
   fetchManagedPluginAsset,
+  listProjectFiles,
+  listProjects,
   listFileTree,
   readFile,
+  readProjectFile,
   renameFile,
+  renameProjectFile,
   searchFiles,
   writeFile,
   writeBinaryFile,
+  writeProjectBinaryFile,
+  writeProjectFile,
 } from "../lib/wailsBackend";
 import type { PluginAPI, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
 import { registerDashboardWidget as registerDashboardWidgetDefinition } from "../dashboard/widgetRegistry";
@@ -97,7 +106,33 @@ export function createPluginAPI(
       rename: renameFile,
       delete: deleteFile,
     };
+    const writeProjectContent = async (path: string, content: string | ArrayBuffer) => {
+      if (content instanceof ArrayBuffer) {
+        const bytes = new Uint8Array(content);
+        let binary = "";
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        await writeProjectBinaryFile(path, btoa(binary));
+      } else await writeProjectFile(path, content);
+    };
+    api.projectFiles = {
+      async current() {
+        const state = await listProjects();
+        return state.projects.find((project) => project.id === state.activeProjectId) ?? null;
+      },
+      inventory: listProjectFiles,
+      async read(path) {
+        const result = await readProjectFile(path);
+        if (!result) throw new Error(`Project file not found: ${path}`);
+        return result.content;
+      },
+      create: writeProjectContent,
+      update: writeProjectContent,
+      createDirectory: createProjectDirectory,
+      rename: renameProjectFile,
+      delete: deleteProjectFile,
+    };
   }
+  if (has("network")) api.network = { request: externalHTTPRequest };
   if (has("llm") && callbacks.onLLMChat) {
     api.llm = { chat: callbacks.onLLMChat };
     api.gemini = api.llm;

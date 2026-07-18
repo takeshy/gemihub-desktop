@@ -3,7 +3,7 @@ import { externalHTTPRequest, installPluginFiles, readFile, uninstallManagedPlug
 import type { PluginConfig, PluginManifest, PluginPermission } from "./types";
 
 export const PLUGIN_HOST_ID = "gemihub-desktop";
-export const PLUGIN_HOST_VERSION = "0.1.0";
+export const PLUGIN_HOST_VERSION = "0.8.1";
 const LEGACY_PLUGIN_HOST_ID = "llm-hub-workspace";
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -16,6 +16,7 @@ export interface PluginPreview {
   repo: string;
   releaseTag: string;
   manifest: PluginManifest;
+  manifestSHA256: string;
 }
 
 export interface PluginInstallMetadata {
@@ -59,13 +60,13 @@ export function comparePluginVersions(leftValue: string, rightValue: string): nu
 }
 
 export function normalizePluginRepo(input: string): string | null {
-  const trimmed = input.trim().replace(/\.git$/, "").replace(/\/$/, "");
+  const trimmed = input.trim().replace(/\/+$/, "").replace(/\.git$/i, "");
   const shorthand = trimmed.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/);
   if (shorthand) return `${shorthand[1]}/${shorthand[2]}`;
   try {
     const parsed = new URL(trimmed);
     const parts = parsed.pathname.split("/").filter(Boolean);
-    return parsed.protocol === "https:" && parsed.hostname === "github.com" && parts.length === 2 && parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part)) ? `${parts[0]}/${parts[1]}` : null;
+    return parsed.protocol === "https:" && parsed.hostname === "github.com" && !parsed.search && !parsed.hash && parts.length === 2 && parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part)) ? `${parts[0]}/${parts[1]}` : null;
   } catch { return null; }
 }
 
@@ -84,6 +85,14 @@ async function getText(url: string): Promise<string> {
 async function sha256Text(content: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function releaseAssetFileName(path: string): string | null {
+  if (path.includes("\\") || path.startsWith("/")) return null;
+  const segments = path.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) return null;
+  const name = segments.at(-1)!;
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? name : null;
 }
 
 function validateManifest(raw: unknown, releaseTag: string): PluginManifest {
@@ -109,7 +118,7 @@ function validateManifest(raw: unknown, releaseTag: string): PluginManifest {
       if (asset.sha256 && !/^[a-f0-9]{64}$/i.test(asset.sha256)) throw new Error(`Invalid asset SHA-256: ${asset.name}`);
     }
   }
-  if (manifest.hostPatches && (typeof manifest.hostPatches !== "object" || Object.values(manifest.hostPatches).some((paths) => !Array.isArray(paths) || paths.some((path) => typeof path !== "string")))) throw new Error("Invalid hostPatches declaration");
+  if (manifest.hostPatches && (typeof manifest.hostPatches !== "object" || Object.values(manifest.hostPatches).some((paths) => !Array.isArray(paths) || paths.some((path) => typeof path !== "string" || !releaseAssetFileName(path))))) throw new Error("Invalid hostPatches declaration");
   return manifest;
 }
 
@@ -126,22 +135,30 @@ async function releaseInfo(repo: string): Promise<{ release: GitHubRelease; mani
 export async function previewPluginRelease(input: string): Promise<PluginPreview> {
   const repo = normalizePluginRepo(input);
   if (!repo) throw new Error("Use a GitHub repository in owner/repo format");
-  const { release, manifest } = await releaseInfo(repo);
-  return { repo, releaseTag: release.tag_name, manifest };
+  const { release, manifest, manifestText } = await releaseInfo(repo);
+  return { repo, releaseTag: release.tag_name, manifest, manifestSHA256: await sha256Text(manifestText) };
 }
 
-export async function installPluginRelease(input: string, expectedID?: string): Promise<{ config: PluginConfig; metadata: PluginInstallMetadata }> {
+export async function installPluginRelease(input: string, expectedID?: string, approvedPreview?: PluginPreview): Promise<{ config: PluginConfig; metadata: PluginInstallMetadata }> {
   const repo = normalizePluginRepo(input);
   if (!repo) throw new Error("Use a GitHub repository in owner/repo format");
   const { release, manifest, manifestText } = await releaseInfo(repo);
   if (expectedID && manifest.id !== expectedID) throw new Error(`Plugin id changed from ${expectedID} to ${manifest.id}`);
+  if (approvedPreview) {
+    const unchanged = approvedPreview.repo === repo
+      && approvedPreview.releaseTag === release.tag_name
+      && approvedPreview.manifest.id === manifest.id
+      && approvedPreview.manifestSHA256 === await sha256Text(manifestText);
+    if (!unchanged) throw new Error("The GitHub release changed after preview. Review the plugin again before installing.");
+  }
   const requiredNames = ["main.js", ...(release.assets.some((asset) => asset.name === "styles.css") ? ["styles.css"] : [])];
   const patchHostID = manifest.hostPatches?.[PLUGIN_HOST_ID] ? PLUGIN_HOST_ID : manifest.hostPatches?.[LEGACY_PLUGIN_HOST_ID] ? LEGACY_PLUGIN_HOST_ID : PLUGIN_HOST_ID;
   const patchNames = manifest.hostPatches?.[patchHostID] ?? [];
   const uniqueNames = [...new Set([...requiredNames, ...patchNames])];
   const downloaded = await Promise.all(uniqueNames.map(async (name) => {
-    if (name.includes("/") || name.includes("\\") || name.startsWith(".")) throw new Error(`Unsafe release asset name: ${name}`);
-    const asset = release.assets.find((candidate) => candidate.name === name);
+    const assetName = releaseAssetFileName(name);
+    if (!assetName) throw new Error(`Unsafe release asset name: ${name}`);
+    const asset = release.assets.find((candidate) => candidate.name === assetName);
     if (!asset) throw new Error(`Release asset not found: ${name}`);
     return { relativePath: `${manifest.id}/${name}`, content: await getText(asset.browser_download_url) };
   }));

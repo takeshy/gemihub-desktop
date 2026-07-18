@@ -180,7 +180,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
       const existing = configs.find((config) => config.id === preview.manifest.id);
       if (existing && (existing.source !== "github" || existing.repo !== preview.repo)) throw new Error(`Plugin id ${preview.manifest.id} is already installed from another source.`);
       if (!window.confirm(`Install ${preview.manifest.name} ${preview.manifest.version}?\nPermissions: ${permissions}\nWorkspace patches: ${patches}`)) return;
-      const installed = await installPluginRelease(preview.repo, existing?.id);
+      const installed = await installPluginRelease(preview.repo, existing?.id, preview);
       setConfigs((current) => [...current.filter((config) => config.id !== installed.config.id), installed.config]);
       setRepoInput(""); setManagerMessage(`Installed ${preview.manifest.name} ${preview.manifest.version}.`);
       setPluginRefresh((value) => value + 1);
@@ -198,7 +198,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
       const added = (preview.manifest.permissions ?? []).filter((permission) => !oldPermissions.has(permission));
       const detail = added.length ? `\nNew permissions: ${added.join(", ")}` : "";
       if (!window.confirm(`Update ${preview.manifest.name} from ${config.version} to ${preview.manifest.version}?${detail}`)) return;
-      const installed = await installPluginRelease(config.repo, config.id);
+      const installed = await installPluginRelease(config.repo, config.id, preview);
       setConfigs((current) => current.map((item) => item.id === config.id ? { ...installed.config, enabled: item.enabled } : item));
       setManagerMessage(`Updated ${preview.manifest.name} to ${preview.manifest.version}.`);
       setPluginRefresh((value) => value + 1);
@@ -242,7 +242,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
           <section className="plugin-manager">
             <header><div><strong>Plugins</strong><small>GemiHub-compatible local extensions</small></div><button type="button" onClick={() => setManagerOpen(false)}><X size={16} /></button></header>
             {!directoryBase && <p>Select a workspace directory to discover `.llm-hub/plugins`.</p>}
-            {directoryBase && <div className="plugin-install"><input value={repoInput} onChange={(event) => setRepoInput(event.target.value)} placeholder="owner/repository" disabled={!!pluginBusy} /><button type="button" onClick={() => void installFromGitHub()} disabled={!repoInput.trim() || !!pluginBusy}>{pluginBusy === "install" ? <Loader2 className="spin" size={14} /> : <Download size={14} />} Install</button></div>}
+            {directoryBase && <form className="plugin-install" onSubmit={(event) => { event.preventDefault(); void installFromGitHub(); }}><input value={repoInput} onChange={(event) => setRepoInput(event.target.value)} placeholder="owner/repository or GitHub URL" aria-label="GitHub plugin repository" disabled={!!pluginBusy} /><button type="submit" disabled={!repoInput.trim() || !!pluginBusy}>{pluginBusy === "install" ? <Loader2 className="spin" size={14} /> : <Download size={14} />} Install</button></form>}
             {managerMessage && <p className="plugin-manager-message">{managerMessage}</p>}
             {manifests.map((manifest) => {
               const config = configs.find((item) => item.id === manifest.id);

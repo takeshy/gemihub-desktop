@@ -19,7 +19,7 @@ import (
 )
 
 const maxPluginInstallBytes = 64 * 1024 * 1024
-const maxPluginAssetBytes = 128 * 1024 * 1024
+const maxPluginAssetBytes = 256 * 1024 * 1024
 
 var managedPluginIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 var managedPluginVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)

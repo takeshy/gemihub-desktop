@@ -101,6 +101,18 @@ func (a *App) directoryPath(path string, allowMissing bool) (string, error) {
 	if base == "" {
 		return "", fmt.Errorf("directory base is not configured")
 	}
+	return resolvePathInsideBase(base, path, allowMissing)
+}
+
+func (a *App) projectPath(path string, allowMissing bool) (string, error) {
+	base := a.GetActiveProjectPath()
+	if base == "" {
+		return "", fmt.Errorf("active project is not configured")
+	}
+	return resolvePathInsideBase(base, strings.TrimSpace(path), allowMissing)
+}
+
+func resolvePathInsideBase(base, path string, allowMissing bool) (string, error) {
 	rel := filepath.FromSlash(strings.TrimSpace(path))
 	if filepath.IsAbs(rel) {
 		var err error
@@ -191,6 +203,124 @@ func (a *App) ListProjectTree() ([]FileTreeNode, error) {
 		}
 	}
 	return result, nil
+}
+
+// ListProjectFiles returns every user file in the active project. It is kept
+// separate from FileInventory because workspace and project files have
+// different lifecycle and sync scopes.
+func (a *App) ListProjectFiles() ([]DirectoryFileEntry, error) {
+	return fileInventoryForBase(a.GetActiveProjectPath())
+}
+
+func (a *App) ReadProjectFile(path string) (*LocalFileResult, error) {
+	target, err := a.projectPath(path, false)
+	if err != nil {
+		return nil, err
+	}
+	result, err := readLocalFile(target)
+	if err != nil {
+		return nil, err
+	}
+	result.Path = filepath.ToSlash(strings.TrimSpace(path))
+	return result, nil
+}
+
+func (a *App) WriteProjectFile(path, content string) error {
+	target, err := a.projectPath(path, true)
+	if err != nil {
+		return err
+	}
+	if shouldReadAsDataURL(filepath.Base(target)) {
+		return fmt.Errorf("refusing text write to binary file %q", filepath.Base(target))
+	}
+	if err := a.recordFileVersion(path, target); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".gemihub-project-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, target)
+}
+
+func (a *App) WriteProjectBinaryFile(path, contentBase64 string) error {
+	target, err := a.projectPath(path, true)
+	if err != nil {
+		return err
+	}
+	content, err := base64.StdEncoding.DecodeString(contentBase64)
+	if err != nil {
+		return fmt.Errorf("invalid base64 content: %w", err)
+	}
+	if err := a.recordFileVersion(path, target); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, content, 0o644)
+}
+
+func (a *App) CreateProjectDirectory(path string) error {
+	target, err := a.projectPath(path, true)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(target, 0o755)
+}
+
+func (a *App) RenameProjectFile(oldPath, newPath string) error {
+	oldTarget, err := a.projectPath(oldPath, false)
+	if err != nil {
+		return err
+	}
+	newTarget, err := a.projectPath(newPath, true)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Lstat(newTarget); err == nil {
+		return fmt.Errorf("target already exists")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(newTarget), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(oldTarget, newTarget)
+}
+
+func (a *App) DeleteProjectFile(path string) error {
+	target, err := a.projectPath(path, false)
+	if err != nil {
+		return err
+	}
+	if target == a.GetActiveProjectPath() {
+		return fmt.Errorf("cannot delete the active project")
+	}
+	info, err := os.Lstat(target)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return os.Remove(target)
+	}
+	return os.Remove(target)
 }
 
 func buildFileTree(base, dir string) ([]FileTreeNode, error) {

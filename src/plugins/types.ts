@@ -1,6 +1,6 @@
 import type React from "react";
 import type ReactDOM from "react-dom";
-import type { FileSearchResult, FileTreeNode } from "../lib/wailsBackend";
+import type { DirectoryFileEntry, ExternalHTTPRequest, ExternalHTTPResponse, FileSearchResult, FileTreeNode, Project } from "../lib/wailsBackend";
 import type { DashboardWidgetDefinition } from "../dashboard/widgetRegistry";
 
 export type PluginPermission = "files" | "storage" | "network" | "llm" | "drive" | "gemini" | "calendar" | "gmail" | "sheets";
@@ -80,6 +80,17 @@ export interface PluginAPI {
     rename(oldPath: string, newPath: string): Promise<void>;
     delete(path: string): Promise<void>;
   };
+  projectFiles?: {
+    current(): Promise<Project | null>;
+    inventory(): Promise<DirectoryFileEntry[]>;
+    read(path: string): Promise<string>;
+    create(path: string, content: string | ArrayBuffer): Promise<void>;
+    update(path: string, content: string | ArrayBuffer): Promise<void>;
+    createDirectory(path: string): Promise<void>;
+    rename(oldPath: string, newPath: string): Promise<void>;
+    delete(path: string): Promise<void>;
+  };
+  network?: { request(request: ExternalHTTPRequest): Promise<ExternalHTTPResponse> };
   llm?: { chat(messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }): Promise<string> };
   gemini?: { chat(messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }): Promise<string> };
   storage?: {
