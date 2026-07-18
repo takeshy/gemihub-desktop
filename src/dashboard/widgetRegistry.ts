@@ -1,5 +1,39 @@
 import type { DashboardWidget } from "./types";
-import type { ComponentType } from "react";
+import type { ComponentType, FC, ReactNode } from "react";
+
+export interface DashboardWidgetContext {
+  host: "dashboard" | "canvas";
+  size: { w: number; h: number };
+  widgetId?: string;
+  dashboardFileId?: string;
+  dashboardFileName?: string;
+  onConfigChange?: (config: unknown) => void;
+}
+
+export interface DashboardWidgetConfigEditorProps {
+  config: unknown;
+  onChange: (next: unknown) => void;
+  setDoneAction?: (action: (() => unknown | Promise<unknown>) | null) => void;
+  widgetType?: string;
+  onTypeChange?: (nextType: string, nextConfig: Record<string, unknown>) => void;
+  widgetId?: string;
+  dashboardFileId?: string;
+  dashboardFileName?: string;
+}
+
+/** Web-compatible contract exposed through PluginAPI.registerWidget. */
+export interface PluginWidgetDefinition {
+  type: string;
+  label: string;
+  hiddenFromPalette?: boolean;
+  icon?: ReactNode;
+  defaultConfig: unknown;
+  render: (config: unknown, ctx: DashboardWidgetContext) => ReactNode;
+  defaultSize?: { w: number; h: number };
+  ConfigEditor?: FC<DashboardWidgetConfigEditorProps>;
+  filePathOf?: (config: unknown) => string | undefined;
+  externalUrlOf?: (config: unknown) => string | undefined;
+}
 
 export interface DashboardWidgetDefinition {
   type: string;
@@ -12,6 +46,13 @@ export interface DashboardWidgetDefinition {
   component?: ComponentType<{ config: Record<string, unknown>; onChange: (config: Record<string, unknown>) => void }>;
   configComponent?: ComponentType<{ config: Record<string, unknown>; onChange: (config: Record<string, unknown>) => void }>;
   configurable?: boolean;
+  /** Web-compatible plugin widget fields. */
+  render?: PluginWidgetDefinition["render"];
+  ConfigEditor?: PluginWidgetDefinition["ConfigEditor"];
+  filePathOf?: PluginWidgetDefinition["filePathOf"];
+  externalUrlOf?: PluginWidgetDefinition["externalUrlOf"];
+  hiddenFromPalette?: boolean;
+  icon?: ReactNode;
 }
 
 const core: DashboardWidgetDefinition[] = [
@@ -34,11 +75,25 @@ export function registerDashboardWidget(definition: DashboardWidgetDefinition): 
   if (typeof window !== "undefined") window.dispatchEvent(new Event("llm-hub:dashboard-widgets-changed"));
 }
 
+export function registerPluginWidget(definition: PluginWidgetDefinition): void {
+  const normalized: DashboardWidgetDefinition = {
+    ...definition,
+    description: "",
+    defaultConfig: definition.defaultConfig as Record<string, unknown>,
+    defaultSize: definition.defaultSize ?? { w: 4, h: 4 },
+    hidden: definition.hiddenFromPalette,
+    configurable: !!definition.ConfigEditor,
+  };
+  registerDashboardWidget(normalized);
+}
+
 export function dashboardWidgetDefinitions(): DashboardWidgetDefinition[] { return [...core, ...pluginDefinitions.values()]; }
 export function dashboardWidgetDefinition(type: string): DashboardWidgetDefinition | null { return dashboardWidgetDefinitions().find((item) => item.type === type) ?? null; }
 
 export function dashboardWidgetFilePath(widget: DashboardWidget): string | undefined {
   const definition = dashboardWidgetDefinition(widget.type);
+  const resolved = definition?.filePathOf?.(widget.config);
+  if (resolved) return resolved;
   const key = definition?.filePathKey;
   if (!key) return undefined;
   const value = widget.config[key];
@@ -47,7 +102,7 @@ export function dashboardWidgetFilePath(widget: DashboardWidget): string | undef
 
 export function dashboardWidgetHasSettings(type: string): boolean {
   const definition = dashboardWidgetDefinition(type);
-  return definition?.configurable === true || !!definition?.configComponent;
+  return definition?.configurable === true || !!definition?.configComponent || !!definition?.ConfigEditor;
 }
 
 /** Whether a newly-added widget has its primary selection configured. */

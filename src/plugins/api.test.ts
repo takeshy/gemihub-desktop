@@ -1,6 +1,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import { createPluginAPI } from "./api.ts";
 import type { PluginSlashCommand } from "./types.ts";
+import { dashboardWidgetDefinition } from "../dashboard/widgetRegistry.ts";
 
 Deno.test("plugin API registers slash commands and exposes the LLM compatibility alias", async () => {
   let registered: PluginSlashCommand | undefined;
@@ -19,4 +20,17 @@ Deno.test("plugin API registers slash commands and exposes the LLM compatibility
   assertEquals(registered?.name, "summarize");
   assertEquals(await api.llm?.chat([{ role: "user", content: "hello" }]), "hello");
   assertEquals(await api.gemini?.chat([{ role: "user", content: "hello" }]), "hello");
+});
+
+Deno.test("plugin API exposes the Web registerWidget contract", () => {
+  const api = createPluginAPI("example", "en", [], {
+    onRegisterView: () => undefined,
+    onRegisterSettingsTab: () => undefined,
+    onRegisterSlashCommand: () => undefined,
+  });
+  const render = () => "widget";
+  api.registerWidget({ type: "summary", label: "Summary", defaultConfig: {}, render });
+
+  assertEquals(dashboardWidgetDefinition("summary")?.render, render);
+  assertEquals(dashboardWidgetDefinition("example:summary"), null);
 });

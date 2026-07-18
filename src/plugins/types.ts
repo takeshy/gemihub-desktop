@@ -1,7 +1,7 @@
 import type React from "react";
 import type ReactDOM from "react-dom";
 import type { DirectoryFileEntry, ExternalHTTPRequest, ExternalHTTPResponse, FileSearchResult, FileTreeNode, Project } from "../lib/wailsBackend";
-import type { DashboardWidgetDefinition } from "../dashboard/widgetRegistry";
+import type { PluginWidgetDefinition } from "../dashboard/widgetRegistry";
 
 export type PluginPermission = "files" | "storage" | "network" | "llm" | "drive" | "gemini" | "calendar" | "gmail" | "sheets";
 
@@ -66,8 +66,7 @@ export interface PluginAPI {
   registerView(view: Omit<PluginView, "id" | "pluginId"> & { id: string }): void;
   registerSettingsTab(tab: { name?: string; component: PluginSettingsTab["component"] }): void;
   registerSlashCommand(command: Omit<PluginSlashCommand, "pluginId">): void;
-  registerDashboardWidget(widget: DashboardWidgetDefinition): void;
-  registerWidget(widget: DashboardWidgetDefinition): void;
+  registerWidget(widget: PluginWidgetDefinition): void;
   onActiveFileChanged(callback: (detail: { path: string | null; name: string | null }) => void): () => void;
   selectFile(path: string): void;
   files?: {

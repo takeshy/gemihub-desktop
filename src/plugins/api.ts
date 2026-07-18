@@ -21,7 +21,7 @@ import {
   writeProjectFile,
 } from "../lib/wailsBackend";
 import type { PluginAPI, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
-import { registerDashboardWidget as registerDashboardWidgetDefinition } from "../dashboard/widgetRegistry";
+import { registerPluginWidget } from "../dashboard/widgetRegistry";
 
 export interface PluginRegistrationCallbacks {
   onRegisterView: (view: PluginView) => void;
@@ -48,9 +48,6 @@ export function createPluginAPI(
     if (permission === "llm") return permissions.includes("llm") || permissions.includes("gemini");
     return permissions.includes(permission);
   };
-  const registerWidget = (widget: Parameters<PluginAPI["registerDashboardWidget"]>[0]) => {
-    registerDashboardWidgetDefinition({ ...widget, type: `${pluginId}:${widget.type}` });
-  };
   const api: PluginAPI = {
     language,
     registerView(view) {
@@ -62,8 +59,9 @@ export function createPluginAPI(
     registerSlashCommand(command) {
       callbacks.onRegisterSlashCommand({ ...command, pluginId });
     },
-    registerDashboardWidget: registerWidget,
-    registerWidget,
+    registerWidget(widget) {
+      registerPluginWidget(widget);
+    },
     onActiveFileChanged(callback) {
       const listener = (event: Event) => callback((event as CustomEvent<{ path: string | null; name: string | null }>).detail);
       window.addEventListener("llm-hub:active-file", listener);

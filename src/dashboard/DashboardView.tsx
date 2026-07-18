@@ -73,6 +73,7 @@ import { WidgetSettingsPanel } from "./WidgetSettingsPanel";
 import { CalendarDashboardWidget } from "./CalendarDashboardWidget";
 import {
   dashboardWidgetDefinition,
+  dashboardWidgetFilePath,
   dashboardWidgetHasSettings,
   isDashboardWidgetConfigured,
 } from "./widgetRegistry";
@@ -2005,8 +2006,11 @@ export function DashboardView({
               const displayLayout = smallGrid
                 ? (smallLayouts.get(widget.id) ?? widget.layout)
                 : widget.layout;
-              const pluginWidget = dashboardWidgetDefinition(widget.type)
-                ?.component;
+              const pluginDefinition = dashboardWidgetDefinition(widget.type);
+              const pluginWidget = pluginDefinition?.component;
+              const pluginRender = pluginDefinition?.render;
+              const pluginBackingPath = dashboardWidgetFilePath(widget);
+              const pluginExternalURL = pluginDefinition?.externalUrlOf?.(widget.config);
               const handleAction = async (id: string) => {
                 if (id === "new") {
                   updateFileConfig({
@@ -2692,6 +2696,21 @@ export function DashboardView({
                             <Settings2 size={14} />
                           </button>
                         )}
+                        {(pluginBackingPath || pluginExternalURL) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (pluginExternalURL) {
+                                window.open(pluginExternalURL, "_blank", "noopener,noreferrer");
+                              } else if (pluginBackingPath) {
+                                void openKnownPathInLastActiveWidget(pluginBackingPath);
+                              }
+                            }}
+                            title="Open"
+                          >
+                            <ExternalLink size={14} />
+                          </button>
+                        )}
                         {!isMaximized && (
                           <button
                             type="button"
@@ -2811,7 +2830,18 @@ export function DashboardView({
                         managerId={`${dashboardPath || "local"}:${widget.id}`}
                       />
                     )}
-                    {pluginWidget && (() => {
+                    {pluginRender?.(widget.config, {
+                      host: "dashboard",
+                      size: { w: displayLayout.w, h: displayLayout.h },
+                      widgetId: widget.id,
+                      dashboardFileName: dashboardPath || undefined,
+                      onConfigChange: (config) => {
+                        if (config && typeof config === "object" && !Array.isArray(config)) {
+                          updateWidget({ ...widget, config: config as Record<string, unknown> });
+                        }
+                      },
+                    })}
+                    {!pluginRender && pluginWidget && (() => {
                       const PluginWidget = pluginWidget;
                       return (
                         <PluginWidget
@@ -2821,7 +2851,7 @@ export function DashboardView({
                         />
                       );
                     })()}
-                    {!pluginWidget && !isFileWidgetType(widget.type) &&
+                    {!pluginRender && !pluginWidget && !isFileWidgetType(widget.type) &&
                       ![
                         "workflow",
                         "web",
@@ -2950,6 +2980,8 @@ export function DashboardView({
                 } else updateWidget({ ...widget, config });
               }}
               onTitleChange={(title) => updateWidget({ ...widget, title })}
+              dashboardFileName={dashboardPath}
+              onTypeChange={(type, config) => updateWidget({ ...widget, type, config })}
               onDelete={() => {
                 if (!confirm("Delete this widget?")) return;
                 onChange({

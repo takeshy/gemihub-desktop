@@ -110,6 +110,8 @@ export function WidgetSettingsPanel({
   onTitleChange,
   onDelete,
   onClose,
+  dashboardFileName,
+  onTypeChange,
 }: {
   widget: DashboardWidget;
   chatSettings: ChatSettings;
@@ -118,9 +120,11 @@ export function WidgetSettingsPanel({
   onTitleChange: (title: string) => void;
   onDelete: () => void;
   onClose: () => void;
+  dashboardFileName?: string;
+  onTypeChange?: (nextType: string, nextConfig: Record<string, unknown>) => void;
 }) {
   const definition = dashboardWidgetDefinition(widget.type);
-  const PluginConfig = definition?.configComponent;
+  const PluginConfig = definition?.ConfigEditor ?? definition?.configComponent;
   const workflowCard =
     widget.config.card && typeof widget.config.card === "object" &&
       !Array.isArray(widget.config.card)
@@ -1094,7 +1098,9 @@ export function WidgetSettingsPanel({
           )}
           {widget.type === "secret-manager" && fileInput("folder", "Secrets")}
           {PluginConfig && (
-            <PluginConfig config={widget.config} onChange={onChange} />
+            <PluginConfig config={widget.config} onChange={(next) => {
+              if (next && typeof next === "object" && !Array.isArray(next)) onChange(next as Record<string, unknown>);
+            }} widgetType={widget.type} widgetId={widget.id} dashboardFileName={dashboardFileName} onTypeChange={onTypeChange} />
           )}
           {!definition && (
             <label>
