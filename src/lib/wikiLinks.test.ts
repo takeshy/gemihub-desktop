@@ -9,6 +9,8 @@ Deno.test("wiki links remain relative for logical workspace files", () => {
 Deno.test("wiki links preserve workspace URI roots", () => {
   assertEquals(pathDirName("workspace://current.md"), "workspace://");
   assertEquals(pathDirName("workspace://folder/current.md"), "workspace://folder");
+  assertEquals(pathDirName("project://current.md"), "project://");
+  assertEquals(pathDirName("project://folder/current.md"), "project://folder");
   assertEquals(wikiTargetToPath("workspace://", "Note"), "workspace://Note.md");
   assertEquals(wikiTargetToPath("workspace://folder", "Note"), "workspace://folder/Note.md");
 });

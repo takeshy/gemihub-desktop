@@ -277,6 +277,46 @@ body.resizing-side-pane * {
   overflow: auto;
 }
 
+.plugin-sidebar-view {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.plugin-sidebar-view > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  padding: 7px;
+}
+
+.plugin-sidebar-view select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 6px 8px;
+}
+
+.plugin-sidebar-view > header button {
+  display: inline-flex;
+  width: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.plugin-sidebar-view > header button:hover:not(:disabled) { color: var(--accent); }
+.plugin-sidebar-view > header button:disabled { cursor: default; opacity: 0.4; }
+.plugin-sidebar-view-body { min-height: 0; overflow: auto; }
+
 .chat-placeholder {
   display: flex;
   height: 100%;
@@ -363,6 +403,9 @@ body.resizing-side-pane * {
   color: var(--danger);
   font-size: 0.72rem;
 }
+
+.plugin-manager article.plugin-manager-selected { border-color: var(--accent); }
+.plugin-manager-settings { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 10px; }
 
 .plugin-install {
   display: grid;

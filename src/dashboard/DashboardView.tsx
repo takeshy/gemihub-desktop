@@ -72,6 +72,7 @@ import { WidgetPalette } from "./WidgetPalette";
 import { WidgetSettingsPanel } from "./WidgetSettingsPanel";
 import { CalendarDashboardWidget } from "./CalendarDashboardWidget";
 import {
+  dashboardPluginWidgetForPath,
   dashboardWidgetDefinition,
   dashboardWidgetFilePath,
   dashboardWidgetHasSettings,
@@ -197,13 +198,18 @@ function filePathFromConfig(config: Record<string, unknown>): string {
 }
 function fileReadPathFromConfig(config: Record<string, unknown>): string {
   const raw = rawFilePathFromConfig(config);
-  if (/^workspace:\/\//i.test(raw) || config.fileScope !== "workspace") return raw;
-  return `workspace://${raw}`;
+  if (/^(?:workspace|project):\/\//i.test(raw)) return raw;
+  if (config.fileScope === "workspace") return `workspace://${raw}`;
+  if (config.fileScope === "project") return `project://${raw}`;
+  return raw;
 }
-function normalizedFileReference(path?: string): { filePath?: string; fileScope?: "workspace" } {
+function normalizedFileReference(path?: string): { filePath?: string; fileScope?: "workspace" | "project" } {
   if (!path) return { filePath: path, fileScope: undefined };
   if (/^workspace:\/\//i.test(path)) {
     return { filePath: path.replace(/^workspace:\/\//i, ""), fileScope: "workspace" };
+  }
+  if (/^project:\/\//i.test(path)) {
+    return { filePath: path.replace(/^project:\/\//i, ""), fileScope: "project" };
   }
   return { filePath: path, fileScope: undefined };
 }
@@ -533,6 +539,7 @@ export function DashboardView({
   workspaceBase,
   dashboardPath,
   startupPaths,
+  pluginWidgetRequest,
 }: {
   data: DashboardData;
   onChange: Dispatch<SetStateAction<DashboardData>>;
@@ -574,6 +581,7 @@ export function DashboardView({
   workspaceBase: string;
   dashboardPath?: string;
   startupPaths: string[] | null;
+  pluginWidgetRequest: { id: number; type: string; config: Record<string, unknown> };
 }) {
   const { t: tr } = useI18n();
   const cols = Math.max(
@@ -624,6 +632,7 @@ export function DashboardView({
   const handledOpenPathRequestRef = useRef(0);
   const handledEqualizeLayoutRequestRef = useRef(0);
   const handledSplitWidgetRequestRef = useRef(0);
+  const handledPluginWidgetRequestRef = useRef(0);
   const hydratedFilePathsRef = useRef(new Set<string>());
   const previousWorkspaceBaseRef = useRef(workspaceBase);
   const handledStartupFilesRef = useRef(false);
@@ -801,7 +810,7 @@ export function DashboardView({
         if (existing) window.clearTimeout(existing);
         const timer = window.setTimeout(() => {
           fileSaveTimersRef.current.delete(widgetId);
-          void writeFile(nextFilePath, nextContent).then(() => {
+          void writeFile(fileReadPathFromConfig(nextConfig), nextContent).then(() => {
             window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
             window.dispatchEvent(
               new CustomEvent("llm-hub:dashboard-data-changed", {
@@ -1190,6 +1199,45 @@ export function DashboardView({
     [cols, fitGridRows],
   );
 
+  const openOrUpdatePluginWidget = useCallback((type: string, config: Record<string, unknown>): string | undefined => {
+    const existing = data.widgets.find((widget) => widget.type === type);
+    if (!existing && data.widgets.length >= MAX_WIDGETS) return undefined;
+    const next = existing ? null : widgetDefaults(type, data.widgets, activeLayoutDirection, cols);
+    const targetId = existing?.id || next?.id;
+    if (!targetId) return undefined;
+    onChange((current) => {
+      const currentWidget = current.widgets.find((widget) => widget.type === type);
+      if (currentWidget) {
+        const definition = dashboardWidgetDefinition(currentWidget.type);
+        return {
+          ...current,
+          widgets: current.widgets.map((widget) => widget.id === currentWidget.id
+            ? { ...widget, title: definition?.label || widget.title, config: { ...widget.config, ...config } }
+            : widget),
+        };
+      }
+      if (!next) return current;
+      next.config = { ...next.config, ...config };
+      return { ...current, widgets: buildAddedWidgets(current.widgets, next, activeLayoutDirection) };
+    });
+    setActiveWidgetId(targetId);
+    setMaximizedWidgetId(targetId);
+    return targetId;
+  }, [activeLayoutDirection, buildAddedWidgets, cols, data.widgets, onChange]);
+
+  const openPluginWidgetForPath = useCallback((path: string): string | undefined => {
+    const definition = dashboardPluginWidgetForPath(path);
+    return definition ? openOrUpdatePluginWidget(definition.type, { filePath: path }) : undefined;
+  }, [openOrUpdatePluginWidget]);
+
+  const revealGenericFileWidget = useCallback((widgetId: string) => {
+    if (!maximizedWidgetId) return;
+    const maximized = data.widgets.find((widget) => widget.id === maximizedWidgetId);
+    if (maximized && (maximized.type.startsWith("plugin-view:") || dashboardWidgetDefinition(maximized.type)?.pluginId)) {
+      setMaximizedWidgetId(widgetId);
+    }
+  }, [data.widgets, maximizedWidgetId]);
+
   const createFileWidget = useCallback(
     (
       fileName: string,
@@ -1214,9 +1262,10 @@ export function DashboardView({
       });
       recordRecentFile(fileName, content, mode, filePath);
       setActiveWidgetId(nextWidgetId);
+      revealGenericFileWidget(nextWidgetId);
       return nextWidgetId;
     },
-    [buildAddedWidgets, cols, onChange, recordRecentFile],
+    [buildAddedWidgets, cols, onChange, recordRecentFile, revealGenericFileWidget],
   );
 
   const openFileInWidget = useCallback(
@@ -1244,8 +1293,9 @@ export function DashboardView({
         ...extraConfig,
       });
       setActiveWidgetId(widgetId);
+      revealGenericFileWidget(widgetId);
     },
-    [data.widgets, updateFileWidget],
+    [data.widgets, revealGenericFileWidget, updateFileWidget],
   );
 
   const resolveOpenedFile = useCallback(async (path: string, result: { path: string; fileName: string; content: string }) => {
@@ -1350,7 +1400,10 @@ export function DashboardView({
       mode: MarkdownMode,
       filePath?: string,
     ) => {
-      if (filePickerCreatesWidget) {
+      if (filePath && openPluginWidgetForPath(filePath)) {
+        // A plugin main view owns this file type; do not create or replace a
+        // generic File widget with its binary/file-object representation.
+      } else if (filePickerCreatesWidget) {
         createFileWidget(
           fileName,
           content,
@@ -1373,11 +1426,14 @@ export function DashboardView({
       filePickerCreatesWidget,
       filePickerTargetId,
       openFileInWidget,
+      openPluginWidgetForPath,
     ],
   );
 
   const openPathAsWidget = useCallback(
     async (path: string) => {
+      const pluginWidgetId = openPluginWidgetForPath(path);
+      if (pluginWidgetId) return pluginWidgetId;
       const result = await readKnownPath(path);
       if (!result) return undefined;
       const opened = await resolveOpenedFile(path, result);
@@ -1390,11 +1446,13 @@ export function DashboardView({
         opened.extraConfig,
       );
     },
-    [activeLayoutDirection, createFileWidget, readKnownPath, resolveOpenedFile],
+    [activeLayoutDirection, createFileWidget, openPluginWidgetForPath, readKnownPath, resolveOpenedFile],
   );
 
   const openDirectoryPathAsWidget = useCallback(
     async (path: string) => {
+      const pluginWidgetId = openPluginWidgetForPath(path);
+      if (pluginWidgetId) return pluginWidgetId;
       const result = await readFile(path);
       if (!result) return undefined;
       const opened = await resolveOpenedFile(path, result);
@@ -1407,15 +1465,21 @@ export function DashboardView({
         opened.extraConfig,
       );
     },
-    [activeLayoutDirection, createFileWidget, resolveOpenedFile],
+    [activeLayoutDirection, createFileWidget, openPluginWidgetForPath, resolveOpenedFile],
   );
 
   const openPathInWidget = useCallback(
     async (widgetId: string, path: string) => {
+      if (openPluginWidgetForPath(path)) return true;
       const target = data.widgets.find((widget) => widget.id === widgetId);
-      const readPath = target?.config.fileScope === "workspace" &&
-          !/^(?:workspace:\/\/|[a-z]:[\\/]|\/|\\\\)/i.test(path)
-        ? `workspace://${path}`
+      const scopedPrefix = target?.config.fileScope === "workspace"
+        ? "workspace"
+        : target?.config.fileScope === "project"
+        ? "project"
+        : "";
+      const readPath = scopedPrefix &&
+          !/^(?:(?:workspace|project):\/\/|[a-z]:[\\/]|\/|\\\\)/i.test(path)
+        ? `${scopedPrefix}://${path}`
         : path;
       const result = await readKnownPath(readPath);
       if (!result) return false;
@@ -1430,7 +1494,7 @@ export function DashboardView({
       );
       return true;
     },
-    [data.widgets, openFileInWidget, readKnownPath, resolveOpenedFile],
+    [data.widgets, openFileInWidget, openPluginWidgetForPath, readKnownPath, resolveOpenedFile],
   );
 
   const navigationFor = useCallback(
@@ -1447,6 +1511,8 @@ export function DashboardView({
 
   const openDirectoryPathInLastActiveWidget = useCallback(
     async (path: string) => {
+      const pluginWidgetId = openPluginWidgetForPath(path);
+      if (pluginWidgetId) return pluginWidgetId;
       const result = await readFile(path);
       if (!result) return undefined;
       const content = await prepareOpenedContent(
@@ -1489,11 +1555,14 @@ export function DashboardView({
       data.widgets,
       navigationFor,
       openFileInWidget,
+      openPluginWidgetForPath,
     ],
   );
 
   const openKnownPathInLastActiveWidget = useCallback(
     async (path: string) => {
+      const pluginWidgetId = openPluginWidgetForPath(path);
+      if (pluginWidgetId) return pluginWidgetId;
       if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) {
         return openDirectoryPathInLastActiveWidget(path);
       }
@@ -1540,6 +1609,7 @@ export function DashboardView({
       navigationFor,
       openDirectoryPathInLastActiveWidget,
       openFileInWidget,
+      openPluginWidgetForPath,
       readKnownPath,
     ],
   );
@@ -1773,6 +1843,12 @@ export function DashboardView({
   }, [activeLayoutDirection, addWidget, addWidgetRequest]);
 
   useEffect(() => {
+    if (pluginWidgetRequest.id <= handledPluginWidgetRequestRef.current || !pluginWidgetRequest.type) return;
+    handledPluginWidgetRequestRef.current = pluginWidgetRequest.id;
+    openOrUpdatePluginWidget(pluginWidgetRequest.type, pluginWidgetRequest.config);
+  }, [openOrUpdatePluginWidget, pluginWidgetRequest]);
+
+  useEffect(() => {
     if (equalizeLayoutRequest.id <= handledEqualizeLayoutRequestRef.current) {
       return;
     }
@@ -1817,27 +1893,27 @@ export function DashboardView({
   }, [activeWidgetId, data.widgets, fitGridRows, smallGrid, smallLayouts]);
 
   useEffect(() => {
-    const widget = data.widgets.find((item) =>
-      item.id === activeWidgetId && isFileWidgetType(item.type)
-    );
+    const widget = data.widgets.find((item) => item.id === activeWidgetId);
     if (!widget) {
       onActiveFileChange(null);
       return;
     }
-    lastActiveFileWidgetIdRef.current = widget.id;
-    const path = filePathFromConfig(widget.config) ||
+    if (isFileWidgetType(widget.type)) lastActiveFileWidgetIdRef.current = widget.id;
+    const path = (isFileWidgetType(widget.type) ? filePathFromConfig(widget.config) : dashboardWidgetFilePath(widget)) ||
       (typeof widget.config.fileName === "string"
         ? widget.config.fileName
         : "");
     const content = typeof widget.config.content === "string"
       ? widget.config.content
       : "";
-    onActiveFileChange(
-      path && content && !content.startsWith("data:") &&
-        content.length <= 1024 * 1024
-        ? { path, content }
-        : null,
-    );
+    onActiveFileChange(path
+      ? {
+        path,
+        content: content && !content.startsWith("data:") && content.length <= 1024 * 1024
+          ? content
+          : "",
+      }
+      : null);
   }, [activeWidgetId, data.widgets, onActiveFileChange]);
 
   useEffect(() => {

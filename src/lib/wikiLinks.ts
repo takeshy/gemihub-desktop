@@ -92,10 +92,12 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 export function pathDirName(path: string): string {
-  if (path.toLowerCase().startsWith("workspace://")) {
-    const relative = path.slice("workspace://".length);
+  const scope = /^(workspace|project):\/\//i.exec(path)?.[1]?.toLowerCase();
+  if (scope) {
+    const prefix = `${scope}://`;
+    const relative = path.slice(prefix.length);
     const separatorIndex = Math.max(relative.lastIndexOf("/"), relative.lastIndexOf("\\"));
-    return separatorIndex === -1 ? "workspace://" : `workspace://${relative.slice(0, separatorIndex)}`;
+    return separatorIndex === -1 ? prefix : `${prefix}${relative.slice(0, separatorIndex)}`;
   }
   const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return separatorIndex === -1 ? "" : path.slice(0, separatorIndex);

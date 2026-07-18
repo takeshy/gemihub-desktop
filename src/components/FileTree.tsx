@@ -8,6 +8,7 @@ import {
   FilePlus2,
   Folder,
   FolderOpen,
+  FolderSearch,
   FolderPlus,
   Layers3,
   LockKeyhole,
@@ -22,6 +23,8 @@ import {
 import { EncryptedFileModal } from "./EncryptedFileModal";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import { isEncryptedFile } from "../lib/hybridEncryption";
+import { isProtectedProjectRoot, scopedTreePath, type FileTreeScope } from "../lib/fileTreePaths";
+import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
 import {
   createDirectory,
   duplicateFile,
@@ -29,6 +32,7 @@ import {
   listTrash,
   listFileTree,
   listProjectTree,
+  openContainingFolder,
   readFile,
   restoreFileHistory,
   restoreTrash,
@@ -45,12 +49,7 @@ import {
   type TrashEntry,
 } from "../lib/wailsBackend";
 
-type TreeMode = "files" | "project";
-const PROJECT_ROOTS = ["Dashboards", "Memos", "Secrets", "skills", "workflows"];
-
-export function projectTreeNodes(nodes: FileTreeNode[]): FileTreeNode[] {
-  return PROJECT_ROOTS.flatMap((name) => nodes.filter((node) => node.isDir && node.name.toLowerCase() === name.toLowerCase()));
-}
+type TreeMode = FileTreeScope;
 
 function parentPath(path: string): string {
   const index = path.lastIndexOf("/");
@@ -93,8 +92,8 @@ function TreeRow({
   scope: TreeMode;
 }) {
   const isOpen = expanded.has(node.path);
-  const protectedProjectRoot = scope === "project" && depth === 0;
-  const scopedPath = (path: string) => scope === "files" ? `workspace://${path}` : path;
+  const protectedProjectRoot = scope === "project" && isProtectedProjectRoot(node, depth);
+  const scopedPath = (path: string) => scopedTreePath(scope, path);
   const mutate = async (kind: "file" | "folder" | "rename" | "delete") => {
     try {
       if (kind === "file") {
@@ -220,7 +219,7 @@ export function FileTree({
 
   const modeNodes = useMemo(() => treeMode === "project" ? projectNodes : nodes, [nodes, projectNodes, treeMode]);
   const filtered = useMemo(() => visibleTree(modeNodes, query), [modeNodes, query]);
-  const visibleContentResults = useMemo(() => treeMode === "project" ? contentResults.filter((item) => PROJECT_ROOTS.some((root) => item.path === root || item.path.toLowerCase().startsWith(`${root.toLowerCase()}/`))) : contentResults, [contentResults, treeMode]);
+  const visibleContentResults = contentResults;
   const rootName = directoryBase.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || directoryBase;
 
   useEffect(() => {
@@ -241,6 +240,7 @@ export function FileTree({
 
   const openTreeFile = (path: string) => {
     if (path.toLowerCase().endsWith(".encrypted")) { setEncryptedModalPath(path); return; }
+    if (dashboardPluginWidgetForPath(path)) { onOpenFile(path); return; }
     void readFile(path).then((file) => {
       if (file && isEncryptedFile(file.content)) setEncryptedModalPath(path); else onOpenFile(path);
     }).catch(() => onOpenFile(path));
@@ -262,6 +262,7 @@ export function FileTree({
   const showHistory = async () => { const selected=contextMenu;if(!selected)return;setContextMenu(null);setHistoryDialog({path:selected.path,entries:await listFileHistory(selected.path)}); };
   const duplicateFromMenu = async () => { const selected=contextMenu;if(!selected)return;setContextMenu(null);await duplicateFile(selected.path);await reload(); };
   const trashFromMenu = async () => { const selected=contextMenu;if(!selected)return;setContextMenu(null);if(confirm(`Move ${selected.node.path} to Trash?`)){await trashFile(selected.path);await reload();} };
+  const openContainingFolderFromMenu = async () => { const selected=contextMenu;if(!selected)return;setContextMenu(null);try{await openContainingFolder(selected.path);}catch(error){alert(error instanceof Error?error.message:String(error));} };
 
   const chooseDirectory = async () => {
     const selected = await selectDirectoryBase();
@@ -333,12 +334,12 @@ export function FileTree({
                 scope={treeMode}
               />
             ))}
-            {treeMode === "project" && filtered.length === 0 && <div className="file-tree-project-empty">No project resource directories.</div>}
+            {treeMode === "project" && filtered.length === 0 && <div className="file-tree-project-empty">Workspace is empty.</div>}
             {query.trim() && visibleContentResults.some((item) => item.preview) && (
               <section className="file-tree-content-results">
                 <strong>Content</strong>
                 {visibleContentResults.filter((item) => item.preview).map((item) => (
-                  <button key={`${item.path}:${item.line}`} type="button" onClick={() => openTreeFile(treeMode === "files" ? `workspace://${item.path}` : item.path)}>
+                  <button key={`${item.path}:${item.line}`} type="button" onClick={() => openTreeFile(scopedTreePath(treeMode, item.path))}>
                     <span>{item.path}{item.line ? `:${item.line}` : ""}</span>
                     <small>{item.preview}</small>
                   </button>
@@ -350,6 +351,7 @@ export function FileTree({
       )}
       {contextMenu && (
         <div className="file-tree-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
+          <button type="button" onClick={() => void openContainingFolderFromMenu()}><FolderSearch size={14} />Open in Explorer</button>
           {!contextMenu.node.isDir && <>
             {contextMenu.path.toLowerCase().endsWith(".encrypted")
               ? <button type="button" onClick={() => { setEncryptedModalPath(contextMenu.path); setContextMenu(null); }}><LockKeyhole size={14} />暗号化ファイルを開く</button>

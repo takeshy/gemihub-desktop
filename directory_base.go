@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -87,16 +89,24 @@ func (a *App) GetDirectoryBase() string {
 func (a *App) directoryPath(path string, allowMissing bool) (string, error) {
 	path = strings.TrimSpace(path)
 	forceWorkspace := strings.HasPrefix(strings.ToLower(path), "workspace://")
+	forceProject := strings.HasPrefix(strings.ToLower(path), "project://")
 	if forceWorkspace {
 		path = path[len("workspace://"):]
+	} else if forceProject {
+		path = path[len("project://"):]
 	}
 	base := a.GetDirectoryBase()
-	if !forceWorkspace && isProjectResourcePath(path) {
+	if forceProject {
+		base = a.GetActiveProjectPath()
+	} else if !forceWorkspace && isProjectResourcePath(path) {
 		if projectBase := a.GetActiveProjectPath(); projectBase != "" {
 			base = projectBase
 		}
 	}
 	if base == "" {
+		if forceProject {
+			return "", fmt.Errorf("active project is not configured")
+		}
 		return "", fmt.Errorf("directory base is not configured")
 	}
 	return resolvePathInsideBase(base, path, allowMissing)
@@ -163,6 +173,15 @@ func isProjectResourcePath(path string) bool {
 	return false
 }
 
+func stripPathScope(path, scope string) (string, bool) {
+	trimmed := strings.TrimSpace(path)
+	prefix := scope + "://"
+	if !strings.HasPrefix(strings.ToLower(trimmed), prefix) {
+		return trimmed, false
+	}
+	return trimmed[len(prefix):], true
+}
+
 func requirePathInside(base, target string) error {
 	rel, err := filepath.Rel(base, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -179,25 +198,42 @@ func (a *App) ListFileTree() ([]FileTreeNode, error) {
 	return buildFileTree(base, base)
 }
 
+// OpenContainingFolder opens a file's parent directory (or the directory
+// itself) in the operating system's file manager.
+func (a *App) OpenContainingFolder(path string) error {
+	target, err := a.directoryPath(path, false)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	folder := target
+	if !info.IsDir() {
+		folder = filepath.Dir(target)
+	}
+	var command *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		command = exec.Command("explorer.exe", folder)
+	case "darwin":
+		command = exec.Command("open", folder)
+	default:
+		command = exec.Command("xdg-open", folder)
+	}
+	if err := command.Start(); err != nil {
+		return err
+	}
+	return command.Process.Release()
+}
+
 func (a *App) ListProjectTree() ([]FileTreeNode, error) {
 	base := a.GetActiveProjectPath()
 	if base == "" {
 		return []FileTreeNode{}, nil
 	}
-	nodes, err := buildFileTree(base, base)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]FileTreeNode, 0, len(projectResourceDirectories))
-	for _, root := range projectResourceDirectories {
-		for _, node := range nodes {
-			if node.IsDir && strings.EqualFold(node.Name, root) {
-				result = append(result, node)
-				break
-			}
-		}
-	}
-	return result, nil
+	return buildFileTree(base, base)
 }
 
 // ListProjectFiles returns every user file in the active project. It is kept
@@ -435,8 +471,10 @@ func (a *App) CreateDirectory(path string) error {
 }
 
 func (a *App) RenameFile(oldPath, newPath string) error {
-	oldClean := strings.Trim(filepath.ToSlash(strings.TrimSpace(oldPath)), "/")
-	if isProjectResourcePath(oldPath) && !strings.Contains(oldClean, "/") {
+	oldProjectPath, projectScoped := stripPathScope(oldPath, "project")
+	_, workspaceScoped := stripPathScope(oldPath, "workspace")
+	oldProjectPath = strings.Trim(filepath.ToSlash(oldProjectPath), "/")
+	if !workspaceScoped && (projectScoped || isProjectResourcePath(oldPath)) && isProjectResourcePath(oldProjectPath) && !strings.Contains(oldProjectPath, "/") {
 		return fmt.Errorf("cannot rename a project resource directory")
 	}
 	oldTarget, err := a.directoryPath(oldPath, false)
@@ -466,8 +504,13 @@ func (a *App) DeleteFile(path string) error {
 	if target == a.GetDirectoryBase() {
 		return fmt.Errorf("cannot delete the directory base")
 	}
-	clean := strings.Trim(filepath.ToSlash(strings.TrimSpace(path)), "/")
-	if isProjectResourcePath(path) && !strings.Contains(clean, "/") {
+	if target == a.GetActiveProjectPath() {
+		return fmt.Errorf("cannot delete the active project")
+	}
+	projectPath, projectScoped := stripPathScope(path, "project")
+	_, workspaceScoped := stripPathScope(path, "workspace")
+	projectPath = strings.Trim(filepath.ToSlash(projectPath), "/")
+	if !workspaceScoped && (projectScoped || isProjectResourcePath(path)) && isProjectResourcePath(projectPath) && !strings.Contains(projectPath, "/") {
 		return fmt.Errorf("cannot delete a project resource directory")
 	}
 	info, err := os.Lstat(target)
@@ -506,7 +549,7 @@ func searchFilesInBase(base, query string, limit int) ([]FileSearchResult, error
 			return walkErr
 		}
 		if entry.IsDir() {
-			if path != base && (entry.Name() == ".git" || entry.Name() == "node_modules") {
+			if path != base && (entry.Name() == ".git" || entry.Name() == ".llm-hub" || entry.Name() == "node_modules") {
 				return filepath.SkipDir
 			}
 			return nil

@@ -60,7 +60,7 @@ export function createPluginAPI(
       callbacks.onRegisterSlashCommand({ ...command, pluginId });
     },
     registerWidget(widget) {
-      registerPluginWidget(widget);
+      registerPluginWidget(pluginId, widget);
     },
     onActiveFileChanged(callback) {
       const listener = (event: Event) => callback((event as CustomEvent<{ path: string | null; name: string | null }>).detail);

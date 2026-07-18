@@ -36,7 +36,11 @@ export interface PluginConfig {
 export interface PluginViewProps {
   api: PluginAPI;
   language?: string;
+  /** Web-compatible alias for the currently opened file path. */
+  fileId?: string;
   filePath?: string;
+  fileName?: string;
+  fileContent?: string;
 }
 
 export interface PluginView {

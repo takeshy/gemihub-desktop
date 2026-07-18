@@ -63,6 +63,13 @@ func TestProjectResourcesAreIndependentFromDirectoryBase(t *testing.T) {
 	if err := app.WriteFile("Dashboards/home.dashboard", "project dashboard"); err != nil {
 		t.Fatal(err)
 	}
+	if err := app.WriteFile("project://readme.md", "ordinary project file"); err != nil {
+		t.Fatal(err)
+	}
+	projectReadme, err := app.ReadFile("project://readme.md")
+	if err != nil || projectReadme.Content != "ordinary project file" {
+		t.Fatalf("project-scoped ordinary file was not readable: %#v, %v", projectReadme, err)
+	}
 	if _, err := os.Stat(filepath.Join(project.Path, "Dashboards", "home.dashboard")); err != nil {
 		t.Fatalf("dashboard was not written to project: %v", err)
 	}
@@ -147,7 +154,7 @@ func TestProjectResourcesAreIndependentFromDirectoryBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(projectTree) != len(projectResourceDirectories) {
+	if len(projectTree) != len(projectResourceDirectories)+1 || projectTree[len(projectTree)-1].Name != "readme.md" {
 		t.Fatalf("unexpected project tree roots: %#v", projectTree)
 	}
 	workspaceTree, err := app.ListFileTree()

@@ -357,6 +357,7 @@ interface WailsAppApi {
   GetDirectoryBase: () => Promise<string>;
   ListFileTree: () => Promise<FileTreeNode[]>;
   ListProjectTree: () => Promise<FileTreeNode[]>;
+  OpenContainingFolder: (path: string) => Promise<void>;
   ListProjectFiles: () => Promise<DirectoryFileEntry[]>;
   ReadProjectFile: (path: string) => Promise<LocalFileResult>;
   WriteProjectFile: (path: string, content: string) => Promise<void>;
@@ -570,6 +571,12 @@ export async function listFileTree(): Promise<FileTreeNode[]> {
 
 export async function listProjectTree(): Promise<FileTreeNode[]> {
   return await appApi()?.ListProjectTree() ?? [];
+}
+
+export async function openContainingFolder(path: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Opening a containing folder requires the desktop app.");
+  await api.OpenContainingFolder(path);
 }
 
 export async function listProjectFiles(): Promise<DirectoryFileEntry[]> {

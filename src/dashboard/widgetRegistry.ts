@@ -33,6 +33,8 @@ export interface PluginWidgetDefinition {
   ConfigEditor?: FC<DashboardWidgetConfigEditorProps>;
   filePathOf?: (config: unknown) => string | undefined;
   externalUrlOf?: (config: unknown) => string | undefined;
+  /** Desktop host routing metadata for an implicit plugin main view. */
+  extensions?: string[];
 }
 
 export interface DashboardWidgetDefinition {
@@ -53,6 +55,9 @@ export interface DashboardWidgetDefinition {
   externalUrlOf?: PluginWidgetDefinition["externalUrlOf"];
   hiddenFromPalette?: boolean;
   icon?: ReactNode;
+  /** Owning plugin, used by the Desktop plugin selector. */
+  pluginId?: string;
+  extensions?: PluginWidgetDefinition["extensions"];
 }
 
 const core: DashboardWidgetDefinition[] = [
@@ -75,9 +80,10 @@ export function registerDashboardWidget(definition: DashboardWidgetDefinition): 
   if (typeof window !== "undefined") window.dispatchEvent(new Event("llm-hub:dashboard-widgets-changed"));
 }
 
-export function registerPluginWidget(definition: PluginWidgetDefinition): void {
+export function registerPluginWidget(pluginId: string, definition: PluginWidgetDefinition): void {
   const normalized: DashboardWidgetDefinition = {
     ...definition,
+    pluginId,
     description: "",
     defaultConfig: definition.defaultConfig as Record<string, unknown>,
     defaultSize: definition.defaultSize ?? { w: 4, h: 4 },
@@ -87,8 +93,27 @@ export function registerPluginWidget(definition: PluginWidgetDefinition): void {
   registerDashboardWidget(normalized);
 }
 
+export function pluginMainViewWidgetType(viewId: string): string {
+  return `plugin-view:${viewId}`;
+}
+
+export function unregisterPluginWidgets(): void {
+  pluginDefinitions.clear();
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("llm-hub:dashboard-widgets-changed"));
+}
+
 export function dashboardWidgetDefinitions(): DashboardWidgetDefinition[] { return [...core, ...pluginDefinitions.values()]; }
 export function dashboardWidgetDefinition(type: string): DashboardWidgetDefinition | null { return dashboardWidgetDefinitions().find((item) => item.type === type) ?? null; }
+
+export function dashboardPluginWidgetForPath(path: string): DashboardWidgetDefinition | null {
+  const normalized = path.split(/[?#]/, 1)[0].toLowerCase();
+  return [...pluginDefinitions.values()].find((definition) =>
+    definition.pluginId && definition.extensions?.some((extension) => {
+      const suffix = extension.startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`;
+      return normalized.endsWith(suffix);
+    })
+  ) ?? null;
+}
 
 export function dashboardWidgetFilePath(widget: DashboardWidget): string | undefined {
   const definition = dashboardWidgetDefinition(widget.type);

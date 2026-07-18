@@ -872,6 +872,11 @@ export default function App() {
     readStored(AI_ENABLED_KEY, "true") !== "false"
   );
   const [pluginViewRequest, setPluginViewRequest] = useState(0);
+  const [pluginWidgetRequest, setPluginWidgetRequest] = useState<{
+    id: number;
+    type: string;
+    config: Record<string, unknown>;
+  }>({ id: 0, type: "", config: {} });
   const activeProjectPath =
     projectState.projects.find((project) =>
       project.id === projectState.activeProjectId
@@ -1852,6 +1857,7 @@ export default function App() {
                   workspaceBase={directoryBase}
                   dashboardPath={activeDashboardPath}
                   startupPaths={dashboardContextReady ? startupPaths : null}
+                  pluginWidgetRequest={pluginWidgetRequest}
                 />
               )}
             {!dashboardRawMode && dashboardError && (
@@ -1887,6 +1893,18 @@ export default function App() {
                 onOpenPluginView={() => {
                   setSettingsOpen(false);
                   setChatViewOpen(true);
+                }}
+                onOpenPluginWidget={(request) => {
+                  setDashboardRawMode(false);
+                  setPluginWidgetRequest((current) => ({
+                    id: current.id + 1,
+                    type: request.type,
+                    config: request.config,
+                  }));
+                }}
+                onOpenPluginSettings={() => {
+                  setSettingsSection("plugins");
+                  setSettingsOpen(true);
                 }}
                 chatSettings={chatSettings}
                 onChatSettingsChange={setChatSettings}

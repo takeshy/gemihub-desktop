@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { dashboardWidgetDefinition, dashboardWidgetFilePath, dashboardWidgetHasSettings, isDashboardWidgetConfigured, registerDashboardWidget, registerPluginWidget } from "./widgetRegistry.ts";
+import { dashboardPluginWidgetForPath, dashboardWidgetDefinition, dashboardWidgetFilePath, dashboardWidgetHasSettings, isDashboardWidgetConfigured, pluginMainViewWidgetType, registerDashboardWidget, registerPluginWidget } from "./widgetRegistry.ts";
 
 Deno.test("dashboard plugin widgets register and resolve file-backed paths", () => {
   registerDashboardWidget({ type: "test:chart", label: "Chart", description: "test", defaultConfig: {}, defaultSize: { w: 4, h: 3 }, filePathKey: "source" });
@@ -10,7 +10,7 @@ Deno.test("dashboard plugin widgets register and resolve file-backed paths", () 
 Deno.test("Web-compatible plugin widgets use a portable type", () => {
   const render = () => "rendered";
   const ConfigEditor = () => null;
-  registerPluginWidget({
+  registerPluginWidget("example", {
     type: "summary",
     label: "Summary",
     defaultConfig: { path: "" },
@@ -24,6 +24,8 @@ Deno.test("Web-compatible plugin widgets use a portable type", () => {
   assertEquals(dashboardWidgetDefinition("example:summary"), null);
   assertEquals(dashboardWidgetFilePath({ id: "two", type: "summary", title: "Summary", layout: { x: 0, y: 0, w: 6, h: 4 }, config: { path: "report.md" } }), "report.md");
   assertEquals(dashboardWidgetHasSettings("summary"), true);
+  assertEquals(dashboardWidgetDefinition("summary")?.pluginId, "example");
+  assertEquals(pluginMainViewWidgetType("example:main"), "plugin-view:example:main");
 });
 
 Deno.test("new selectable widgets are configured only after their primary selection", () => {
@@ -36,4 +38,16 @@ Deno.test("new selectable widgets are configured only after their primary select
   assertEquals(isDashboardWidgetConfigured(widget("kanban", { kanban: "Dashboards/Kanbans/work.kanban" })), true);
   assertEquals(isDashboardWidgetConfigured(widget("kanban", { folder: "Work", title: "Tasks" })), true);
   assertEquals(isDashboardWidgetConfigured(widget("memo-list", {})), true);
+});
+
+Deno.test("plugin main-view extensions route files to their widget", () => {
+  registerPluginWidget("audio", {
+    type: "plugin-view:audio:main",
+    label: "Audio",
+    defaultConfig: {},
+    extensions: [".mid", "midi", ".audioscore"],
+    render: () => null,
+  });
+  assertEquals(dashboardPluginWidgetForPath("Scores/demo.MID")?.type, "plugin-view:audio:main");
+  assertEquals(dashboardPluginWidgetForPath("Scores/demo.md"), null);
 });

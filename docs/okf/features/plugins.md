@@ -6,7 +6,9 @@ tags: [plugins, extensions, permissions, github]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-PluginはWorkspace内の `.llm-hub/plugins/{id}` へ手動配置するか、`Settings > Plugins`からGitHub Release assetを取得してインストールします。有効化、update、uninstall、Plugin固有設定も同じ画面で管理します。右サイドバーのPlugin viewは、インストール済みPluginの機能を使う場所です。
+PluginはWorkspace内の `.llm-hub/plugins/{id}` へ手動配置するか、`Settings > Plugins`からGitHub Release assetを取得してインストールします。有効化、update、uninstall、Plugin固有設定も同じ画面で管理します。右サイドバーは1つのPluginタブとselectを共有し、選択したPluginのsidebar viewを表示します。隣の設定ボタンは、そのPluginが登録したsettings tabを直接開きます。
+
+Pluginが`location: "main"`のviewを登録すると、Desktopはそのviewを暗黙のPluginWidgetとしてDashboardへ追加します。同じtypeのwidgetがすでにあればconfigと登録定義を更新して再利用し、どちらの場合もwidgetを最大化します。main viewが`extensions`を宣言している場合、その拡張子のファイルを開く操作は汎用File widgetを作らず、対応するPluginWidgetへ自動的にルーティングされます。旧Desktop patchがmain viewを`extensions`付きsidebar viewとして登録している場合も同じ契約へ自動変換します。
 
 `api.registerWidget`はGemiHub Webと同じ`WidgetDef`契約（`render(config, ctx)`、`ConfigEditor`、`filePathOf`、`externalUrlOf`）を使用し、Webと同じ`type`を保存します。
 

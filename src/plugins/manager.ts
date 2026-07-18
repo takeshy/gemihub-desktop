@@ -3,7 +3,7 @@ import { externalHTTPRequest, installPluginFiles, readFile, uninstallManagedPlug
 import type { PluginConfig, PluginManifest, PluginPermission } from "./types";
 
 export const PLUGIN_HOST_ID = "gemihub-desktop";
-export const PLUGIN_HOST_VERSION = "0.9.0";
+export const PLUGIN_HOST_VERSION = "0.9.1";
 const LEGACY_PLUGIN_HOST_ID = "llm-hub-workspace";
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;

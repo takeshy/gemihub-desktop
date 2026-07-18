@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bot, ChevronRight, ChevronsRight, Download, Loader2, Plug, Puzzle, RefreshCw, Search, Trash2, Workflow as WorkflowIcon } from "lucide-react";
+import { Bot, ChevronRight, ChevronsRight, Download, Loader2, Plug, Puzzle, RefreshCw, Search, Settings, Trash2, Workflow as WorkflowIcon } from "lucide-react";
 import { chat, listPluginIDs } from "../lib/wailsBackend";
 import { ChatPanel } from "../llm/ChatPanel";
 import type { ActiveSelection } from "../llm/selection";
@@ -15,6 +15,8 @@ import { loadPlugin, readPluginManifest, unloadPlugin } from "./loader";
 import type { PluginAPI, PluginConfig, PluginInstance, PluginManifest, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
 import { SkillWorkflowToolHost } from "../skills/SkillWorkflowToolHost";
 import { checkPluginUpdate, installPluginRelease, PLUGIN_HOST_ID, previewPluginRelease, readPluginInstallMetadata, uninstallPluginRelease } from "./manager";
+import { pluginMainViewWidgetType, registerPluginWidget, unregisterPluginWidgets } from "../dashboard/widgetRegistry";
+import { normalizeDesktopPluginView, pluginViewForPath } from "./pluginViews";
 
 const CONFIG_KEY = "llm-hub:plugins";
 
@@ -26,7 +28,31 @@ function storedConfigs(key: string): PluginConfig[] {
   try { return JSON.parse(localStorage.getItem(key) || "[]") as PluginConfig[]; } catch { return []; }
 }
 
-export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, settingsOpen, onCollapse, onOpenPluginView, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; settingsOpen: boolean; onCollapse: () => void; onOpenPluginView: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
+function PluginMainViewWidget({ view, api, language, config }: { view: PluginView; api: PluginAPI; language: string; config: unknown }) {
+  const configuredPath = config && typeof config === "object" && !Array.isArray(config) && typeof (config as { filePath?: unknown }).filePath === "string"
+    ? (config as { filePath: string }).filePath
+    : "";
+  const filePath = configuredPath && (!view.extensions?.length || pluginViewForPath([view], configuredPath))
+    ? configuredPath
+    : "";
+  const [fileContent, setFileContent] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!filePath) { setFileContent(""); return; }
+    const reader = filePath.toLowerCase().startsWith("workspace://")
+      ? api.files?.read(filePath)
+      : api.projectFiles?.read(filePath) ?? api.files?.read(filePath);
+    void reader?.then((content) => { if (!cancelled) setFileContent(content); }).catch(() => { if (!cancelled) setFileContent(""); });
+    return () => { cancelled = true; };
+  }, [api, filePath]);
+
+  const Component = view.component;
+  const fileName = filePath.split(/[\\/]/).pop() || undefined;
+  return <Component api={api} language={language} fileId={filePath || undefined} filePath={filePath || undefined} fileName={fileName} fileContent={fileContent || undefined} />;
+}
+
+export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, settingsOpen, onCollapse, onOpenPluginView, onOpenPluginWidget, onOpenPluginSettings, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; settingsOpen: boolean; onCollapse: () => void; onOpenPluginView: () => void; onOpenPluginWidget: (request: { type: string; config: Record<string, unknown> }) => void; onOpenPluginSettings: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
   const configKey = useMemo(() => workspaceConfigKey(projectBase), [projectBase]);
   const [configs, setConfigs] = useState<PluginConfig[]>(() => storedConfigs(configKey));
   const [manifests, setManifests] = useState<PluginManifest[]>([]);
@@ -34,6 +60,8 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const [settingsTabs, setSettingsTabs] = useState<PluginSettingsTab[]>([]);
   const [slashCommands, setSlashCommands] = useState<PluginSlashCommand[]>([]);
   const [activeTab, setActiveTab] = useState("chat");
+  const [selectedPluginId, setSelectedPluginId] = useState("");
+  const [settingsPluginId, setSettingsPluginId] = useState("");
   const [settingsContainer, setSettingsContainer] = useState<HTMLElement | null>(null);
   const [chatAttachmentRequest, setChatAttachmentRequest] = useState<{ id: number; files: Array<{ path: string; content: string }> }>({ id: 0, files: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -44,6 +72,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const instancesRef = useRef<PluginInstance[]>([]);
   const apiMapRef = useRef(new Map<string, PluginAPI>());
   const handledPluginViewRequestRef = useRef(0);
+  const handledPluginFileRef = useRef("");
   const loadingConfigRef = useRef(false);
 
   useEffect(() => {
@@ -103,13 +132,37 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
     const registeredCommands: PluginSlashCommand[] = [];
     const instances: PluginInstance[] = [];
     apiMapRef.current.clear();
+    unregisterPluginWidgets();
     setViews([]);
     setSettingsTabs([]);
     setSlashCommands([]);
     setErrors({});
 
     const callbacks = {
-      onRegisterView: (view: PluginView) => { registeredViews.push(view); if (!cancelled) setViews([...registeredViews]); },
+      onRegisterView: (view: PluginView) => {
+        // Older Desktop host patches represented a companion main view as a
+        // second sidebar view. Extensions distinguish it from a real sidebar
+        // panel, so normalize it into the Dashboard widget path.
+        const registeredView = normalizeDesktopPluginView(view);
+        registeredViews.push(registeredView);
+        if (registeredView.location === "main") {
+          const api = apiMapRef.current.get(registeredView.pluginId);
+          if (api) {
+            registerPluginWidget(registeredView.pluginId, {
+              type: pluginMainViewWidgetType(registeredView.id),
+              label: registeredView.name,
+              defaultConfig: { filePath: "" },
+              defaultSize: { w: 12, h: 7 },
+              extensions: registeredView.extensions,
+              filePathOf: (config) => config && typeof config === "object" && !Array.isArray(config) && typeof (config as { filePath?: unknown }).filePath === "string"
+                ? (config as { filePath: string }).filePath
+                : undefined,
+              render: (config) => <PluginMainViewWidget view={registeredView} api={api} language={language} config={config} />,
+            });
+          }
+        }
+        if (!cancelled) setViews([...registeredViews]);
+      },
       onRegisterSettingsTab: (tab: PluginSettingsTab) => { registeredSettings.push(tab); if (!cancelled) setSettingsTabs([...registeredSettings]); },
       onRegisterSlashCommand: (command: PluginSlashCommand) => { registeredCommands.push(command); if (!cancelled) setSlashCommands([...registeredCommands]); },
       onLLMChat: async (messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }) => {
@@ -147,17 +200,76 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   }, [chatSettings, configs, language, manifests]);
 
   const sidebarViews = views.filter((view) => view.location === "sidebar");
-  const activeView = sidebarViews.find((view) => view.id === activeTab);
-  const activeApi = activeView ? apiMapRef.current.get(activeView.pluginId) : null;
+  const mainViews = views.filter((view) => view.location === "main");
+  const pluginChoices = useMemo(() => {
+    const ids = [...new Set(views.map((view) => view.pluginId))];
+    return ids.map((pluginId) => ({
+      pluginId,
+      name: manifests.find((manifest) => manifest.id === pluginId)?.name
+        || views.find((view) => view.pluginId === pluginId && view.location === "sidebar")?.name
+        || views.find((view) => view.pluginId === pluginId && view.location === "main")?.name
+        || pluginId,
+    }));
+  }, [manifests, views]);
+  const activePluginId = pluginChoices.some((choice) => choice.pluginId === selectedPluginId)
+    ? selectedPluginId
+    : pluginChoices[0]?.pluginId || "";
+  const activeView = sidebarViews.find((view) => view.pluginId === activePluginId);
+  const activeApi = activePluginId ? apiMapRef.current.get(activePluginId) : null;
   const ActiveViewComponent = activeView?.component;
+  const activePluginMainView = mainViews.find((view) => view.pluginId === activePluginId);
+  const activeFileMatchesPlugin = !!activeFile?.path && !!activePluginMainView
+    && (!activePluginMainView.extensions?.length || !!pluginViewForPath([activePluginMainView], activeFile.path));
+
+  const activatePlugin = (pluginId: string) => {
+    if (!pluginId) return;
+    setSelectedPluginId(pluginId);
+    setActiveTab("plugins");
+    const mainView = mainViews.find((view) => view.pluginId === pluginId);
+    if (mainView) {
+      const activePath = activeFile?.path || "";
+      const matchesActiveFile = !mainView.extensions?.length
+        || mainView.extensions.some((extension) => activePath.toLowerCase().endsWith(extension.toLowerCase()));
+      // Match GemiHub Web: a companion main view is not activated while the
+      // current file has an extension the plugin did not request.
+      if (!activePath || matchesActiveFile) {
+        onOpenPluginWidget({
+          type: pluginMainViewWidgetType(mainView.id),
+          config: activePath ? { filePath: activePath } : {},
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const path = activeFile?.path || "";
+    const view = pluginViewForPath(mainViews, path);
+    if (!view) {
+      handledPluginFileRef.current = "";
+      return;
+    }
+    const requestKey = `${view.id}\n${path}`;
+    if (handledPluginFileRef.current === requestKey) return;
+    handledPluginFileRef.current = requestKey;
+    setSelectedPluginId(view.pluginId);
+    setActiveTab("plugins");
+    onOpenPluginWidget({
+      type: pluginMainViewWidgetType(view.id),
+      config: { filePath: path },
+    });
+  }, [activeFile?.path, mainViews, onOpenPluginWidget]);
+
+  useEffect(() => {
+    if (activePluginId && activePluginId !== selectedPluginId) setSelectedPluginId(activePluginId);
+  }, [activePluginId, selectedPluginId]);
 
   useEffect(() => {
     if (pluginViewRequest <= handledPluginViewRequestRef.current) return;
-    const target = activeView || sidebarViews[0];
+    const target = activePluginId || pluginChoices[0]?.pluginId;
     if (!target) return;
     handledPluginViewRequestRef.current = pluginViewRequest;
-    setActiveTab(target.id);
-  }, [activeView, pluginViewRequest, sidebarViews]);
+    activatePlugin(target);
+  }, [activePluginId, pluginChoices, pluginViewRequest]);
 
   const tabs = useMemo(() => [
     ...(aiEnabled ? [
@@ -165,14 +277,14 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
       { id: "rag-search", name: "RAG Search", icon: Search },
       { id: "workflow", name: "Workflow", icon: WorkflowIcon },
     ] : []),
-    ...sidebarViews.map((view) => ({ id: view.id, name: view.name, icon: Puzzle })),
-  ], [aiEnabled, sidebarViews]);
+    ...(pluginChoices.length ? [{ id: "plugins", name: "Plugins", icon: Puzzle }] : []),
+  ], [aiEnabled, pluginChoices.length]);
 
   useEffect(() => {
     if (!aiEnabled && ["chat", "rag-search", "workflow"].includes(activeTab)) {
-      setActiveTab(sidebarViews[0]?.id || "");
+      setActiveTab(pluginChoices.length ? "plugins" : "");
     }
-  }, [activeTab, aiEnabled, sidebarViews]);
+  }, [activeTab, aiEnabled, pluginChoices.length]);
 
   const togglePlugin = (manifest: PluginManifest) => {
     setConfigs((current) => {
@@ -183,10 +295,14 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   };
 
   const openPluginView = (pluginId: string) => {
-    const view = sidebarViews.find((item) => item.pluginId === pluginId);
-    if (!view) return;
-    setActiveTab(view.id);
+    if (!pluginChoices.some((choice) => choice.pluginId === pluginId)) return;
+    activatePlugin(pluginId);
     onOpenPluginView();
+  };
+
+  const openPluginSettings = (pluginId: string) => {
+    setSettingsPluginId(pluginId);
+    onOpenPluginSettings();
   };
 
   const installFromGitHub = async () => {
@@ -250,7 +366,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
         <button type="button" onClick={onCollapse} title={aiEnabled ? "Collapse ChatView" : "Collapse Plugin view"}><ChevronsRight size={17} /></button>
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          return <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)} title={tab.name}><Icon size={17} /></button>;
+          return <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => tab.id === "plugins" ? activatePlugin(activePluginId) : setActiveTab(tab.id)} title={tab.name}><Icon size={17} /></button>;
         })}
       </header>
 
@@ -261,8 +377,27 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
           <RAGSearchPanel directoryBase={directoryBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} onOpenSettings={onOpenRAGSettings} onOpenFile={onOpenDirectoryFile} onChatWithResults={(results) => { setChatAttachmentRequest((current) => ({ id: current.id + 1, files: results.map((result, index) => ({ path: `[RAG] ${result.filePath}#chunk-${result.chunkIndex}-${index + 1}`, content: result.text })) })); setActiveTab("chat"); }} />
         ) : aiEnabled && activeTab === "workflow" ? (
           <WorkflowPanel directoryBase={projectBase} settings={chatSettings} activeFile={activeFile} onOpenFile={onOpenDirectoryFile} />
-        ) : ActiveViewComponent && activeApi ? (
-          <ActiveViewComponent api={activeApi} language={language} />
+        ) : activeTab === "plugins" && activePluginId ? (
+          <section className="plugin-sidebar-view">
+            <header>
+              <select value={activePluginId} onChange={(event) => activatePlugin(event.target.value)} aria-label="Plugin view">
+                {pluginChoices.map((choice) => <option key={choice.pluginId} value={choice.pluginId}>{choice.name}</option>)}
+              </select>
+              <button type="button" disabled={!settingsTabs.some((tab) => tab.pluginId === activePluginId)} onClick={() => openPluginSettings(activePluginId)} title="Plugin settings"><Settings size={15} /></button>
+            </header>
+            <div className="plugin-sidebar-view-body">
+              {ActiveViewComponent && activeApi
+                ? <ActiveViewComponent
+                    api={activeApi}
+                    language={language}
+                    fileId={activeFile?.path}
+                    filePath={activeFile?.path}
+                    fileName={activeFile?.path.split(/[\\/]/).pop()}
+                    fileContent={activeFileMatchesPlugin ? activeFile?.content || undefined : undefined}
+                  />
+                : <section className="chat-placeholder"><Puzzle size={24} /><span>The plugin view is open in the Dashboard.</span></section>}
+            </div>
+          </section>
         ) : (
           <section className="chat-placeholder"><Plug size={24} /><span>Select a plugin view.</span></section>
         )}
@@ -278,20 +413,19 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
               const config = configs.find((item) => item.id === manifest.id);
               const enabled = !!config?.enabled;
               const managed = config?.source === "github";
-              const hasView = sidebarViews.some((view) => view.pluginId === manifest.id);
+              const hasView = pluginChoices.some((choice) => choice.pluginId === manifest.id);
+              const settingsTab = settingsTabs.find((tab) => tab.pluginId === manifest.id);
+              const SettingsComponent = settingsTab?.component;
+              const settingsApi = apiMapRef.current.get(manifest.id);
               return (
-                <article key={manifest.id}>
+                <article key={manifest.id} className={settingsPluginId === manifest.id ? "plugin-manager-selected" : ""}>
                   <button type="button" className="plugin-manager-open" disabled={!enabled || !hasView} onClick={() => openPluginView(manifest.id)}><span><strong>{manifest.name}</strong><small>{manifest.description || manifest.id} · {manifest.version}</small></span>{hasView && <ChevronRight size={16} />}</button>
                   <label className="plugin-toggle"><input type="checkbox" checked={enabled} onChange={() => togglePlugin(manifest)} /><span /></label>
-                  {managed && <div className="plugin-manager-actions"><button type="button" title="Check for updates" disabled={!!pluginBusy} onClick={() => void updateFromGitHub(config)}>{pluginBusy === config.id ? <Loader2 className="spin" size={13} /> : <RefreshCw size={13} />}</button><button type="button" title="Uninstall" disabled={!!pluginBusy} onClick={() => void uninstallGitHubPlugin(config)}><Trash2 size={13} /></button></div>}
+                  {(managed || SettingsComponent) && <div className="plugin-manager-actions">{SettingsComponent && <button type="button" title="Plugin settings" disabled={!enabled} onClick={() => setSettingsPluginId((current) => current === manifest.id ? "" : manifest.id)}><Settings size={13} /></button>}{managed && <><button type="button" title="Check for updates" disabled={!!pluginBusy} onClick={() => void updateFromGitHub(config)}>{pluginBusy === config.id ? <Loader2 className="spin" size={13} /> : <RefreshCw size={13} />}</button><button type="button" title="Uninstall" disabled={!!pluginBusy} onClick={() => void uninstallGitHubPlugin(config)}><Trash2 size={13} /></button></>}</div>}
                   {errors[manifest.id] && <em>{errors[manifest.id]}</em>}
+                  {settingsPluginId === manifest.id && SettingsComponent && settingsApi && <div className="plugin-manager-settings"><SettingsComponent api={settingsApi} language={language} /></div>}
                 </article>
               );
-            })}
-            {settingsTabs.map((tab) => {
-              const SettingsComponent = tab.component;
-              const api = apiMapRef.current.get(tab.pluginId);
-              return api ? <SettingsComponent key={tab.pluginId} api={api} language={language} /> : null;
             })}
           </section>,
           settingsContainer,
