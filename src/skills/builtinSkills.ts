@@ -1099,7 +1099,7 @@ are previewed when supported. A memo panel can be toggled per file.
 
 ### \`memo-list\` — browse document memos
 
-Lists memo sidecar files created by file widgets in the memo directory configured in Workspace settings.
+Lists memo sidecar files created by file widgets under the Workspace's Memos directory.
 
 \`\`\`yaml
 - id: memos-1

@@ -6,7 +6,7 @@ tags: [skills, commands, ai, workflows]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-Agent Skillは `SKILL.md` を中心に、AIが特定作業を行うための説明、手順、references、関連Workflowをまとめたディレクトリです。ProjectのSkillsをSettingsで検出・有効化し、Chat sessionごとにactive skillを選べます。Markdownなど対応形式向けのbuilt-in skillsもあります。
+Agent Skillは `SKILL.md` を中心に、AIが特定作業を行うための説明、手順、references、関連Workflowをまとめたディレクトリです。WorkspaceのSkillsをSettingsで検出・有効化し、Chat sessionごとにactive skillを選べます。Markdownなど対応形式向けのbuilt-in skillsもあります。
 
 # 管理と利用
 

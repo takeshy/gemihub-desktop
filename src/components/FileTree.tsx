@@ -42,12 +42,11 @@ import {
   type FileSearchResult,
   type FileTreeNode,
   type FileHistoryEntry,
-  type Project,
   type TrashEntry,
 } from "../lib/wailsBackend";
 
 type TreeMode = "files" | "project";
-const PROJECT_ROOTS = ["Dashboards", "Secrets", "skills", "workflows"];
+const PROJECT_ROOTS = ["Dashboards", "Memos", "Secrets", "skills", "workflows"];
 
 export function projectTreeNodes(nodes: FileTreeNode[]): FileTreeNode[] {
   return PROJECT_ROOTS.flatMap((name) => nodes.filter((node) => node.isDir && node.name.toLowerCase() === name.toLowerCase()));
@@ -160,17 +159,13 @@ function TreeRow({
 export function FileTree({
   directoryBase,
   onDirectoryBaseChange,
-  projects,
-  activeProjectId,
-  onProjectChange,
+  projectPath,
   onOpenFile,
   onCollapse,
 }: {
   directoryBase: string;
   onDirectoryBaseChange: (path: string) => void;
-  projects: Project[];
-  activeProjectId: string;
-  onProjectChange: (id: string) => void;
+  projectPath: string;
   onOpenFile: (path: string) => void;
   onCollapse: () => void;
 }) {
@@ -193,11 +188,11 @@ export function FileTree({
         await setDirectoryBase(directoryBase);
         setNodes(await listFileTree());
       } else setNodes([]);
-      setProjectNodes(await listProjectTree());
+      if (treeMode === "project") setProjectNodes(await listProjectTree());
     } finally {
       setLoading(false);
     }
-  }, [activeProjectId, directoryBase, projects]);
+  }, [directoryBase, projectPath, treeMode]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -217,13 +212,12 @@ export function FileTree({
       void (treeMode === "project" ? searchProjectFiles(normalized, 30) : searchFiles(normalized, 30)).then(setContentResults).catch(() => setContentResults([]));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [activeProjectId, directoryBase, query, treeMode]);
+  }, [directoryBase, query, treeMode]);
 
   const modeNodes = useMemo(() => treeMode === "project" ? projectNodes : nodes, [nodes, projectNodes, treeMode]);
   const filtered = useMemo(() => visibleTree(modeNodes, query), [modeNodes, query]);
   const visibleContentResults = useMemo(() => treeMode === "project" ? contentResults.filter((item) => PROJECT_ROOTS.some((root) => item.path === root || item.path.toLowerCase().startsWith(`${root.toLowerCase()}/`))) : contentResults, [contentResults, treeMode]);
   const rootName = directoryBase.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || directoryBase;
-  const activeProject = projects.find((project) => project.id === activeProjectId);
 
   useEffect(() => { localStorage.setItem("llm-hub:fileTreeMode", treeMode); }, [treeMode]);
 
@@ -287,12 +281,12 @@ export function FileTree({
       <div className="file-tree-mode-bar">
         <div role="tablist" aria-label="Tree source">
           <button type="button" role="tab" aria-selected={treeMode === "files"} className={treeMode === "files" ? "active" : ""} onClick={() => switchTreeMode("files")}><Folder size={14} />Files</button>
-          <button type="button" role="tab" aria-selected={treeMode === "project"} className={treeMode === "project" ? "active" : ""} onClick={() => switchTreeMode("project")}><Layers3 size={14} />Project</button>
+          <button type="button" role="tab" aria-selected={treeMode === "project"} className={treeMode === "project" ? "active" : ""} onClick={() => switchTreeMode("project")}><Layers3 size={14} />Workspace</button>
         </div>
         <button type="button" className="file-tree-collapse" onClick={onCollapse} title="Collapse FileTree"><ChevronsLeft size={16} /></button>
       </div>
       <header className="file-tree-header">
-        {treeMode === "files" ? <button type="button" className="file-tree-root" onClick={() => void chooseDirectory()} title={directoryBase || "Open directory"}><FolderOpen size={16} /><span><small>DIRECTORY</small><strong>{directoryBase ? rootName : "Open directory"}</strong></span></button> : <div className="file-tree-project" title={activeProject?.path}><FolderOpen size={16} /><span><small>PROJECT</small><strong>{activeProject?.name || "Default (session)"}</strong></span></div>}
+        {treeMode === "files" ? <button type="button" className="file-tree-root" onClick={() => void chooseDirectory()} title={directoryBase || "Open directory"}><FolderOpen size={16} /><span><small>FILES</small><strong>{directoryBase ? rootName : "Open directory"}</strong></span></button> : <div className="file-tree-project" title={projectPath}><FolderOpen size={16} /><span><small>WORKSPACE</small><strong>{projectPath.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "Workspace"}</strong></span></div>}
         <div className="file-tree-actions">
           {directoryBase && treeMode === "files" && <>
             <button type="button" onClick={() => void createAtRoot("file")} title="New file"><FilePlus2 size={15} /></button>
@@ -302,15 +296,11 @@ export function FileTree({
           {(directoryBase || treeMode === "project") && <button type="button" onClick={() => void listTrash().then(setTrashDialog)} title="Trash"><Trash2 size={15} /></button>}
         </div>
       </header>
-      {treeMode === "project" && projects.length > 0 && <div className="file-tree-project-picker">
-        <label htmlFor="file-tree-project-select">Project</label>
-        <select id="file-tree-project-select" value={activeProjectId} onChange={(event) => onProjectChange(event.target.value)} title="Switch project">{!activeProjectId && <option value="" disabled>Default (session)</option>}{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
-      </div>}
-      {((treeMode === "files" && directoryBase) || (treeMode === "project" && projects.length > 0)) && (
+      {((treeMode === "files" && directoryBase) || (treeMode === "project" && projectPath)) && (
         <>
           <label className="file-tree-search">
             <Search size={14} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={treeMode === "project" ? "Search project resources" : "Search files"} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={treeMode === "project" ? "Search workspace resources" : "Search files"} />
           </label>
           <div className="file-tree-scroll">
             {filtered.map((node) => (

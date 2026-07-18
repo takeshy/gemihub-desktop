@@ -346,15 +346,8 @@ export interface MCPStdioStartRequest {
 
 interface WailsAppApi {
   ListProjects: () => Promise<ProjectState>;
+  SetProjectDirectory: (path: string) => Promise<ProjectState>;
   SelectProjectDirectory: () => Promise<string>;
-  CreateProject: (name: string, path: string) => Promise<ProjectState>;
-  UpdateProject: (
-    id: string,
-    name: string,
-    path: string,
-  ) => Promise<ProjectState>;
-  DeleteProject: (id: string) => Promise<ProjectState>;
-  SetActiveProject: (id: string) => Promise<ProjectState>;
   OpenDeveloperTools: () => Promise<boolean>;
   SelectLocalFile: () => Promise<LocalFileResult | null>;
   SelectLocalFilePath: () => Promise<string>;
@@ -533,39 +526,14 @@ export async function listProjects(): Promise<ProjectState> {
     { activeProjectId: "", projects: [] };
 }
 
+export async function setProjectDirectory(path: string): Promise<ProjectState> {
+  const api = appApi();
+  if (!api) throw new Error("Workspace directory requires the desktop app.");
+  return await api.SetProjectDirectory(path);
+}
+
 export async function selectProjectDirectory(): Promise<string> {
   return await appApi()?.SelectProjectDirectory() ?? "";
-}
-
-export async function createProject(
-  name: string,
-  path = "",
-): Promise<ProjectState> {
-  const api = appApi();
-  if (!api) throw new Error("Projects require the desktop app.");
-  return await api.CreateProject(name, path);
-}
-
-export async function updateProject(
-  id: string,
-  name: string,
-  path: string,
-): Promise<ProjectState> {
-  const api = appApi();
-  if (!api) throw new Error("Projects require the desktop app.");
-  return await api.UpdateProject(id, name, path);
-}
-
-export async function deleteProject(id: string): Promise<ProjectState> {
-  const api = appApi();
-  if (!api) throw new Error("Projects require the desktop app.");
-  return await api.DeleteProject(id);
-}
-
-export async function setActiveProject(id: string): Promise<ProjectState> {
-  const api = appApi();
-  if (!api) throw new Error("Projects require the desktop app.");
-  return await api.SetActiveProject(id);
 }
 
 export async function openDeveloperTools(): Promise<boolean> {

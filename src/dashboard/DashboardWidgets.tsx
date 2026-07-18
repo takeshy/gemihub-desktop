@@ -281,7 +281,7 @@ export function MemoListDashboardWidget(
   if (!memoDirPath) {
     return (
       <div className="dashboard-widget-empty">
-        Configure a memo directory in Settings.
+        Select a Workspace directory in Settings.
       </div>
     );
   }
@@ -2306,9 +2306,9 @@ export function SecretManagerDashboardWidget(
           <Plus size={12} />New Secret
         </button>
       </header>
-      <div className="secret-folder-bar" title={folder || "Project root"}>
+      <div className="secret-folder-bar" title={folder || "Workspace root"}>
         <Folder size={13} />
-        <span>{folder || "Project root"}</span>
+        <span>{folder || "Workspace root"}</span>
       </div>
       {error && !createOpen && !viewing && (
         <div className="dashboard-widget-error">{error}</div>

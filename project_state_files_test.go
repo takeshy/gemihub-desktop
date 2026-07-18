@@ -33,25 +33,3 @@ func TestProjectStateFilesStayInActiveProject(t *testing.T) {
 		t.Fatal("expected unsafe state name to be rejected")
 	}
 }
-
-func TestChatHistoryPersistsAcrossProjectlessSessions(t *testing.T) {
-	config := t.TempDir()
-	app := NewApp()
-	app.projectConfigDir = config
-	app.sessionNoProject = true
-	if err := app.WriteProjectStateFile("chat-history", "session chat"); err != nil {
-		t.Fatal(err)
-	}
-	restarted := NewApp()
-	restarted.projectConfigDir = config
-	restarted.sessionNoProject = true
-	if value, err := restarted.ReadProjectStateFile("chat-history"); err != nil || value != "session chat" {
-		t.Fatalf("unexpected session history: %q, %v", value, err)
-	}
-	if _, err := os.Stat(filepath.Join(config, "Session", ".llm-hub", "state", "chat-history.data")); err != nil {
-		t.Fatalf("persistent session history was not created: %v", err)
-	}
-	if err := app.WriteProjectStateFile("workflow-history", "bad"); err == nil {
-		t.Fatal("workflow history must require a Project")
-	}
-}

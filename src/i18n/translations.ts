@@ -23,8 +23,6 @@ export interface TranslationStrings {
   // Settings
   "settings.title": string;
   "settings.externalEditor": string;
-  "settings.memoDirectory": string;
-  "settings.memoDirectoryHint": string;
   "settings.memoSyncTimeline": string;
   "settings.memoSyncTimelineHint": string;
   "settings.language": string;
@@ -168,8 +166,6 @@ const en: TranslationStrings = {
 
   "settings.title": "Settings",
   "settings.externalEditor": "External editor path",
-  "settings.memoDirectory": "Memo directory",
-  "settings.memoDirectoryHint": "Directory where per-document memo (Timeline) files are stored. It is independent of the active Project and working directory; the memo feature stays disabled until this is set.",
   "settings.memoSyncTimeline": "Memo sync Timeline",
   "settings.memoSyncTimelineHint": "Append new memo posts to this Timeline. Leave blank to disable. Edits and deletions are not synchronized.",
   "settings.language": "Language",
@@ -242,7 +238,7 @@ const en: TranslationStrings = {
   "alert.externalEditorFailed": "Could not open the external editor.",
   "alert.openFromListFailed": "Could not open the file. It may have been moved or deleted.",
 
-  "memo.dirPrompt": "The memo directory is not set. Open settings?",
+  "memo.dirPrompt": "A Workspace directory is required. Open settings?",
   "memo.needsLocalFile": "Memos are available for widgets showing a local file.",
   "memo.panelTitle": "Memo",
   "memo.collapse": "Collapse memo panel",
@@ -250,7 +246,7 @@ const en: TranslationStrings = {
   "memo.closePanel": "Close memo panel",
   "memo.empty": "No memos yet.",
   "memo.loadFailed": "Could not read the memo file.",
-  "memo.needsConfig": "Requires a memo directory and a saved local file.",
+  "memo.needsConfig": "Requires a Workspace and a saved local file.",
   "memo.showMore": "Show more",
   "memo.showLess": "Show less",
   "memo.pin": "Pin",
@@ -304,8 +300,6 @@ const ja: TranslationStrings = {
 
   "settings.title": "設定",
   "settings.externalEditor": "外部エディタのパス",
-  "settings.memoDirectory": "メモディレクトリ",
-  "settings.memoDirectoryHint": "ドキュメントごとのメモ (Timeline) を保存するディレクトリ。Projectや作業ディレクトリとは独立しており、未設定の間はメモ機能は無効です。",
   "settings.memoSyncTimeline": "メモ同期先Timeline",
   "settings.memoSyncTimelineHint": "新規メモをこのTimelineにも追記します。空欄なら無効です。編集と削除は同期しません。",
   "settings.language": "言語",
@@ -378,7 +372,7 @@ const ja: TranslationStrings = {
   "alert.externalEditorFailed": "外部エディタを起動できませんでした。",
   "alert.openFromListFailed": "ファイルを開けませんでした。移動または削除された可能性があります。",
 
-  "memo.dirPrompt": "メモディレクトリが設定されていません。設定画面を開きますか?",
+  "memo.dirPrompt": "Workspaceディレクトリが必要です。設定画面を開きますか?",
   "memo.needsLocalFile": "メモはローカルファイルを開いたウィジェットで利用できます。",
   "memo.panelTitle": "メモ",
   "memo.collapse": "パネルを折りたたむ",
@@ -386,7 +380,7 @@ const ja: TranslationStrings = {
   "memo.closePanel": "パネルを閉じる",
   "memo.empty": "まだメモがありません。",
   "memo.loadFailed": "メモファイルを読み込めませんでした。",
-  "memo.needsConfig": "メモディレクトリと保存済みファイルが必要です。",
+  "memo.needsConfig": "Workspaceと保存済みファイルが必要です。",
   "memo.showMore": "もっと見る",
   "memo.showLess": "閉じる",
   "memo.pin": "ピン留め",

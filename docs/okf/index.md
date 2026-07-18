@@ -4,12 +4,12 @@
 
 ## 最初に行うこと
 
-1. `Settings > Projects` でProjectを作成または選択する。
-2. `Settings > Working directory` で、普段扱うファイルのルートを選ぶ。
+1. 必要なら `Settings > General` でWorkspace directoryを変更する。
+2. 同じ画面のFiles directoryで、普段扱うファイルのルートを選ぶ。
 3. `+ Add Widget` または `Ctrl/Cmd + P` でファイルを開く。
-4. 引用メモを使う場合はMemo directory、AIを使う場合は `Settings > AI features` を追加設定する。
+4. AIを使う場合は `Settings > AI features` を設定する。引用メモはWorkspace内の `Memos/` へ自動保存される。
 
-Project、Working directory、Memo directoryは別々に指定できます。DashboardやWorkflowなどのアプリ資産を置く場所がProject、FileTreeやAI file toolsが触れる範囲がWorking directory、引用メモの保存先がMemo directoryです。迷った場合は、まずProjectとWorking directoryを同じフォルダにしても構いません。
+DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspace、FileTreeやAI file toolsが触れる範囲がFiles directoryです。引用メモはWorkspaceの `Memos/` に保存されます。迷った場合は両方に同じフォルダを指定しても構いません。
 
 ## 目的から探す
 
@@ -26,11 +26,11 @@ Project、Working directory、Memo directoryは別々に指定できます。Das
 
 ## このバンドルの有効化
 
-配布版では、このガイドは `GemiHub Desktop Help` というbuilt-in bundleとして常に利用できます。Chat入力欄の本アイコンから選ぶと、会話のcurated contextとして参照されます。source checkoutのMarkdownを外部bundleとして確認するときだけ、このリポジトリをWorking directoryにし、`Settings > Local retrieval > OKF knowledge bundles`のrootへ `docs/okf` を設定します。
+配布版では、このガイドは `GemiHub Desktop Help` というbuilt-in bundleとして常に利用できます。Chat入力欄の本アイコンから選ぶと、会話のcurated contextとして参照されます。source checkoutのMarkdownを外部bundleとして確認するときだけ、このリポジトリをFiles directoryにし、`Settings > Local retrieval > OKF knowledge bundles`のrootへ `docs/okf` を設定します。
 
 ## ワークスペースとドキュメント
 
-* [Projectsと作業ディレクトリ](/features/workspace-projects.md) - プロジェクト資産とFileTreeの作業フォルダの違い、切り替え方法。
+* [WorkspaceとFilesディレクトリ](/features/workspace-projects.md) - Workspace資産と通常ファイルの範囲の違い。
 * [ファイル管理](/features/file-management.md) - ファイルを開く方法、FileTree、外部エディタ、保存とエクスポート。
 * [ドキュメントビューア](/features/document-viewers.md) - PDF、EPUB、HTML、テキスト、画像の表示。
 * [Markdown編集](/features/markdown-editing.md) - Preview、WYSIWYG、Rawの編集モードと拡張記法。

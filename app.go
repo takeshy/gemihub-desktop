@@ -22,8 +22,6 @@ type App struct {
 	projectMu        sync.Mutex
 	projectConfigDir string
 	projectState     ProjectState
-	sessionProject   *Project
-	sessionNoProject bool
 	cliMu            sync.Mutex
 	cliCmd           *exec.Cmd
 	ragMu            sync.Mutex
@@ -57,9 +55,6 @@ func (a *App) startup(ctx context.Context) {
 	}
 	if err := a.initializeProjects(); err != nil {
 		fmt.Println("Could not initialize projects:", err)
-	}
-	if len(paths) > 0 {
-		a.configureFileLaunchProject(filepath.Dir(paths[0]))
 	}
 }
 

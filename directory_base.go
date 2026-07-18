@@ -42,7 +42,7 @@ type DirectoryFileEntry struct {
 
 func (a *App) SelectDirectoryBase() (string, error) {
 	path, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "Select Workspace Directory",
+		Title: "Select Files Directory",
 	})
 	if err != nil || path == "" {
 		return path, err
@@ -94,8 +94,6 @@ func (a *App) directoryPath(path string, allowMissing bool) (string, error) {
 	if !forceWorkspace && isProjectResourcePath(path) {
 		if projectBase := a.GetActiveProjectPath(); projectBase != "" {
 			base = projectBase
-		} else if a.isSessionWithoutProject() {
-			return "", fmt.Errorf("project is required for Dashboards, Kanban, Bases, Secret Manager, skills, and workflows; select or create a project")
 		}
 	}
 	if base == "" {
@@ -151,15 +149,12 @@ func resolvePathInsideBase(base, path string, allowMissing bool) (string, error)
 	return target, nil
 }
 
-func (a *App) isSessionWithoutProject() bool {
-	a.projectMu.Lock()
-	defer a.projectMu.Unlock()
-	return a.sessionNoProject
-}
-
 func isProjectResourcePath(path string) bool {
 	normalized := strings.TrimLeft(filepath.ToSlash(strings.TrimSpace(path)), "/")
 	first := strings.SplitN(normalized, "/", 2)[0]
+	if strings.EqualFold(first, ".llm-hub") {
+		return true
+	}
 	for _, root := range projectResourceDirectories {
 		if strings.EqualFold(first, root) {
 			return true

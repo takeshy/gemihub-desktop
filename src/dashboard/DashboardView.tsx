@@ -1986,8 +1986,7 @@ export function DashboardView({
                 (widgetNavigation?.forward.length ?? 0) > 0;
               const updateFileConfig = (next: Record<string, unknown>) =>
                 updateFileWidget(widget.id, next);
-              // §3: without a memo directory the feature is disabled and the
-              // icon prompts for settings instead.
+              // Memo files live under the Workspace's Memos directory.
               const toggleMemoPanel = () => {
                 if (!memoDirPath) {
                   if (confirm(tr("memo.dirPrompt"))) onOpenSettings();

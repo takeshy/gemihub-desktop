@@ -27,8 +27,8 @@ Automation ruleとは別に、特定Workflowへ任意のキーボードショー
 
 # 保存場所の注意
 
-Automation ruleとHotkeyの割り当ては、Workflowファイル本体と違い、Working directoryのpathに紐づけてブラウザ側のlocalStorageへ保存されます。**Projectの資産としては保存されないため、Working directoryを切り替えると別のruleセットが表示されます。** また、アプリやブラウザのstorageを消去すると、Workflowファイル自体は残ったままruleとHotkeyの設定だけが失われるため注意してください。
+Automation ruleとHotkeyの割り当てはWorkspaceのpathに紐づけてブラウザ側のlocalStorageへ保存されます。Workspace directoryを変更すると別のruleセットが表示されます。また、アプリやブラウザのstorageを消去すると、Workflowファイル自体は残ったままruleとHotkeyの設定だけが失われるため注意してください。
 
 # 関連機能
 
-[Workflow](/features/workflows.md)、[Projectsと作業ディレクトリ](/features/workspace-projects.md)（rule保存先がWorking directory側である点）。
+[Workflow](/features/workflows.md)、[WorkspaceとFilesディレクトリ](/features/workspace-projects.md)。

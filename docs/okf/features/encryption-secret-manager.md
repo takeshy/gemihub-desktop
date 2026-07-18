@@ -10,7 +10,7 @@ timestamp: 2026-07-15T00:00:00+09:00
 
 # Secret Manager
 
-DashboardのSecret Manager widgetでは、指定folder内の暗号化ファイルを作成、unlock、copy、updateできます。API keyなどを平文Markdownへ置かずにProject内で管理する用途を想定しています。
+DashboardのSecret Manager widgetでは、指定folder内の暗号化ファイルを作成、unlock、copy、updateできます。API keyなどを平文Markdownへ置かずにWorkspace内で管理する用途を想定しています。
 
 # 履歴の暗号化
 

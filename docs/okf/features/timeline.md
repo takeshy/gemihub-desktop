@@ -6,7 +6,7 @@ tags: [timeline, markdown, journal, dashboard]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-Timeline widgetは、短い記録を時系列で残す個人用Markdownマイクロブログです。Dashboardに追加し、Timeline名、表示する最新件数、composer modeなどを設定します。データはProject内の通常のMarkdown資産として扱えます。
+Timeline widgetは、短い記録を時系列で残す個人用Markdownマイクロブログです。Dashboardに追加し、Timeline名、表示する最新件数、composer modeなどを設定します。データはWorkspace内の通常のMarkdown資産として扱えます。
 
 Timelineは日々のログや進捗メモのように「投稿時刻順で記録を積む」用途に向きます。特定ドキュメントの引用位置と紐づけたい場合は、別機能の[引用付きメモ](/features/document-memos.md)を使います。複数の文書メモを横断して確認する場合はMemo List widgetを使います。
 

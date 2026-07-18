@@ -17,7 +17,6 @@ import {
   Database,
   Eye,
   FolderOpen,
-  FolderTree,
   Home,
   LayoutDashboard,
   Library,
@@ -25,7 +24,6 @@ import {
   MessageSquare,
   Moon,
   NotebookText,
-  Palette,
   Pencil,
   Plug,
   Plus,
@@ -84,10 +82,10 @@ import {
   openDeveloperTools,
   type ProjectState,
   selectDirectoryBase,
-  selectDirectoryPath,
   selectExternalEditor,
+  selectProjectDirectory,
   selectVertexOAuthClient,
-  setActiveProject,
+  setProjectDirectory,
   setDirectoryBase,
   startDiscordBot,
   startupFilePaths,
@@ -121,7 +119,6 @@ import {
 } from "./skills/skills";
 import { AgentSkillsSettings } from "./skills/AgentSkillsSettings";
 import { APP_NAME } from "./appIdentity";
-import { ProjectsSettings } from "./projects/ProjectsSettings";
 import { isBinaryDocumentFileName } from "./dashboard/documentKind";
 import { configureOrUnlockHistoryEncryption, historyEncryptionConfigured, historyEncryptionPreferences, migrateWorkflowHistoryStorage, setHistoryEncryptionPreferences } from "./lib/historyEncryption";
 
@@ -169,7 +166,6 @@ interface DiffTarget {
 const STORAGE_KEY = "gemihub-desktop:document";
 const NAME_KEY = "gemihub-desktop:fileName";
 const EXTERNAL_EDITOR_KEY = "gemihub-desktop:externalEditorPath";
-const MEMO_DIRECTORY_KEY = "gemihub-desktop:memoDirectory";
 const MEMO_SYNC_TIMELINE_KEY = "gemihub-desktop:memoSyncTimeline";
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
 const LANGUAGE_KEY = "gemihub-desktop:language";
@@ -804,9 +800,7 @@ export default function App() {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<
-    | "projects"
-    | "workspace"
-    | "appearance"
+    | "general"
     | "encryption"
     | "ai"
     | "cli"
@@ -816,7 +810,7 @@ export default function App() {
     | "mcp"
     | "discord"
     | "plugins"
-  >("projects");
+  >("general");
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
   const [historyEncryption, setHistoryEncryption] = useState(historyEncryptionPreferences);
   const [historyEncryptionPassword, setHistoryEncryptionPassword] = useState("");
@@ -848,9 +842,6 @@ export default function App() {
   );
   const [externalEditorPath, setExternalEditorPath] = useState(() =>
     readStored(EXTERNAL_EDITOR_KEY, "")
-  );
-  const [memoDirPath, setMemoDirPath] = useState(() =>
-    readStored(MEMO_DIRECTORY_KEY, "")
   );
   const [memoSyncTimeline, setMemoSyncTimeline] = useState(() =>
     readStored(MEMO_SYNC_TIMELINE_KEY, "")
@@ -886,6 +877,7 @@ export default function App() {
     projectState.projects.find((project) =>
       project.id === projectState.activeProjectId
     )?.path || "";
+  const memoDirPath = activeProjectPath ? `${activeProjectPath.replace(/[\\/]+$/, "")}/Memos` : "";
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [chatViewOpen, setChatViewOpen] = useState(() =>
     readStored(AI_ENABLED_KEY, "true") !== "false"
@@ -1053,10 +1045,10 @@ export default function App() {
     dashboardRawSaveTimerRef.current = null;
   }, []);
 
-  const activateProject = useCallback(async (id: string) => {
+  const changeProjectDirectory = useCallback(async (path: string) => {
     prepareProjectChange();
     try {
-      const state = await setActiveProject(id);
+      const state = await setProjectDirectory(path);
       applyProjectState(state);
       window.dispatchEvent(new Event("llm-hub:project-changed"));
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
@@ -1167,13 +1159,6 @@ export default function App() {
     }
   }, [externalEditorPath]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(MEMO_DIRECTORY_KEY, memoDirPath);
-    } catch (error) {
-      console.warn("Could not persist memo directory.", error);
-    }
-  }, [memoDirPath]);
 
   useEffect(() => {
     try {
@@ -1222,7 +1207,7 @@ export default function App() {
 
   useEffect(() => {
     const requireProject = () => {
-      setSettingsSection("projects");
+      setSettingsSection("general");
       setSettingsOpen(true);
     };
     window.addEventListener("llm-hub:project-required", requireProject);
@@ -1594,10 +1579,10 @@ export default function App() {
               <span className="global-context">Directory: {directoryBase}</span>
             )}
             <span className="global-context">
-              Project:{" "}
+              Workspace:{" "}
               {projectState.projects.find((project) =>
                 project.id === projectState.activeProjectId
-              )?.name || "Default (session)"}
+              )?.name || "Workspace"}
             </span>
           </div>
 
@@ -1617,13 +1602,6 @@ export default function App() {
               type="button"
               className="icon-button"
               onClick={() => {
-                if (!memoDirPath) {
-                  if (confirm(tr("memo.dirPrompt"))) {
-                    setSettingsSection("workspace");
-                    setSettingsOpen(true);
-                  }
-                  return;
-                }
                 setMemoListOpen(true);
               }}
               title={tr("topbar.memoList")}
@@ -1669,9 +1647,7 @@ export default function App() {
             <FileTree
               directoryBase={directoryBase}
               onDirectoryBaseChange={setDirectoryBaseState}
-              projects={projectState.projects}
-              activeProjectId={projectState.activeProjectId}
-              onProjectChange={(id) => void activateProject(id)}
+              projectPath={activeProjectPath}
               onOpenFile={(path) => {
                 if (
                   !path.startsWith("workspace://") &&
@@ -1980,24 +1956,10 @@ export default function App() {
                 <aside className="settings-nav">
                   <button
                     type="button"
-                    className={settingsSection === "projects" ? "active" : ""}
-                    onClick={() => setSettingsSection("projects")}
+                    className={settingsSection === "general" ? "active" : ""}
+                    onClick={() => setSettingsSection("general")}
                   >
-                    <FolderOpen size={16} /> Projects
-                  </button>
-                  <button
-                    type="button"
-                    className={settingsSection === "workspace" ? "active" : ""}
-                    onClick={() => setSettingsSection("workspace")}
-                  >
-                    <FolderTree size={16} /> Working directory
-                  </button>
-                  <button
-                    type="button"
-                    className={settingsSection === "appearance" ? "active" : ""}
-                    onClick={() => setSettingsSection("appearance")}
-                  >
-                    <Palette size={16} /> Appearance
+                    <FolderOpen size={16} /> General
                   </button>
                   <button
                     type="button"
@@ -2068,24 +2030,26 @@ export default function App() {
                   </button>
                 </aside>
                 <div className="settings-body">
-                  {settingsSection === "projects" && (
-                    <ProjectsSettings
-                      state={projectState}
-                      defaultPath={directoryBase}
-                      onChange={applyProjectState}
-                      onActivate={activateProject}
-                      onBeforeActiveProjectMutation={prepareProjectChange}
-                    />
-                  )}
-                  {settingsSection === "workspace" && (
+                  {settingsSection === "general" && (
                     <>
                       <label className="settings-field">
-                        <span>Working directory</span>
+                        <span>Workspace directory</span>
+                        <div className="settings-path-row">
+                          <input value={activeProjectPath} readOnly placeholder="Select a Workspace directory" />
+                          <button type="button" className="settings-browse" onClick={async () => {
+                            const path = await selectProjectDirectory();
+                            if (path) await changeProjectDirectory(path);
+                          }}>{tr("common.browse")}</button>
+                        </div>
+                        <small className="settings-hint">Dashboards, Memos, Secrets, skills, workflows, plugins, and application state are stored under this directory.</small>
+                      </label>
+                      <label className="settings-field">
+                        <span>Files directory</span>
                         <div className="settings-path-row">
                           <input
                             value={directoryBase}
                             readOnly
-                            placeholder="Open a working directory"
+                            placeholder="Open a files directory"
                           />
                           <button
                             type="button"
@@ -2099,8 +2063,8 @@ export default function App() {
                           </button>
                         </div>
                         <small className="settings-hint">
-                          FileTree and file tools use this working directory.
-                          Project assets are stored separately and are not
+                          The Files tab and AI file tools use this directory.
+                          Workspace assets are stored separately and are not
                           written here.
                         </small>
                       </label>
@@ -2126,29 +2090,6 @@ export default function App() {
                         </div>
                       </label>
                       <label className="settings-field">
-                        <span>{tr("settings.memoDirectory")}</span>
-                        <div className="settings-path-row">
-                          <input
-                            value={memoDirPath}
-                            onChange={(event) => setMemoDirPath(event.target.value)}
-                            placeholder="Select a memo directory"
-                          />
-                          <button
-                            type="button"
-                            className="settings-browse"
-                            onClick={async () => {
-                              const path = await selectDirectoryPath();
-                              if (path) setMemoDirPath(path);
-                            }}
-                          >
-                            {tr("common.browse")}
-                          </button>
-                        </div>
-                        <small className="settings-hint">
-                          {tr("settings.memoDirectoryHint")}
-                        </small>
-                      </label>
-                      <label className="settings-field">
                         <span>{tr("settings.memoSyncTimeline")}</span>
                         <input
                           value={memoSyncTimeline}
@@ -2159,10 +2100,6 @@ export default function App() {
                           {tr("settings.memoSyncTimelineHint")}
                         </small>
                       </label>
-                    </>
-                  )}
-                  {settingsSection === "appearance" && (
-                    <>
                       <label className="settings-field">
                         <span>{tr("settings.language")}</span>
                         <select

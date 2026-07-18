@@ -21,7 +21,7 @@ AI Chatは任意機能です。`Settings > AI features > Use AI features` を有
 
 # 履歴の保存場所
 
-Chat historyはProject内の隠しstate fileとして保存されます。Projectを選択していない場合のみ、アプリ設定領域内のsession用stateへ保存され、この場合に限り他の状態（Workflow logなど）より先にhistoryだけが利用できます。つまりProjectを選ぶ・選ばないでhistoryの保存先が変わり、両者は自動的にはマージされません。「前の会話が見当たらない」ときは、Project選択状態が変わっていないか確認してください。
+Chat historyはWorkspace内の隠しstate fileとして保存されます。session専用の別保存先はなく、Workflow logなどの状態と同じWorkspaceにまとまります。
 
 # Session単位の設定
 

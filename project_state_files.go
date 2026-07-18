@@ -17,20 +17,13 @@ func (a *App) projectStateFilePath(name string) (string, error) {
 	}
 	base := a.GetActiveProjectPath()
 	if base == "" {
-		if name != "chat-history" {
-			return "", fmt.Errorf("project is required for %s", name)
-		}
-		config, err := a.projectsConfigDir()
-		if err != nil {
-			return "", err
-		}
-		base = filepath.Join(config, "Session")
+		return "", fmt.Errorf("project is required for %s", name)
 	}
 	return filepath.Join(base, ".llm-hub", "state", name+".data"), nil
 }
 
 // ReadProjectStateFile reads hidden application state owned by the active
-// Project. Chat history falls back to the persistent project-less Session.
+// Project.
 // An absent state file is represented by an empty string.
 func (a *App) ReadProjectStateFile(name string) (string, error) {
 	path, err := a.projectStateFilePath(name)
@@ -48,7 +41,7 @@ func (a *App) ReadProjectStateFile(name string) (string, error) {
 }
 
 // WriteProjectStateFile atomically stores hidden application state instead of
-// browser localStorage. Only Chat history is valid without an active Project.
+// browser localStorage.
 func (a *App) WriteProjectStateFile(name, content string) error {
 	path, err := a.projectStateFilePath(name)
 	if err != nil {

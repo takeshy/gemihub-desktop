@@ -17,12 +17,17 @@ import { checkPluginUpdate, installPluginRelease, PLUGIN_HOST_ID, previewPluginR
 
 const CONFIG_KEY = "llm-hub:plugins";
 
-function storedConfigs(): PluginConfig[] {
-  try { return JSON.parse(localStorage.getItem(CONFIG_KEY) || "[]") as PluginConfig[]; } catch { return []; }
+function workspaceConfigKey(projectBase: string): string {
+  return `${CONFIG_KEY}:${encodeURIComponent(projectBase)}`;
+}
+
+function storedConfigs(key: string): PluginConfig[] {
+  try { return JSON.parse(localStorage.getItem(key) || "[]") as PluginConfig[]; } catch { return []; }
 }
 
 export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, onCollapse, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; onCollapse: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
-  const [configs, setConfigs] = useState<PluginConfig[]>(storedConfigs);
+  const configKey = useMemo(() => workspaceConfigKey(projectBase), [projectBase]);
+  const [configs, setConfigs] = useState<PluginConfig[]>(() => storedConfigs(configKey));
   const [manifests, setManifests] = useState<PluginManifest[]>([]);
   const [views, setViews] = useState<PluginView[]>([]);
   const [settingsTabs, setSettingsTabs] = useState<PluginSettingsTab[]>([]);
@@ -38,14 +43,24 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const instancesRef = useRef<PluginInstance[]>([]);
   const apiMapRef = useRef(new Map<string, PluginAPI>());
   const handledPluginViewRequestRef = useRef(0);
+  const loadingConfigRef = useRef(false);
 
   useEffect(() => {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(configs));
-  }, [configs]);
+    loadingConfigRef.current = true;
+    setConfigs(storedConfigs(configKey));
+  }, [configKey]);
+
+  useEffect(() => {
+    if (loadingConfigRef.current) {
+      loadingConfigRef.current = false;
+      return;
+    }
+    localStorage.setItem(configKey, JSON.stringify(configs));
+  }, [configKey, configs]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!directoryBase) {
+    if (!projectBase) {
       setManifests([]);
       return;
     }
@@ -74,7 +89,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
       }
     })();
     return () => { cancelled = true; };
-  }, [directoryBase, pluginRefresh]);
+  }, [pluginRefresh, projectBase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -241,8 +256,8 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
         {managerOpen ? (
           <section className="plugin-manager">
             <header><div><strong>Plugins</strong><small>GemiHub-compatible local extensions</small></div><button type="button" onClick={() => setManagerOpen(false)}><X size={16} /></button></header>
-            {!directoryBase && <p>Select a workspace directory to discover `.llm-hub/plugins`.</p>}
-            {directoryBase && <form className="plugin-install" onSubmit={(event) => { event.preventDefault(); void installFromGitHub(); }}><input value={repoInput} onChange={(event) => setRepoInput(event.target.value)} placeholder="owner/repository or GitHub URL" aria-label="GitHub plugin repository" disabled={!!pluginBusy} /><button type="submit" disabled={!repoInput.trim() || !!pluginBusy}>{pluginBusy === "install" ? <Loader2 className="spin" size={14} /> : <Download size={14} />} Install</button></form>}
+            {!projectBase && <p>Select a Workspace directory to discover `.llm-hub/plugins`.</p>}
+            {projectBase && <form className="plugin-install" onSubmit={(event) => { event.preventDefault(); void installFromGitHub(); }}><input value={repoInput} onChange={(event) => setRepoInput(event.target.value)} placeholder="owner/repository or GitHub URL" aria-label="GitHub plugin repository" disabled={!!pluginBusy} /><button type="submit" disabled={!repoInput.trim() || !!pluginBusy}>{pluginBusy === "install" ? <Loader2 className="spin" size={14} /> : <Download size={14} />} Install</button></form>}
             {managerMessage && <p className="plugin-manager-message">{managerMessage}</p>}
             {manifests.map((manifest) => {
               const config = configs.find((item) => item.id === manifest.id);

@@ -6,7 +6,7 @@ tags: [dashboard, widgets, layout, workspace]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-Dashboardは複数のwidgetを自由に配置するワークスペースです。Project内の `Dashboards/*.dashboard` に可搬なYAMLとして保存され、再起動後もレイアウトを復元します。widgetは追加、移動、リサイズ、設定、最大化、削除ができます。
+Dashboardは複数のwidgetを自由に配置するワークスペースです。Workspace内の `Dashboards/*.dashboard` に可搬なYAMLとして保存され、再起動後もレイアウトを復元します。widgetは追加、移動、リサイズ、設定、最大化、削除ができます。
 
 # 標準widget
 

@@ -12,7 +12,7 @@ Open Knowledge Format（OKF）は、1ファイルを1概念として整理する
 
 製品機能ガイドは `GemiHub Desktop Help` built-in bundleとして常にselectorへ表示され、外部OKF rootを設定せず利用できます。他の知識を追加する場合は次の手順で外部bundleを登録します。
 
-1. OKF bundleをWorking directory内に用意する。既定の検索rootは `Knowledge`。
+1. OKF bundleをFiles directory内に用意する。既定の検索rootは `Knowledge`。
 2. OKF settingsで検索rootを設定する。
 3. `index.md` を持つbundleを検出する。
 4. ChatのOKF selectorで参照したいbundleをactiveにする。
