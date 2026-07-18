@@ -17,6 +17,9 @@ func TestSingleProjectInitializeAndChangeDirectory(t *testing.T) {
 	if len(state.Projects) != 1 || state.Projects[0].Name != "Workspace" || state.ActiveProjectID != "project" {
 		t.Fatalf("unexpected defaults: %#v", state)
 	}
+	if want := filepath.Join(config, "GemiHub Workspace"); state.Projects[0].Path != want {
+		t.Fatalf("default workspace path = %q, want %q", state.Projects[0].Path, want)
+	}
 	if app.GetDirectoryBase() != "" {
 		t.Fatalf("project initialization changed the independent directory base")
 	}

@@ -81,7 +81,6 @@ import {
   listProjects,
   openDeveloperTools,
   type ProjectState,
-  selectDirectoryBase,
   selectExternalEditor,
   selectProjectDirectory,
   selectVertexOAuthClient,
@@ -169,7 +168,7 @@ const EXTERNAL_EDITOR_KEY = "gemihub-desktop:externalEditorPath";
 const MEMO_SYNC_TIMELINE_KEY = "gemihub-desktop:memoSyncTimeline";
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
 const LANGUAGE_KEY = "gemihub-desktop:language";
-const DIRECTORY_BASE_KEY = "llm-hub:directoryBase";
+const LAST_OPENED_DIRECTORY_KEY = "llm-hub:lastOpenedDirectory";
 const FILE_TREE_WIDTH_KEY = "llm-hub:fileTreeWidth";
 const CHAT_VIEW_WIDTH_KEY = "llm-hub:chatViewWidth";
 const DEFAULT_FILE_TREE_WIDTH = 250;
@@ -982,8 +981,14 @@ export default function App() {
       return false;
     }
     replaceDashboard(loaded, path);
+    if (projectState.activeProjectId) {
+      localStorage.setItem(
+        `gemihub-desktop:last-dashboard:${encodeURIComponent(projectState.activeProjectId)}`,
+        path,
+      );
+    }
     return true;
-  }, [replaceDashboard]);
+  }, [projectState.activeProjectId, replaceDashboard]);
 
   const undoDashboard = useCallback(() => {
     const previous = dashboardPastRef.current.at(-1);
@@ -1192,7 +1197,7 @@ export default function App() {
       const separator = Math.max(startupFile.lastIndexOf("/"), startupFile.lastIndexOf("\\"));
       const associatedDirectory = separator >= 0 ? startupFile.slice(0, separator) : "";
       setDirectoryBaseState(
-        associatedDirectory || startupDirectory || readStored(DIRECTORY_BASE_KEY, ""),
+        associatedDirectory || startupDirectory || readStored(LAST_OPENED_DIRECTORY_KEY, ""),
       );
       setStartupPaths(paths);
       setDirectoryContextLoaded(true);
@@ -1216,9 +1221,9 @@ export default function App() {
 
   useEffect(() => {
     if (!directoryContextLoaded) return;
-    localStorage.setItem(DIRECTORY_BASE_KEY, directoryBase);
+    localStorage.setItem(LAST_OPENED_DIRECTORY_KEY, directoryBase);
     void setDirectoryBase(directoryBase).catch((error) =>
-      console.warn("Could not set the working directory.", error)
+      console.warn("Could not set the opened file directory.", error)
     );
   }, [directoryBase, directoryContextLoaded]);
 
@@ -1255,7 +1260,10 @@ export default function App() {
       const homeKey = `gemihub-desktop:home-dashboard:${
         encodeURIComponent(projectState.activeProjectId)
       }`;
-      const preferred = localStorage.getItem(homeKey);
+      const lastKey = `gemihub-desktop:last-dashboard:${
+        encodeURIComponent(projectState.activeProjectId)
+      }`;
+      const preferred = localStorage.getItem(lastKey) || localStorage.getItem(homeKey);
       const target = files.find((file) => file.path === preferred)?.path ||
         files[0]?.path;
       setHomeDashboardPath(target || "");
@@ -1648,6 +1656,7 @@ export default function App() {
               directoryBase={directoryBase}
               onDirectoryBaseChange={setDirectoryBaseState}
               projectPath={activeProjectPath}
+              openFilesOnStartup={Boolean(startupPaths?.length)}
               onOpenFile={(path) => {
                 if (
                   !path.startsWith("workspace://") &&
@@ -1873,7 +1882,12 @@ export default function App() {
                 isDark={isDark}
                 aiEnabled={aiEnabled}
                 pluginViewRequest={pluginViewRequest}
+                settingsOpen={settingsOpen && settingsSection === "plugins"}
                 onCollapse={() => setChatViewOpen(false)}
+                onOpenPluginView={() => {
+                  setSettingsOpen(false);
+                  setChatViewOpen(true);
+                }}
                 chatSettings={chatSettings}
                 onChatSettingsChange={setChatSettings}
                 activeFile={activeChatFile}
@@ -2024,7 +2038,10 @@ export default function App() {
                   <button
                     type="button"
                     className={settingsSection === "plugins" ? "active" : ""}
-                    onClick={() => setSettingsSection("plugins")}
+                    onClick={() => {
+                      setSettingsSection("plugins");
+                      setChatViewOpen(true);
+                    }}
                   >
                     <Plug size={16} /> Plugins
                   </button>
@@ -2042,31 +2059,6 @@ export default function App() {
                           }}>{tr("common.browse")}</button>
                         </div>
                         <small className="settings-hint">Dashboards, Memos, Secrets, skills, workflows, plugins, and application state are stored under this directory.</small>
-                      </label>
-                      <label className="settings-field">
-                        <span>Files directory</span>
-                        <div className="settings-path-row">
-                          <input
-                            value={directoryBase}
-                            readOnly
-                            placeholder="Open a files directory"
-                          />
-                          <button
-                            type="button"
-                            className="settings-browse"
-                            onClick={async () => {
-                              const path = await selectDirectoryBase();
-                              if (path) setDirectoryBaseState(path);
-                            }}
-                          >
-                            {tr("common.browse")}
-                          </button>
-                        </div>
-                        <small className="settings-hint">
-                          The Files tab and AI file tools use this directory.
-                          Workspace assets are stored separately and are not
-                          written here.
-                        </small>
                       </label>
                       <label className="settings-field">
                         <span>{tr("settings.externalEditor")}</span>
@@ -4385,17 +4377,7 @@ export default function App() {
                     </>
                   )}
                   {settingsSection === "plugins" && (
-                    <section className="settings-info-card">
-                      <Plug size={20} />
-                      <div>
-                        <strong>Plugin manager</strong>
-                        <p>
-                          Use the plug icon in the app header to open Plugin
-                          view. Local plugins are discovered from{" "}
-                          <code>.llm-hub/plugins</code>.
-                        </p>
-                      </div>
-                    </section>
+                    <div id="plugin-settings-manager" />
                   )}
                 </div>
               </div>

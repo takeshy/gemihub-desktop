@@ -5,11 +5,11 @@
 ## 最初に行うこと
 
 1. 必要なら `Settings > General` でWorkspace directoryを変更する。
-2. 同じ画面のFiles directoryで、普段扱うファイルのルートを選ぶ。
+2. 単独起動では最後のタブ、フォルダ、Dashboardが復元される。関連付けでファイルを開くと、そのフォルダがFilesタブへ表示される。
 3. `+ Add Widget` または `Ctrl/Cmd + P` でファイルを開く。
 4. AIを使う場合は `Settings > AI features` を設定する。引用メモはWorkspace内の `Memos/` へ自動保存される。
 
-DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspace、FileTreeやAI file toolsが触れる範囲がFiles directoryです。引用メモはWorkspaceの `Memos/` に保存されます。迷った場合は両方に同じフォルダを指定しても構いません。
+DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspaceです。Filesタブは関連付けで開いたファイルのフォルダを一時表示し、AI file toolsもその範囲を使います。引用メモはWorkspaceの `Memos/` に保存されます。
 
 ## 目的から探す
 
@@ -30,7 +30,7 @@ DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspace
 
 ## ワークスペースとドキュメント
 
-* [WorkspaceとFilesディレクトリ](/features/workspace-projects.md) - Workspace資産と通常ファイルの範囲の違い。
+* [WorkspaceとFilesタブ](/features/workspace-projects.md) - Workspace資産と関連付けで開いたファイルの扱い。
 * [ファイル管理](/features/file-management.md) - ファイルを開く方法、FileTree、外部エディタ、保存とエクスポート。
 * [ドキュメントビューア](/features/document-viewers.md) - PDF、EPUB、HTML、テキスト、画像の表示。
 * [Markdown編集](/features/markdown-editing.md) - Preview、WYSIWYG、Rawの編集モードと拡張記法。

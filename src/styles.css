@@ -2692,8 +2692,10 @@ body.resizing-side-pane * {
 .file-tree-mode-bar > div { display: grid; min-width: 0; flex: 1; grid-template-columns: 1fr 1fr; gap: 3px; border-radius: 7px; background: var(--panel-subtle); padding: 3px; }
 .file-tree-mode-bar button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; padding: 6px; font-size: 0.7rem; }
 .file-tree-mode-bar > div button.active { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
-.file-tree-mode-bar .file-tree-collapse { width: 27px; height: 27px; flex: none; padding: 0; }
-.file-tree-mode-bar .file-tree-collapse:hover { background: var(--panel-subtle); color: var(--text); }
+.file-tree-mode-bar .file-tree-collapse,
+.file-tree-mode-bar .file-tree-refresh { width: 27px; height: 27px; flex: none; padding: 0; }
+.file-tree-mode-bar .file-tree-collapse:hover,
+.file-tree-mode-bar .file-tree-refresh:hover { background: var(--panel-subtle); color: var(--text); }
 
 .file-tree-project { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; padding: 3px 5px; }
 .file-tree-project > span { display: grid; min-width: 0; gap: 1px; }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronRight, ChevronsRight, Download, Loader2, Plug, Puzzle, RefreshCw, Search, Trash2, Workflow as WorkflowIcon, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Bot, ChevronRight, ChevronsRight, Download, Loader2, Plug, Puzzle, RefreshCw, Search, Trash2, Workflow as WorkflowIcon } from "lucide-react";
 import { chat, listPluginIDs } from "../lib/wailsBackend";
 import { ChatPanel } from "../llm/ChatPanel";
 import type { ActiveSelection } from "../llm/selection";
@@ -25,7 +26,7 @@ function storedConfigs(key: string): PluginConfig[] {
   try { return JSON.parse(localStorage.getItem(key) || "[]") as PluginConfig[]; } catch { return []; }
 }
 
-export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, onCollapse, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; onCollapse: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
+export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, settingsOpen, onCollapse, onOpenPluginView, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; settingsOpen: boolean; onCollapse: () => void; onOpenPluginView: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
   const configKey = useMemo(() => workspaceConfigKey(projectBase), [projectBase]);
   const [configs, setConfigs] = useState<PluginConfig[]>(() => storedConfigs(configKey));
   const [manifests, setManifests] = useState<PluginManifest[]>([]);
@@ -33,7 +34,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const [settingsTabs, setSettingsTabs] = useState<PluginSettingsTab[]>([]);
   const [slashCommands, setSlashCommands] = useState<PluginSlashCommand[]>([]);
   const [activeTab, setActiveTab] = useState("chat");
-  const [managerOpen, setManagerOpen] = useState(false);
+  const [settingsContainer, setSettingsContainer] = useState<HTMLElement | null>(null);
   const [chatAttachmentRequest, setChatAttachmentRequest] = useState<{ id: number; files: Array<{ path: string; content: string }> }>({ id: 0, files: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [repoInput, setRepoInput] = useState("");
@@ -44,6 +45,10 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const apiMapRef = useRef(new Map<string, PluginAPI>());
   const handledPluginViewRequestRef = useRef(0);
   const loadingConfigRef = useRef(false);
+
+  useEffect(() => {
+    setSettingsContainer(settingsOpen ? document.getElementById("plugin-settings-manager") : null);
+  }, [settingsOpen]);
 
   useEffect(() => {
     loadingConfigRef.current = true;
@@ -152,7 +157,6 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
     if (!target) return;
     handledPluginViewRequestRef.current = pluginViewRequest;
     setActiveTab(target.id);
-    setManagerOpen(false);
   }, [activeView, pluginViewRequest, sidebarViews]);
 
   const tabs = useMemo(() => [
@@ -182,7 +186,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
     const view = sidebarViews.find((item) => item.pluginId === pluginId);
     if (!view) return;
     setActiveTab(view.id);
-    setManagerOpen(false);
+    onOpenPluginView();
   };
 
   const installFromGitHub = async () => {
@@ -246,16 +250,27 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
         <button type="button" onClick={onCollapse} title={aiEnabled ? "Collapse ChatView" : "Collapse Plugin view"}><ChevronsRight size={17} /></button>
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          return <button key={tab.id} type="button" className={!managerOpen && activeTab === tab.id ? "active" : ""} onClick={() => { setActiveTab(tab.id); setManagerOpen(false); }} title={tab.name}><Icon size={17} /></button>;
+          return <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)} title={tab.name}><Icon size={17} /></button>;
         })}
-        <span />
-        <button type="button" className={managerOpen ? "active" : ""} onClick={() => setManagerOpen((value) => !value)} title="Plugins"><Plug size={17} /></button>
       </header>
 
       <div className="plugin-host-body">
-        {managerOpen ? (
-          <section className="plugin-manager">
-            <header><div><strong>Plugins</strong><small>GemiHub-compatible local extensions</small></div><button type="button" onClick={() => setManagerOpen(false)}><X size={16} /></button></header>
+        {aiEnabled && activeTab === "chat" ? (
+          <ChatPanel isDark={isDark} directoryBase={directoryBase} projectBase={projectBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} activeFile={activeFile} activeSelection={activeSelection} externalAttachments={chatAttachmentRequest} pluginCommands={slashCommands} onOpenSettings={onOpenChatSettings} onOpenFile={onOpenDirectoryFile} onOpenWorkflow={(path) => { onOpenDirectoryFile(path); setActiveTab("workflow"); }} />
+        ) : aiEnabled && activeTab === "rag-search" ? (
+          <RAGSearchPanel directoryBase={directoryBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} onOpenSettings={onOpenRAGSettings} onOpenFile={onOpenDirectoryFile} onChatWithResults={(results) => { setChatAttachmentRequest((current) => ({ id: current.id + 1, files: results.map((result, index) => ({ path: `[RAG] ${result.filePath}#chunk-${result.chunkIndex}-${index + 1}`, content: result.text })) })); setActiveTab("chat"); }} />
+        ) : aiEnabled && activeTab === "workflow" ? (
+          <WorkflowPanel directoryBase={projectBase} settings={chatSettings} activeFile={activeFile} onOpenFile={onOpenDirectoryFile} />
+        ) : ActiveViewComponent && activeApi ? (
+          <ActiveViewComponent api={activeApi} language={language} />
+        ) : (
+          <section className="chat-placeholder"><Plug size={24} /><span>Select a plugin view.</span></section>
+        )}
+      </div>
+    </aside>
+    {settingsContainer && createPortal(
+          <section className="plugin-manager settings-plugin-manager">
+            <header><div><strong>Plugins</strong><small>GemiHub-compatible Workspace extensions</small></div></header>
             {!projectBase && <p>Select a Workspace directory to discover `.llm-hub/plugins`.</p>}
             {projectBase && <form className="plugin-install" onSubmit={(event) => { event.preventDefault(); void installFromGitHub(); }}><input value={repoInput} onChange={(event) => setRepoInput(event.target.value)} placeholder="owner/repository or GitHub URL" aria-label="GitHub plugin repository" disabled={!!pluginBusy} /><button type="submit" disabled={!repoInput.trim() || !!pluginBusy}>{pluginBusy === "install" ? <Loader2 className="spin" size={14} /> : <Download size={14} />} Install</button></form>}
             {managerMessage && <p className="plugin-manager-message">{managerMessage}</p>}
@@ -278,20 +293,9 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
               const api = apiMapRef.current.get(tab.pluginId);
               return api ? <SettingsComponent key={tab.pluginId} api={api} language={language} /> : null;
             })}
-          </section>
-        ) : aiEnabled && activeTab === "chat" ? (
-          <ChatPanel isDark={isDark} directoryBase={directoryBase} projectBase={projectBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} activeFile={activeFile} activeSelection={activeSelection} externalAttachments={chatAttachmentRequest} pluginCommands={slashCommands} onOpenSettings={onOpenChatSettings} onOpenFile={onOpenDirectoryFile} onOpenWorkflow={(path) => { onOpenDirectoryFile(path); setActiveTab("workflow"); }} />
-        ) : aiEnabled && activeTab === "rag-search" ? (
-          <RAGSearchPanel directoryBase={directoryBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} onOpenSettings={onOpenRAGSettings} onOpenFile={onOpenDirectoryFile} onChatWithResults={(results) => { setChatAttachmentRequest((current) => ({ id: current.id + 1, files: results.map((result, index) => ({ path: `[RAG] ${result.filePath}#chunk-${result.chunkIndex}-${index + 1}`, content: result.text })) })); setActiveTab("chat"); }} />
-        ) : aiEnabled && activeTab === "workflow" ? (
-          <WorkflowPanel directoryBase={projectBase} settings={chatSettings} activeFile={activeFile} onOpenFile={onOpenDirectoryFile} />
-        ) : ActiveViewComponent && activeApi ? (
-          <ActiveViewComponent api={activeApi} language={language} />
-        ) : (
-          <section className="chat-placeholder"><Plug size={24} /><span>Select a plugin view.</span></section>
+          </section>,
+          settingsContainer,
         )}
-      </div>
-    </aside>
     </>
   );
 }

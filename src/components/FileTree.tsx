@@ -160,12 +160,14 @@ export function FileTree({
   directoryBase,
   onDirectoryBaseChange,
   projectPath,
+  openFilesOnStartup,
   onOpenFile,
   onCollapse,
 }: {
   directoryBase: string;
   onDirectoryBaseChange: (path: string) => void;
   projectPath: string;
+  openFilesOnStartup: boolean;
   onOpenFile: (path: string) => void;
   onCollapse: () => void;
 }) {
@@ -175,7 +177,9 @@ export function FileTree({
   const [query, setQuery] = useState("");
   const [contentResults, setContentResults] = useState<FileSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [treeMode, setTreeMode] = useState<TreeMode>(() => localStorage.getItem("llm-hub:fileTreeMode") === "project" ? "project" : "files");
+  const [treeMode, setTreeMode] = useState<TreeMode>(() =>
+    localStorage.getItem("llm-hub:fileTreeMode") === "files" ? "files" : "project"
+  );
   const [contextMenu, setContextMenu] = useState<{ node: FileTreeNode; path: string; x: number; y: number } | null>(null);
   const [encryptedModalPath, setEncryptedModalPath] = useState("");
   const [historyDialog, setHistoryDialog] = useState<{ path: string; entries: FileHistoryEntry[] } | null>(null);
@@ -219,7 +223,13 @@ export function FileTree({
   const visibleContentResults = useMemo(() => treeMode === "project" ? contentResults.filter((item) => PROJECT_ROOTS.some((root) => item.path === root || item.path.toLowerCase().startsWith(`${root.toLowerCase()}/`))) : contentResults, [contentResults, treeMode]);
   const rootName = directoryBase.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || directoryBase;
 
-  useEffect(() => { localStorage.setItem("llm-hub:fileTreeMode", treeMode); }, [treeMode]);
+  useEffect(() => {
+    if (openFilesOnStartup) setTreeMode("files");
+  }, [openFilesOnStartup]);
+
+  useEffect(() => {
+    localStorage.setItem("llm-hub:fileTreeMode", treeMode);
+  }, [treeMode]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -283,19 +293,19 @@ export function FileTree({
           <button type="button" role="tab" aria-selected={treeMode === "files"} className={treeMode === "files" ? "active" : ""} onClick={() => switchTreeMode("files")}><Folder size={14} />Files</button>
           <button type="button" role="tab" aria-selected={treeMode === "project"} className={treeMode === "project" ? "active" : ""} onClick={() => switchTreeMode("project")}><Layers3 size={14} />Workspace</button>
         </div>
+        {(directoryBase || treeMode === "project") && <button type="button" className="file-tree-refresh" onClick={() => void reload()} title="Refresh"><RefreshCw size={15} className={loading ? "spin" : ""} /></button>}
         <button type="button" className="file-tree-collapse" onClick={onCollapse} title="Collapse FileTree"><ChevronsLeft size={16} /></button>
       </div>
-      <header className="file-tree-header">
-        {treeMode === "files" ? <button type="button" className="file-tree-root" onClick={() => void chooseDirectory()} title={directoryBase || "Open directory"}><FolderOpen size={16} /><span><small>FILES</small><strong>{directoryBase ? rootName : "Open directory"}</strong></span></button> : <div className="file-tree-project" title={projectPath}><FolderOpen size={16} /><span><small>WORKSPACE</small><strong>{projectPath.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "Workspace"}</strong></span></div>}
+      {treeMode === "files" && <header className="file-tree-header">
+        <button type="button" className="file-tree-root" onClick={() => void chooseDirectory()} title={directoryBase || "Open directory"}><FolderOpen size={16} /><span><small>FILES</small><strong>{directoryBase ? rootName : "Open directory"}</strong></span></button>
         <div className="file-tree-actions">
-          {directoryBase && treeMode === "files" && <>
+          {directoryBase && <>
             <button type="button" onClick={() => void createAtRoot("file")} title="New file"><FilePlus2 size={15} /></button>
             <button type="button" onClick={() => void createAtRoot("folder")} title="New folder"><FolderPlus size={15} /></button>
           </>}
-          {(directoryBase || treeMode === "project") && <button type="button" onClick={() => void reload()} title="Refresh"><RefreshCw size={15} className={loading ? "spin" : ""} /></button>}
-          {(directoryBase || treeMode === "project") && <button type="button" onClick={() => void listTrash().then(setTrashDialog)} title="Trash"><Trash2 size={15} /></button>}
+          {directoryBase && <button type="button" onClick={() => void listTrash().then(setTrashDialog)} title="Trash"><Trash2 size={15} /></button>}
         </div>
-      </header>
+      </header>}
       {((treeMode === "files" && directoryBase) || (treeMode === "project" && projectPath)) && (
         <>
           <label className="file-tree-search">

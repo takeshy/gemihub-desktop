@@ -34,6 +34,20 @@ func (a *App) projectsConfigDir() (string, error) {
 	return filepath.Join(config, appID), nil
 }
 
+func (a *App) defaultWorkspacePath(configDir string) (string, error) {
+	// Tests and embedded callers can isolate all generated data by overriding
+	// the config directory. Production workspaces belong somewhere users can
+	// reach directly from Explorer or Finder.
+	if a.projectConfigDir != "" {
+		return filepath.Join(configDir, "GemiHub Workspace"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "Documents", "GemiHub Workspace"), nil
+}
+
 var projectResourceDirectories = []string{"Dashboards", "Memos", "Secrets", "skills", "workflows"}
 
 func ensureProjectLayout(path string) error {
@@ -107,7 +121,11 @@ func (a *App) initializeProjects() error {
 		selected = &project
 	}
 	if selected == nil {
-		path, err := normalizedProjectPath(filepath.Join(dir, "Projects", "Default"))
+		defaultPath, err := a.defaultWorkspacePath(dir)
+		if err != nil {
+			return err
+		}
+		path, err := normalizedProjectPath(defaultPath)
 		if err != nil {
 			return err
 		}

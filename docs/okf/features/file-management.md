@@ -17,11 +17,11 @@ timestamp: 2026-07-15T00:00:00+09:00
 * External editor: `Settings > General`で実行ファイルを指定し、ローカルファイルを外部エディタで開く。
 * widgetは移動、リサイズ、最大化、クローズが可能。`Ctrl/Cmd + O`で最大化、`Ctrl/Cmd + M`で戻します。
 
-FileTreeとファイルAPIは選択したFiles directoryをルートにします。削除や過去版の復元については[履歴・複製・Trash](/features/file-history-trash.md)を参照してください。
+関連付けや「プログラムから開く」でファイルを開くと、FileTreeのFilesタブとファイルAPIはそのファイルのフォルダを一時的なルートにします。削除や過去版の復元については[履歴・複製・Trash](/features/file-history-trash.md)を参照してください。
 
 # 基本的な流れ
 
-1. Files directoryを設定する。
+1. OSから対象ファイルをGemiHub Desktopで開くか、Filesタブからフォルダを開く。
 2. FileTree、file picker、drag & dropのいずれかでファイルを開く。
 3. 対応するviewer/editorで作業する。
 4. `Ctrl/Cmd + S` で保存する。ディスク側の変更を取り込む場合はReloadを使う。
