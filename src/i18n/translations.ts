@@ -19,6 +19,9 @@ export interface TranslationStrings {
   "topbar.toggleTheme": string;
   "topbar.memoList": string;
   "topbar.settings": string;
+  "appMenu.openDirectory": string;
+  "appMenu.recent": string;
+  "appMenu.plugins": string;
 
   // Settings
   "settings.title": string;
@@ -163,6 +166,9 @@ const en: TranslationStrings = {
   "topbar.toggleTheme": "Toggle theme",
   "topbar.memoList": "Memo list",
   "topbar.settings": "Settings",
+  "appMenu.openDirectory": "Open directory…",
+  "appMenu.recent": "Recently opened",
+  "appMenu.plugins": "Plugins",
 
   "settings.title": "Settings",
   "settings.externalEditor": "External editor path",
@@ -297,6 +303,9 @@ const ja: TranslationStrings = {
   "topbar.toggleTheme": "テーマ切替",
   "topbar.memoList": "メモ一覧",
   "topbar.settings": "設定",
+  "appMenu.openDirectory": "ディレクトリを開く…",
+  "appMenu.recent": "最近開いたディレクトリ",
+  "appMenu.plugins": "プラグイン",
 
   "settings.title": "設定",
   "settings.externalEditor": "外部エディタのパス",

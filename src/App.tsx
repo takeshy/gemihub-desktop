@@ -9,6 +9,7 @@ import {
 import {
   Bot,
   Check,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Code2,
@@ -94,6 +95,7 @@ import {
   verifyDiscordToken,
   writeFile,
 } from "./lib/wailsBackend";
+import { parseRecentDirectories, updateRecentDirectories } from "./lib/recentDirectories";
 import { selectCLIPath, verifyCLI } from "./lib/wailsBackend";
 import {
   chatModelChoices,
@@ -173,6 +175,7 @@ const MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY = "gemihub-desktop:memoSyncTimeli
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
 const LANGUAGE_KEY = "gemihub-desktop:language";
 const LAST_OPENED_DIRECTORY_KEY = "llm-hub:lastOpenedDirectory";
+const RECENT_DIRECTORIES_KEY = "llm-hub:recentDirectories";
 const FILE_TREE_WIDTH_KEY = "llm-hub:fileTreeWidth";
 const CHAT_VIEW_WIDTH_KEY = "llm-hub:chatViewWidth";
 const DEFAULT_FILE_TREE_WIDTH = 250;
@@ -887,6 +890,11 @@ export default function App() {
     projects: [],
   });
   const [directoryBase, setDirectoryBaseState] = useState("");
+  const [recentDirectories, setRecentDirectories] = useState(() =>
+    parseRecentDirectories(readStored(RECENT_DIRECTORIES_KEY, "[]"))
+  );
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const appMenuRef = useRef<HTMLDivElement>(null);
   const [directoryContextLoaded, setDirectoryContextLoaded] = useState(false);
   const [startupPaths, setStartupPaths] = useState<string[] | null>(null);
   const [projectsContextLoaded, setProjectsContextLoaded] = useState(false);
@@ -909,6 +917,18 @@ export default function App() {
     const parent = parentFilesystemPath(path);
     if (parent) setDirectoryBaseState(parent);
   }, [activeProjectPath]);
+
+  const openFilesDirectory = useCallback(async (path?: string) => {
+    try {
+      const selected = path || await selectDirectoryBase();
+      if (!selected) return;
+      if (path) await setDirectoryBase(selected);
+      setDirectoryBaseState(selected);
+      setAppMenuOpen(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
   const memoDirPath = activeProjectPath ? `${activeProjectPath.replace(/[\\/]+$/, "")}/Memos` : "";
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [chatViewOpen, setChatViewOpen] = useState(() =>
@@ -1263,6 +1283,32 @@ export default function App() {
       console.warn("Could not set the opened file directory.", error)
     );
   }, [directoryBase, directoryContextLoaded]);
+
+  useEffect(() => {
+    if (!directoryContextLoaded || !projectsContextLoaded || !directoryBase) return;
+    if (activeProjectPath && (pathIsInside(directoryBase, activeProjectPath) || pathIsInside(activeProjectPath, directoryBase))) return;
+    setRecentDirectories((current) => {
+      const next = updateRecentDirectories(current, directoryBase);
+      localStorage.setItem(RECENT_DIRECTORIES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [activeProjectPath, directoryBase, directoryContextLoaded, projectsContextLoaded]);
+
+  useEffect(() => {
+    if (!appMenuOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!appMenuRef.current?.contains(event.target as Node)) setAppMenuOpen(false);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAppMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", keydown);
+    };
+  }, [appMenuOpen]);
 
   useEffect(() => {
     try {
@@ -1646,9 +1692,49 @@ export default function App() {
     <I18nProvider language={language}>
       <main className="app-shell">
         <header className="topbar">
-          <div className="document-meta">
-            <LayoutDashboard size={18} aria-hidden="true" />
-            <strong className="app-title">{APP_NAME}</strong>
+          <div className="document-meta" ref={appMenuRef}>
+            <button
+              type="button"
+              className="app-menu-trigger"
+              aria-haspopup="menu"
+              aria-expanded={appMenuOpen}
+              onClick={() => setAppMenuOpen((open) => !open)}
+            >
+              <LayoutDashboard size={18} aria-hidden="true" />
+              <strong className="app-title">{APP_NAME}</strong>
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+            {appMenuOpen && (
+              <div className="app-menu-popover" role="menu">
+                <button type="button" role="menuitem" onClick={() => void openFilesDirectory()}>
+                  <FolderOpen size={16} /><span>{tr("appMenu.openDirectory")}</span>
+                </button>
+                {recentDirectories.length > 0 && (
+                  <section className="app-menu-recent">
+                    <strong>{tr("appMenu.recent")}</strong>
+                    {recentDirectories.map((path) => (
+                      <button type="button" role="menuitem" key={path} title={path} onClick={() => void openFilesDirectory(path)}>
+                        <FolderOpen size={15} />
+                        <span><b>{path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path}</b><small>{path}</small></span>
+                      </button>
+                    ))}
+                  </section>
+                )}
+                <div className="app-menu-separator" />
+                <button type="button" role="menuitem" onClick={() => { setPluginViewRequest((value) => value + 1); setChatViewOpen(true); setAppMenuOpen(false); }}>
+                  <Plug size={16} /><span>{tr("appMenu.plugins")}</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setMemoListOpen(true); setAppMenuOpen(false); }}>
+                  <NotebookText size={16} /><span>{tr("topbar.memoList")}</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setIsDark((value) => !value); setAppMenuOpen(false); }}>
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}<span>{tr("topbar.toggleTheme")}</span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setSettingsOpen(true); setAppMenuOpen(false); }}>
+                  <Settings size={16} /><span>{tr("topbar.settings")}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="global-toolbar">
@@ -1712,14 +1798,6 @@ export default function App() {
             <FileTree
               directoryBase={directoryBase}
               projectPath={activeProjectPath}
-              onOpenDirectory={async () => {
-                try {
-                  const path = await selectDirectoryBase();
-                  if (path) setDirectoryBaseState(path);
-                } catch (error) {
-                  alert(error instanceof Error ? error.message : String(error));
-                }
-              }}
               onOpenFile={(path) => {
                 if (
                   !path.startsWith("workspace://") &&

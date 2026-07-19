@@ -11,7 +11,7 @@ timestamp: 2026-07-15T00:00:00+09:00
 # 主な操作
 
 * `Ctrl/Cmd + P`: File pickerを開く。
-* FileTree上部のフォルダーアイコン: Workspace外のディレクトリを開く。すでに開いているWorkspace外ディレクトリがある場合は、新しく選択したディレクトリへ置き換える。
+* 左上のGemiHub Desktopメニュー: Workspace外のディレクトリを開く。すでに開いているWorkspace外ディレクトリがある場合は、新しく選択したディレクトリへ置き換える。最近開いたディレクトリも同じメニューから選べる。
 * `Ctrl/Cmd + S`: 現在のローカル状態を保存する。
 * `Ctrl/Cmd + E`: 現在のdocument contentをexportする。
 * widget toolbarのReload: ディスク上の変更を再読込する。

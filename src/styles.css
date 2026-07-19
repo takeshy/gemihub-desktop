@@ -3010,6 +3010,7 @@ body.resizing-side-pane * {
 }
 
 .document-meta {
+  position: relative;
   display: flex;
   min-width: 0;
   flex: 1;
@@ -3024,6 +3025,70 @@ body.resizing-side-pane * {
 .app-title {
   flex: none;
 }
+
+.app-menu-trigger {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 7px;
+}
+
+.app-menu-trigger:hover,
+.app-menu-trigger[aria-expanded="true"] {
+  background: var(--panel-subtle);
+}
+
+.app-menu-trigger > svg:last-child { color: var(--muted); }
+
+.app-menu-popover {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 5px);
+  left: 0;
+  display: grid;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(620px, calc(100vh - 70px));
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 24%);
+  padding: 6px;
+}
+
+.app-menu-popover > button,
+.app-menu-recent button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.app-menu-popover > button:hover,
+.app-menu-recent button:hover { background: var(--panel-subtle); }
+.app-menu-popover button > svg { flex: none; color: var(--muted); }
+.app-menu-separator { height: 1px; margin: 5px 3px; background: var(--border); }
+.app-menu-recent { display: grid; min-width: 0; border-top: 1px solid var(--border); margin-top: 5px; padding-top: 5px; }
+.app-menu-recent > strong { padding: 5px 9px 3px; color: var(--muted); font-size: 0.66rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.app-menu-recent button > span { display: grid; min-width: 0; gap: 2px; }
+.app-menu-recent button b,
+.app-menu-recent button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-menu-recent button b { font-size: 0.78rem; }
+.app-menu-recent button small { color: var(--muted); font-size: 0.65rem; }
 
 .global-context {
   min-width: 0;

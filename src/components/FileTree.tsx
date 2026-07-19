@@ -214,13 +214,11 @@ function TreeRow({
 export function FileTree({
   directoryBase,
   projectPath,
-  onOpenDirectory,
   onOpenFile,
   onCollapse,
 }: {
   directoryBase: string;
   projectPath: string;
-  onOpenDirectory: () => Promise<void>;
   onOpenFile: (path: string) => void;
   onCollapse: () => void;
 }) {
@@ -489,7 +487,6 @@ export function FileTree({
     <aside className="file-tree-panel">
       <div className="file-tree-mode-bar">
         <strong className="file-tree-title" title={projectPath}><Folder size={14} />Workspace</strong>
-        <button type="button" onClick={() => void onOpenDirectory()} title="Open directory outside Workspace"><FolderOpen size={15} /></button>
         {projectPath && <>
           <button type="button" onClick={() => void createAtRoot("file")} title="New file"><FilePlus2 size={15} /></button>
           <button type="button" onClick={() => void createAtRoot("folder")} title="New folder"><FolderPlus size={15} /></button>
