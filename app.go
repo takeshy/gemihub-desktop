@@ -32,6 +32,8 @@ type App struct {
 	discord          *discordBot
 	chatToolMu       sync.Mutex
 	chatToolCalls    map[string]chan chatToolResponse
+	chatLimitMu      sync.Mutex
+	chatLimitCalls   map[string]chan int
 	mcpStdioMu       sync.Mutex
 	mcpStdio         map[string]*mcpStdioSession
 	mcpOAuthMu       sync.Mutex
@@ -51,7 +53,7 @@ type LocalPathInfo struct {
 }
 
 func NewApp() *App {
-	return &App{chatToolCalls: make(map[string]chan chatToolResponse), mcpStdio: make(map[string]*mcpStdioSession), ragCancelled: make(map[string]bool)}
+	return &App{chatToolCalls: make(map[string]chan chatToolResponse), chatLimitCalls: make(map[string]chan int), mcpStdio: make(map[string]*mcpStdioSession), ragCancelled: make(map[string]bool)}
 }
 
 func (a *App) startup(ctx context.Context) {

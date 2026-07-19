@@ -39,7 +39,8 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
   scalePercent: number;
   onTextLayerRendered?: (page: number, root: HTMLElement) => void;
   onCurrentPageChange?: (page: number) => void;
-}>(function PdfViewer({ content, title, scalePercent, onTextLayerRendered, onCurrentPageChange }, ref) {
+  onLoadError?: () => void;
+}>(function PdfViewer({ content, title, scalePercent, onTextLayerRendered, onCurrentPageChange, onLoadError }, ref) {
   const { t: tr } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pagesRef = useRef(new Map<number, PageSlot>());
@@ -57,6 +58,8 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
   onTextLayerRenderedRef.current = onTextLayerRendered;
   const onCurrentPageChangeRef = useRef(onCurrentPageChange);
   onCurrentPageChangeRef.current = onCurrentPageChange;
+  const onLoadErrorRef = useRef(onLoadError);
+  onLoadErrorRef.current = onLoadError;
   // Read via a ref so renderPage stays referentially stable: zoom changes
   // must re-render page contents without rebuilding the page placeholders
   // (which would reset the scroll position).
@@ -143,24 +146,41 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
 
     let cancelled = false;
     void (async () => {
-      try {
-        // pdf.js >= 5 removed the eval-based font path entirely
-        // (CVE-2024-4367 class of issues), so no isEvalSupported opt-out is
-        // needed here.
-        const doc = await getDocument({ data: bytes }).promise;
-        if (cancelled || generation !== generationRef.current) {
-          doc.loadingTask.destroy().catch(() => undefined);
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          // Defer even the first attempt so React Strict Mode can cancel its
+          // probe effect before pdf.js creates a loading task. Otherwise the
+          // probe can destroy the worker while the real startup load uses it.
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, attempt > 0 ? 300 : 0)
+          );
+          if (cancelled || generation !== generationRef.current) return;
+          // pdf.js >= 5 removed the eval-based font path entirely
+          // (CVE-2024-4367 class of issues), so no isEvalSupported opt-out is
+          // needed here.
+          // pdf.js transfers this buffer to its worker. Use a fresh copy so a
+          // startup retry never receives an already-detached ArrayBuffer.
+          const doc = await getDocument({ data: bytes.slice() }).promise;
+          if (cancelled || generation !== generationRef.current) {
+            doc.loadingTask.destroy().catch(() => undefined);
+            return;
+          }
+          docRef.current = doc;
+          const firstPage = await doc.getPage(1);
+          if (cancelled || generation !== generationRef.current) return;
+          baseWidthRef.current = firstPage.getViewport({ scale: 1 }).width;
+          setPageCount(doc.numPages);
+          setDocVersion((value) => value + 1);
           return;
+        } catch (loadError) {
+          lastError = loadError;
         }
-        docRef.current = doc;
-        const firstPage = await doc.getPage(1);
-        if (cancelled || generation !== generationRef.current) return;
-        baseWidthRef.current = firstPage.getViewport({ scale: 1 }).width;
-        setPageCount(doc.numPages);
-        setDocVersion((value) => value + 1);
-      } catch (loadError) {
-        console.error(loadError);
-        if (!cancelled) setError(tr("pdf.openFailed"));
+      }
+      console.error(lastError);
+      if (!cancelled) {
+        setError(tr("pdf.openFailed"));
+        onLoadErrorRef.current?.();
       }
     })();
 

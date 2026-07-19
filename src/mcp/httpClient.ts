@@ -35,7 +35,10 @@ export class McpHttpError extends Error {
 }
 
 function responseResult(response: ExternalHTTPResponse, method: string): Record<string, unknown> {
-  if (response.status < 200 || response.status >= 300) throw new McpHttpError(`MCP ${method} failed with HTTP ${response.status}.`, response.status);
+  if (response.status < 200 || response.status >= 300) {
+    const detail = response.body.trim().replace(/\s+/g, " ").slice(0, 500);
+    throw new McpHttpError(`MCP ${method} failed with HTTP ${response.status}${detail ? `: ${detail}` : "."}`, response.status);
+  }
   const payload = parseMcpResponse(response.body);
   if (payload.error) throw new Error(payload.error.message || `MCP ${method} failed.`);
   return payload.result ?? {};

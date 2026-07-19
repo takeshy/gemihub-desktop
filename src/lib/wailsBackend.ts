@@ -107,6 +107,7 @@ export interface MCPOAuthConnectRequest {
   serverUrl: string;
   clientId?: string;
   clientSecret?: string;
+  scopes?: string[];
 }
 
 export interface MCPOAuthStatus {
@@ -248,6 +249,15 @@ export interface ChatToolRequest {
   streamId?: string;
   name: string;
   arguments: Record<string, unknown>;
+}
+
+export interface ChatFunctionLimitRequest {
+  requestId: string;
+  streamId?: string;
+  used: number;
+  currentLimit: number;
+  remaining: number;
+  extensionAmount: number;
 }
 
 export interface ChatStreamEvent {
@@ -470,6 +480,7 @@ interface WailsAppApi {
     resultJSON: string,
     errorMessage: string,
   ) => Promise<boolean>;
+  ResolveChatFunctionLimit: (requestID: string, extension: number) => Promise<boolean>;
   VerifyDiscordToken: (token: string) => Promise<DiscordStatus>;
   StartDiscordBot: (request: DiscordBotRequest) => Promise<DiscordStatus>;
   StopDiscordBot: () => Promise<boolean>;
@@ -532,6 +543,15 @@ export function onChatToolRequest(
   ) ?? (() => undefined);
 }
 
+export function onChatFunctionLimitRequest(
+  callback: (event: ChatFunctionLimitRequest) => void,
+): () => void {
+  return window.runtime?.EventsOn?.(
+    "chat:function-limit-request",
+    callback as (event: never) => void,
+  ) ?? (() => undefined);
+}
+
 export function onRAGSyncProgress(
   callback: (event: RAGSyncProgress) => void,
 ): () => void {
@@ -553,6 +573,10 @@ export async function resolveChatTool(
     result === undefined ? "" : JSON.stringify(result),
     errorMessage,
   );
+}
+
+export async function resolveChatFunctionLimit(requestId: string, extension: number): Promise<boolean> {
+  return await appApi()?.ResolveChatFunctionLimit(requestId, extension) ?? false;
 }
 
 declare global {

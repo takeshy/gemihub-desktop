@@ -26,6 +26,7 @@ import {
   type ChatMessage,
   type ChatStreamEvent,
   listProjectFiles,
+  onChatFunctionLimitRequest,
   onChatStream,
   onChatToolRequest,
   type PendingFileAction,
@@ -34,6 +35,7 @@ import {
   readProjectFile,
   readProjectStateFile,
   resolveChatTool,
+  resolveChatFunctionLimit,
   searchRAG,
   stopCLI,
   writeProjectStateFile,
@@ -111,7 +113,9 @@ interface ChatSession {
   messages: ChatMessage[];
   cliSessionIds: Partial<Record<CLIType, string>>;
   activeSkillPaths: string[];
+  dismissedContextSkillPaths: string[];
   activeOkfBundleIds: string[];
+  activeMcpServerNames: string[] | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -203,7 +207,9 @@ function newSession(messages: ChatMessage[] = []): ChatSession {
     activeSkillPaths: DEFAULT_BUILTIN_SKILL_IDS.map((id) =>
       `${builtinFolderPath(id)}/SKILL.md`
     ),
+    dismissedContextSkillPaths: [],
     activeOkfBundleIds: [],
+    activeMcpServerNames: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -218,11 +224,21 @@ function normalizeSessions(value: unknown): ChatSession[] {
       : DEFAULT_BUILTIN_SKILL_IDS.map((id) =>
         `${builtinFolderPath(id)}/SKILL.md`
       ),
+    dismissedContextSkillPaths: Array.isArray(session.dismissedContextSkillPaths)
+      ? session.dismissedContextSkillPaths.filter((path): path is string =>
+        typeof path === "string"
+      )
+      : [],
     activeOkfBundleIds: Array.isArray(session.activeOkfBundleIds)
       ? session.activeOkfBundleIds.filter((id): id is string =>
         typeof id === "string"
       )
       : [],
+    activeMcpServerNames: Array.isArray(session.activeMcpServerNames)
+      ? session.activeMcpServerNames.filter((name): name is string =>
+        typeof name === "string"
+      )
+      : null,
   }));
 }
 
@@ -437,12 +453,16 @@ export function ChatPanel({
   const streamQueueRef = useRef<ChatStreamEvent[]>([]);
   const streamTimerRef = useRef<number | null>(null);
   const skillMenuRef = useRef<HTMLDivElement | null>(null);
+  const toolMenuRef = useRef<HTMLDivElement | null>(null);
+  const filePickerRef = useRef<HTMLDivElement | null>(null);
+  const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSession = sessions.find((session) => session.id === activeID) ??
     sessions[0];
   const messages = activeSession?.messages ?? [];
   const activeSkillPaths = activeSession?.activeSkillPaths ?? [];
+  const dismissedContextSkillPaths = activeSession?.dismissedContextSkillPaths ?? [];
   const activeOkfBundleIds = activeSession?.activeOkfBundleIds ?? [];
   const activeOkfBundleIdsRef = useRef(activeOkfBundleIds);
   activeOkfBundleIdsRef.current = activeOkfBundleIds;
@@ -455,6 +475,23 @@ export function ChatPanel({
             ...session,
             activeSkillPaths: typeof update === "function"
               ? update(session.activeSkillPaths ?? [])
+              : update,
+            updatedAt: Date.now(),
+          }
+        )
+      );
+    },
+    [activeSession?.id],
+  );
+  const setDismissedContextSkillPaths = useCallback(
+    (update: string[] | ((paths: string[]) => string[])) => {
+      if (!activeSession) return;
+      setSessions((current) =>
+        current.map((session) =>
+          session.id !== activeSession.id ? session : {
+            ...session,
+            dismissedContextSkillPaths: typeof update === "function"
+              ? update(session.dismissedContextSkillPaths ?? [])
               : update,
             updatedAt: Date.now(),
           }
@@ -480,6 +517,23 @@ export function ChatPanel({
     },
     [activeSession?.id],
   );
+  const setActiveMcpServerNames = useCallback(
+    (update: string[] | null | ((names: string[] | null) => string[] | null)) => {
+      if (!activeSession) return;
+      setSessions((current) =>
+        current.map((session) =>
+          session.id !== activeSession.id ? session : {
+            ...session,
+            activeMcpServerNames: typeof update === "function"
+              ? update(session.activeMcpServerNames ?? null)
+              : update,
+            updatedAt: Date.now(),
+          }
+        )
+      );
+    },
+    [activeSession?.id],
+  );
   const draftWithDashboardSkill = useCallback((draft: string) => {
     const skillPath = `${builtinFolderPath("dashboard")}/SKILL.md`;
     setActiveSkillPaths((paths) =>
@@ -488,6 +542,14 @@ export function ChatPanel({
     setInput(draft);
     queueMicrotask(() => composerRef.current?.focus());
   }, [setActiveSkillPaths]);
+  const askDesktopHelp = useCallback(() => {
+    const builtin = getBuiltinOkfBundle();
+    setActiveOkfBundleIds((ids) =>
+      ids.includes(builtin.id) ? ids : [...ids, builtin.id]
+    );
+    setInput("How do I use GemiHub Desktop?");
+    queueMicrotask(() => composerRef.current?.focus());
+  }, [setActiveOkfBundleIds]);
   const refreshOkfBundles = useCallback(async () => {
     const builtin = getBuiltinOkfBundle();
     if (!projectBase) {
@@ -524,13 +586,28 @@ export function ChatPanel({
     const context = skills.find((skill) =>
       skill.folderPath === contextBuiltinPath
     );
+    if (
+      context &&
+      dismissedContextSkillPaths.includes(context.skillFilePath) &&
+      !activeSkillPaths.includes(context.skillFilePath)
+    ) return selectedSkills;
     return [
       ...(context ? [context] : []),
       ...selectedSkills.filter((skill) =>
         !isBuiltinSkillPath(skill.folderPath)
       ),
     ];
-  }, [contextBuiltinPath, selectedSkills, skills]);
+  }, [activeSkillPaths, contextBuiltinPath, dismissedContextSkillPaths, selectedSkills, skills]);
+  const activeMcpServers = useMemo(() => {
+    const selectedNames = activeSession?.activeMcpServerNames;
+    if (settings.provider === "cli" || /(?:image|imagen)/i.test(settings.model)) {
+      return [];
+    }
+    return settings.mcpServers.filter((server) =>
+      server.enabled && server.verified &&
+      (selectedNames == null || selectedNames.includes(server.name))
+    );
+  }, [activeSession?.activeMcpServerNames, settings.mcpServers, settings.model, settings.provider]);
   const skillWorkflows = useMemo(() => collectSkillWorkflows(activeSkills), [
     activeSkills,
   ]);
@@ -602,6 +679,46 @@ export function ChatPanel({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [skillMenuOpen]);
+
+  useEffect(() => {
+    if (!toolMenuOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!toolMenuRef.current?.contains(event.target as Node)) {
+        setToolMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setToolMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [toolMenuOpen]);
+
+  useEffect(() => {
+    if (!filePickerOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !filePickerRef.current?.contains(target) &&
+        !filePickerButtonRef.current?.contains(target)
+      ) {
+        setFilePickerOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFilePickerOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [filePickerOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -921,6 +1038,22 @@ export function ChatPanel({
       );
     }), [runSkillWorkflow, settings]);
 
+  useEffect(() => onChatFunctionLimitRequest((request) => {
+    if (!request.streamId || request.streamId !== streamRef.current?.streamId) {
+      void resolveChatFunctionLimit(request.requestId, 0);
+      return;
+    }
+    const input = window.prompt(
+      `Tool calls are running low (${request.used}/${request.currentLimit} used, ${request.remaining} remaining).\nAdd more tool calls for this response?`,
+      String(request.extensionAmount),
+    );
+    const extension = input === null ? 0 : Number.parseInt(input, 10);
+    void resolveChatFunctionLimit(
+      request.requestId,
+      Number.isFinite(extension) && extension > 0 ? extension : 0,
+    );
+  }), []);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -1234,14 +1367,37 @@ export function ChatPanel({
         activeOkfBundleIds,
       );
       const slashMcpNames = invokedCommand?.enabledMcpServers;
-      const effectiveMcpServers = slashMcpNames == null
-        ? settings.mcpServers
-        : settings.mcpServers.map((server) => ({
+      const sessionMcpNames = activeSession?.activeMcpServerNames;
+      const selectedMcpServers = slashMcpNames != null
+        ? settings.mcpServers.map((server) => ({
           ...server,
           enabled: slashMcpNames.includes(server.name),
-        }));
+        }))
+        : sessionMcpNames != null
+        ? settings.mcpServers.map((server) => ({
+          ...server,
+          enabled: server.enabled && sessionMcpNames.includes(server.name),
+        }))
+        : settings.mcpServers;
+      const effectiveMcpServers = selectedMcpServers.map((server) => {
+        const configuredProjectId = server.headers["x-goog-user-project"] ||
+          server.headers["X-Goog-User-Project"];
+        const fallbackProjectId = /(?:^|\.)googleapis\.com(?:\/|$)/i.test(
+            server.url.replace(/^https?:\/\//i, ""),
+          )
+          ? settings.vertexProjectId.trim()
+          : "";
+        if (configuredProjectId || !fallbackProjectId) return server;
+        return {
+          ...server,
+          headers: {
+            ...server.headers,
+            "x-goog-user-project": fallbackProjectId,
+          },
+        };
+      });
       if (slashMcpNames != null) {
-        onSettingsChange({ ...settings, mcpServers: effectiveMcpServers });
+        setActiveMcpServerNames(slashMcpNames);
       }
       const enabledMcpServers =
         settings.provider === "cli" || /(?:image|imagen)/i.test(settings.model)
@@ -1366,9 +1522,13 @@ export function ChatPanel({
           ),
         );
       };
+      const dashboardSkillActive = skillsAtSend.some((skill) =>
+        /(?:^|\/)dashboard(?:\/|$)/i.test(skill.folderPath) ||
+        skill.name.toLowerCase().includes("dashboard")
+      );
       const customTools = [
         ...skillWorkflowTool(skillsAtSend),
-        getWorkflowSpecTool,
+        ...(dashboardSkillActive ? [getWorkflowSpecTool] : []),
         ...okfDocumentTool(activeOkfBundleIds),
         ...mcpBindings.map(({ name, description, parameters }) => ({
           name,
@@ -1376,6 +1536,12 @@ export function ChatPanel({
           parameters,
         })),
       ];
+      const mcpResourceContext = enabledMcpServers.map((server) => {
+        const projectId = server.headers["x-goog-user-project"] || server.headers["X-Goog-User-Project"];
+        return projectId
+          ? `- ${server.name}: Google Cloud project ID is ${projectId}. Use projects/${projectId} whenever an MCP tool requires a project parent or resource name. Do not guess or search for another project ID.`
+          : `- ${server.name}: no explicit Google Cloud project ID is configured.`;
+      }).join("\n");
       const chatRequest = {
         provider: settings.provider,
         endpoint: settings.endpoint,
@@ -1387,6 +1553,7 @@ export function ChatPanel({
           settings.systemPrompt,
           buildSkillSystemPrompt(skillsAtSend),
           okfPrompt,
+          mcpResourceContext ? `MCP resource context:\n${mcpResourceContext}` : "",
         ].filter(Boolean).join("\n\n"),
         enableFileTools: settings.enableFileTools,
         fileToolMode: settings.fileToolMode,
@@ -1602,6 +1769,13 @@ export function ChatPanel({
             </span>
             <div className="chat-welcome-guides">
               <article>
+                <div><BookOpen size={16} /><strong>GemiHub Desktop Help</strong></div>
+                <p>Use the built-in help knowledge to ask about features, settings, and everyday operations.</p>
+                <button type="button" onClick={askDesktopHelp}>
+                  <BookOpen size={13} />Ask GemiHub Desktop Help
+                </button>
+              </article>
+              <article>
                 <div><LayoutDashboard size={16} /><strong>Build Dashboards with AI</strong></div>
                 <p>Describe what you need in natural language. AI can create or update Dashboard widgets, files, and workflows for you.</p>
                 <button
@@ -1814,17 +1988,45 @@ export function ChatPanel({
                     {skill.name}
                   </button>
                 )}
-                {(!contextBuiltinPath || !skill.builtin) && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setActiveSkillPaths((paths) =>
-                        paths.filter((path) => path !== skill.skillFilePath)
-                      )}
-                  >
-                    <X size={10} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSkillPaths((paths) =>
+                      paths.filter((path) => path !== skill.skillFilePath)
+                    );
+                    if (skill.folderPath === contextBuiltinPath) {
+                      setDismissedContextSkillPaths((paths) =>
+                        [...new Set([...paths, skill.skillFilePath])]
+                      );
+                    }
+                  }}
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {activeMcpServers.length > 0 && (
+          <div className="chat-active-skills">
+            {activeMcpServers.map((server) => (
+              <span key={server.id} title={`MCP Server · ${server.name}`}>
+                <Wrench size={11} />
+                <span>{server.name}</span>
+                <button
+                  type="button"
+                  disabled={loading}
+                  title={`Remove ${server.name} from this chat`}
+                  onClick={() =>
+                    setActiveMcpServerNames((names) => {
+                      const current = names ?? settings.mcpServers
+                        .filter((item) => item.enabled && item.verified)
+                        .map((item) => item.name);
+                      return current.filter((name) => name !== server.name);
+                    })}
+                >
+                  <X size={10} />
+                </button>
               </span>
             ))}
           </div>
@@ -1928,7 +2130,7 @@ export function ChatPanel({
             </div>
           )}
           {filePickerOpen && (
-            <div className="chat-file-picker">
+            <div className="chat-file-picker" ref={filePickerRef}>
               <label>
                 <Search size={13} />
                 <input
@@ -1956,6 +2158,7 @@ export function ChatPanel({
         </div>
         <div className="chat-input-actions">
           <button
+            ref={filePickerButtonRef}
             type="button"
             className="chat-clear"
             disabled={!projectBase}
@@ -1985,17 +2188,27 @@ export function ChatPanel({
                   <label key={skill.skillFilePath}>
                     <input
                       type="checkbox"
-                      checked={contextBuiltinPath === skill.folderPath ||
-                        activeSkillPaths.includes(skill.skillFilePath)}
-                      disabled={contextBuiltinPath === skill.folderPath}
-                      onChange={(event) =>
+                      checked={activeSkills.some((active) =>
+                        active.skillFilePath === skill.skillFilePath
+                      )}
+                      onChange={(event) => {
+                        if (skill.folderPath === contextBuiltinPath) {
+                          setDismissedContextSkillPaths((paths) =>
+                            event.target.checked
+                              ? paths.filter((path) =>
+                                path !== skill.skillFilePath
+                              )
+                              : [...new Set([...paths, skill.skillFilePath])]
+                          );
+                        }
                         setActiveSkillPaths((paths) =>
                           event.target.checked
                             ? [...new Set([...paths, skill.skillFilePath])]
                             : paths.filter((path) =>
                               path !== skill.skillFilePath
                             )
-                        )}
+                        );
+                      }}
                     />
                     <span>
                       <strong>
@@ -2016,7 +2229,7 @@ export function ChatPanel({
               </div>
             )}
           </div>
-          <div className="chat-tool-menu-wrap">
+          <div className="chat-tool-menu-wrap" ref={toolMenuRef}>
             <button
               type="button"
               className={`chat-clear ${
@@ -2065,17 +2278,33 @@ export function ChatPanel({
                       >
                         <input
                           type="checkbox"
-                          checked={server.enabled && server.verified}
+                          checked={activeMcpServers.some((item) =>
+                            item.id === server.id
+                          )}
                           disabled={!server.verified}
-                          onChange={(event) =>
-                            onSettingsChange({
-                              ...settings,
-                              mcpServers: settings.mcpServers.map((item) =>
-                                item.id === server.id
-                                  ? { ...item, enabled: event.target.checked }
-                                  : item
-                              ),
-                            })}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            if (checked && !server.enabled) {
+                              onSettingsChange({
+                                ...settings,
+                                mcpServers: settings.mcpServers.map((item) =>
+                                  item.id === server.id
+                                    ? { ...item, enabled: true }
+                                    : item
+                                ),
+                              });
+                            }
+                            setActiveMcpServerNames((names) => {
+                              const current = names ?? settings.mcpServers
+                                .filter((item) => item.enabled && item.verified)
+                                .map((item) => item.name);
+                              return checked
+                                ? [...new Set([...current, server.name])]
+                                : current.filter((name) =>
+                                  name !== server.name
+                                );
+                            });
+                          }}
                         />
                         <span>
                           <strong>{server.name}</strong>

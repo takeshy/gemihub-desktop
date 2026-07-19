@@ -18,6 +18,9 @@ export interface MCPServerConfig {
   toolHints: string[];
   verified: boolean;
   oauth: boolean;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthScopes?: string[];
 }
 
 export interface APIProviderProfile {
@@ -555,6 +558,9 @@ export function loadChatSettings(): ChatSettings {
             toolHints,
             verified,
             oauth: server.oauth === true,
+            oauthClientId: typeof server.oauthClientId === "string" ? server.oauthClientId : "",
+            oauthClientSecret: typeof server.oauthClientSecret === "string" ? server.oauthClientSecret : "",
+            oauthScopes: Array.isArray(server.oauthScopes) ? server.oauthScopes.filter((scope): scope is string => typeof scope === "string") : [],
           };
         })
         : [],

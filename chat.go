@@ -63,6 +63,15 @@ type ChatToolRequest struct {
 	Arguments map[string]any `json:"arguments"`
 }
 
+type ChatFunctionLimitRequest struct {
+	RequestID       string `json:"requestId"`
+	StreamID        string `json:"streamId"`
+	Used            int    `json:"used"`
+	CurrentLimit    int    `json:"currentLimit"`
+	Remaining       int    `json:"remaining"`
+	ExtensionAmount int    `json:"extensionAmount"`
+}
+
 type chatToolResponse struct {
 	Result any
 	Error  string
@@ -671,6 +680,43 @@ func (a *App) ResolveChatTool(requestID, resultJSON, errorMessage string) bool {
 	}
 }
 
+func (a *App) requestChatFunctionLimitExtension(request ChatRequest, used, currentLimit int) int {
+	requestID := fmt.Sprintf("chat-limit-%d", time.Now().UnixNano())
+	response := make(chan int, 1)
+	a.chatLimitMu.Lock()
+	a.chatLimitCalls[requestID] = response
+	a.chatLimitMu.Unlock()
+	defer func() {
+		a.chatLimitMu.Lock()
+		delete(a.chatLimitCalls, requestID)
+		a.chatLimitMu.Unlock()
+	}()
+	wailsruntime.EventsEmit(a.ctx, "chat:function-limit-request", ChatFunctionLimitRequest{RequestID: requestID, StreamID: request.StreamID, Used: used, CurrentLimit: currentLimit, Remaining: currentLimit - used, ExtensionAmount: 50})
+	select {
+	case extension := <-response:
+		if extension > 0 {
+			return extension
+		}
+	case <-time.After(5 * time.Minute):
+	}
+	return 0
+}
+
+func (a *App) ResolveChatFunctionLimit(requestID string, extension int) bool {
+	a.chatLimitMu.Lock()
+	response := a.chatLimitCalls[requestID]
+	a.chatLimitMu.Unlock()
+	if response == nil {
+		return false
+	}
+	select {
+	case response <- extension:
+		return true
+	default:
+		return false
+	}
+}
+
 // joinFileContent concatenates two file fragments with exactly one newline
 // separator, but only when both sides have content and the boundary is not
 // already a newline. This keeps append/prepend from inserting blank lines or a
@@ -808,7 +854,12 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 	thinkingUsed := []string{}
 	usage := &ChatUsage{}
 	generatedImages := []GeneratedImage{}
-	for iteration := 0; iteration < 8; iteration++ {
+	toolCallSignatures := map[string]bool{}
+	forceAnswer := false
+	functionCallCount := 0
+	functionCallLimit := 50
+	lastLimitPrompt := 0
+	for iteration := 0; iteration < 256; iteration++ {
 		payload := map[string]any{"contents": contents}
 		if config := geminiThinkingConfig(request.Model, request.EnableThinking); config != nil {
 			payload["generationConfig"] = map[string]any{"thinkingConfig": config}
@@ -817,6 +868,9 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 			payload["systemInstruction"] = map[string]any{"parts": []map[string]any{{"text": request.SystemPrompt}}}
 		}
 		declarations := geminiFunctionDeclarationsForRequest(request)
+		if forceAnswer {
+			declarations = nil
+		}
 		geminiTools := []map[string]any{}
 		if len(declarations) > 0 {
 			geminiTools = append(geminiTools, map[string]any{"functionDeclarations": declarations})
@@ -888,21 +942,53 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 			thinkingUsed = append(thinkingUsed, thinking)
 		}
 		functionResponses := []map[string]any{}
-		for _, call := range calls {
+		remaining := functionCallLimit - functionCallCount
+		if remaining <= 10 && lastLimitPrompt != functionCallLimit {
+			lastLimitPrompt = functionCallLimit
+			if extension := a.requestChatFunctionLimitExtension(request, functionCallCount, functionCallLimit); extension > 0 {
+				functionCallLimit += extension
+				remaining = functionCallLimit - functionCallCount
+			}
+		}
+		callsToProcess := calls
+		if len(callsToProcess) > remaining {
+			callsToProcess = callsToProcess[:max(0, remaining)]
+		}
+		if len(callsToProcess) == 0 && len(calls) > 0 {
+			forceAnswer = true
+			functionResponses = append(functionResponses, map[string]any{"text": "The function call limit has been reached. Do not emit another function call. Provide a final natural-language answer using the information gathered so far."})
+		}
+		for _, call := range callsToProcess {
 			arguments, _ := json.Marshal(call.Args)
-			result, pending, err := a.executeChatTool(request, call.Name, string(arguments))
+			signature := call.Name + "\x00" + string(arguments)
+			var result any
+			var pending *PendingFileAction
+			var err error
+			if toolCallSignatures[signature] {
+				result = map[string]any{"success": false, "error": "This exact tool call was already completed. Use its previous result to answer the user without calling it again."}
+				forceAnswer = true
+			} else {
+				toolCallSignatures[signature] = true
+				result, pending, err = a.executeChatTool(request, call.Name, string(arguments))
+			}
 			toolsUsed = append(toolsUsed, call.Name)
 			a.emitChatStream(request, "tool", "", call.Name)
 			if err != nil {
-				result = map[string]any{"success": false, "error": err.Error()}
+				result = map[string]any{"success": false, "error": err.Error(), "instruction": "Do not call another tool to work around this failure. Report the error and required corrective action to the user."}
+				forceAnswer = true
 			}
 			if pending != nil {
 				return &ChatResult{Content: text, PendingAction: pending, ToolsUsed: toolsUsed, Thinking: strings.Join(thinkingUsed, "\n\n"), Usage: usage, GeneratedImages: generatedImages}, nil
 			}
 			functionResponses = append(functionResponses, map[string]any{"functionResponse": map[string]any{"name": call.Name, "response": map[string]any{"result": result}}})
 		}
+		functionCallCount += len(callsToProcess)
 		if len(functionResponses) == 0 {
 			return &ChatResult{Content: text, ToolsUsed: toolsUsed, Thinking: strings.Join(thinkingUsed, "\n\n"), Usage: usage, GeneratedImages: generatedImages}, nil
+		}
+		if functionCallCount >= functionCallLimit || len(callsToProcess) < len(calls) {
+			forceAnswer = true
+			functionResponses = append(functionResponses, map[string]any{"text": "The tool phase is complete. Do not emit or describe another function call. Answer the user's original request now in natural language using only the tool results already returned. If the results are empty or insufficient, say so clearly."})
 		}
 		contents = append(contents, map[string]any{"role": "model", "parts": modelParts})
 		contents = append(contents, map[string]any{"role": "user", "parts": functionResponses})

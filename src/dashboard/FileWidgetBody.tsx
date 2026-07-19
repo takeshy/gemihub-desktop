@@ -240,6 +240,7 @@ export function FileWidgetBody({
   const [unresolvedIds, setUnresolvedIds] = useState<ReadonlySet<string>>(new Set());
   const [frameLoadTick, setFrameLoadTick] = useState(0);
   const [pdfPagesTick, setPdfPagesTick] = useState(0);
+  const [pdfReloadVersion, setPdfReloadVersion] = useState(0);
 
   const contentWrapRef = useRef<HTMLDivElement | null>(null);
   const previewRootRef = useRef<HTMLDivElement | null>(null);
@@ -251,7 +252,28 @@ export function FileWidgetBody({
   const toastTimerRef = useRef(0);
   const flashTimerRef = useRef(0);
   const memoEntriesRef = useRef<MemoEntry[]>([]);
+  const recoveredPdfPathRef = useRef("");
   memoEntriesRef.current = memoEntries;
+
+  useEffect(() => {
+    recoveredPdfPathRef.current = "";
+    setPdfReloadVersion(0);
+  }, [selectionPath]);
+
+  const recoverPdfFromDisk = useCallback(() => {
+    if (!filePath || widget.config.encrypted === true) return;
+    if (recoveredPdfPathRef.current === selectionPath) return;
+    recoveredPdfPathRef.current = selectionPath;
+    const absolute = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(filePath);
+    const readPath = absolute ? filePath : downloadPath;
+    void (absolute ? readLocalFile(readPath) : readFile(readPath)).then((file) => {
+      if (!file?.content) return;
+      onConfigChange({ ...widget.config, fileName: file.fileName, content: file.content });
+      setPdfReloadVersion((value) => value + 1);
+    }).catch((reloadError) => {
+      console.warn("Could not recover PDF from disk.", reloadError);
+    });
+  }, [downloadPath, fileName, filePath, onConfigChange, selectionPath, widget.config]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -945,11 +967,13 @@ export function FileWidgetBody({
     if (kind === "pdf") {
       return (
         <PdfViewer
+          key={`${selectionPath}:${pdfReloadVersion}`}
           ref={pdfRef}
           content={documentContent}
           title={fileName}
           scalePercent={viewFontScale}
           onTextLayerRendered={() => setPdfPagesTick((value) => value + 1)}
+          onLoadError={recoverPdfFromDisk}
         />
       );
     }

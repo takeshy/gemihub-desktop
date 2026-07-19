@@ -1293,7 +1293,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getDirectoryBase(), startupFilePaths()]).then(([startupDirectory, paths]) => {
+    void Promise.all([getDirectoryBase(), startupFilePaths()]).then(async ([startupDirectory, paths]) => {
       if (cancelled) return;
       if (paths.length > 0) {
         setFileTreeOpen(false);
@@ -1302,9 +1302,15 @@ export default function App() {
       const startupFile = paths[0] || "";
       const separator = Math.max(startupFile.lastIndexOf("/"), startupFile.lastIndexOf("\\"));
       const associatedDirectory = separator >= 0 ? startupFile.slice(0, separator) : "";
-      setDirectoryBaseState(
-        associatedDirectory || startupDirectory || readStored(LAST_OPENED_DIRECTORY_KEY, ""),
-      );
+      const initialDirectory = associatedDirectory || startupDirectory ||
+        readStored(LAST_OPENED_DIRECTORY_KEY, "");
+      // Dashboard widgets mount as soon as this state is published. Ensure the
+      // backend resolves workspace:// paths against the same directory first,
+      // otherwise a restored binary document can be read from stale startup
+      // context and only work after the widget is reopened.
+      if (initialDirectory) await setDirectoryBase(initialDirectory);
+      if (cancelled) return;
+      setDirectoryBaseState(initialDirectory);
       setStartupPaths(paths);
       setDirectoryContextLoaded(true);
     }).catch(() => {
@@ -3185,9 +3191,25 @@ export default function App() {
                                       }}
                                     />
                                   </label>
+                                  <div className="rag-number-grid">
+                                    <label className="settings-field">
+                                      <span>OAuth Client ID</span>
+                                      <input value={server.oauthClientId || ""} placeholder="Google Cloud OAuth client ID" onChange={(event) => setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauthClientId: event.target.value } : item) }))} />
+                                    </label>
+                                    <label className="settings-field">
+                                      <span>OAuth Client Secret</span>
+                                      <input type="password" value={server.oauthClientSecret || ""} placeholder="OAuth client secret" onChange={(event) => setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauthClientSecret: event.target.value } : item) }))} />
+                                    </label>
+                                  </div>
+                                  <label className="settings-field">
+                                    <span>OAuth scopes</span>
+                                    <input value={(server.oauthScopes || []).join(" ")} placeholder="https://www.googleapis.com/auth/logging.read" onChange={(event) => setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauthScopes: event.target.value.split(/[\s,]+/).map((scope) => scope.trim()).filter(Boolean) } : item) }))} />
+                                    <small>Space-separated. Empty uses the Google MCP default scope.</small>
+                                  </label>
                                   <label className="settings-field">
                                     <span>Headers (JSON)</span>
                                     <textarea
+                                      key={JSON.stringify(server.headers)}
                                       rows={3}
                                       defaultValue={JSON.stringify(
                                         server.headers,
@@ -3229,7 +3251,7 @@ export default function App() {
                                       }}
                                     />
                                   </label>
-                                  <button
+                                  {!server.oauthClientId?.trim() && <button
                                     type="button"
                                     className="settings-choice"
                                     disabled={!server.url}
@@ -3245,10 +3267,10 @@ export default function App() {
                                         try {
                                           tools = await client.listTools();
                                         } catch (initialError) {
-                                          if (!(initialError instanceof McpHttpError && initialError.status === 401) && !server.oauth) throw initialError;
+                                          if (usedOAuth || !(initialError instanceof McpHttpError && initialError.status === 401)) throw initialError;
                                           await client.close();
                                           setMCPStatus((current) => ({ ...current, [server.id]: "Opening browser for OAuth…" }));
-                                          await connectMCPOAuth({ serverId: server.id, serverUrl: server.url });
+                                          await connectMCPOAuth({ serverId: server.id, serverUrl: server.url, clientId: server.oauthClientId, clientSecret: server.oauthClientSecret, scopes: server.oauthScopes });
                                           usedOAuth = true;
                                           client = new McpHttpClient({ id: server.id, name: server.name, transport: "http", url: server.url, headers: server.headers, enabled: true, oauth: true });
                                           tools = await client.listTools();
@@ -3288,7 +3310,7 @@ export default function App() {
                                     }}
                                   >
                                     Test connection
-                                  </button>
+                                  </button>}
                                 </>
                               )
                               : (
@@ -3481,14 +3503,28 @@ export default function App() {
                                 Tools: {server.toolHints.join(", ")}
                               </small>
                             )}
-                            {server.transport === "http" && server.oauth && (
+                            {server.transport === "http" && (
                               <div className="vertex-oauth-actions">
-                                <small>OAuth authenticated · tokens are stored by the desktop app</small>
-                                <button type="button" className="settings-choice" onClick={() => {
+                                <small>{server.oauth ? "OAuth configured · tokens are stored by the desktop app" : "Authenticate this MCP server with OAuth"}</small>
+                                <button type="button" className="settings-choice" onClick={async () => {
+                                  setMCPStatus((current) => ({ ...current, [server.id]: `Opening browser for OAuth${server.oauth ? " re-authorization" : " authentication"}…` }));
+                                  try {
+                                    await connectMCPOAuth({ serverId: server.id, serverUrl: server.url, clientId: server.oauthClientId, clientSecret: server.oauthClientSecret, scopes: server.oauthScopes });
+                                    setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauth: true } : item) }));
+                                    const client = new McpHttpClient({ id: server.id, name: server.name, transport: "http", url: server.url, headers: server.headers, enabled: true, oauth: true });
+                                    const tools = await client.listTools();
+                                    await client.close();
+                                    setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauth: true, verified: true, enabled: true, toolHints: tools.map((tool) => tool.name) } : item) }));
+                                    setMCPStatus((current) => ({ ...current, [server.id]: `Connected · OAuth · ${tools.length} tools` }));
+                                  } catch (caught) {
+                                    setMCPStatus((current) => ({ ...current, [server.id]: caught instanceof Error ? caught.message : String(caught) }));
+                                  }
+                                }}>{server.oauth ? "Re-authorize" : "Authenticate with OAuth"}</button>
+                                {server.oauth && <button type="button" className="settings-choice" onClick={() => {
                                   void disconnectMCPOAuth(server.id);
                                   setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauth: false, verified: false, enabled: false, toolHints: [] } : item) }));
                                   setMCPStatus((current) => ({ ...current, [server.id]: "OAuth disconnected." }));
-                                }}>Disconnect OAuth</button>
+                                }}>Disconnect OAuth</button>}
                               </div>
                             )}
                             {mcpStatus[server.id] && (
@@ -3525,6 +3561,9 @@ export default function App() {
                               toolHints: [],
                               verified: false,
                               oauth: false,
+                              oauthClientId: "",
+                              oauthClientSecret: "",
+                              oauthScopes: [],
                             }],
                           }))}
                       >

@@ -21,10 +21,11 @@ import (
 const mcpOAuthRefreshBuffer = 5 * time.Minute
 
 type MCPOAuthConnectRequest struct {
-	ServerID     string `json:"serverId"`
-	ServerURL    string `json:"serverUrl"`
-	ClientID     string `json:"clientId,omitempty"`
-	ClientSecret string `json:"clientSecret,omitempty"`
+	ServerID     string   `json:"serverId"`
+	ServerURL    string   `json:"serverUrl"`
+	ClientID     string   `json:"clientId,omitempty"`
+	ClientSecret string   `json:"clientSecret,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
 }
 
 type MCPOAuthStatus struct {
@@ -83,6 +84,9 @@ func (a *App) ConnectMCPOAuth(request MCPOAuthConnectRequest) (*MCPOAuthStatus, 
 	if err != nil {
 		return nil, err
 	}
+	if len(request.Scopes) > 0 {
+		discovery.Config.Scopes = request.Scopes
+	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -93,6 +97,9 @@ func (a *App) ConnectMCPOAuth(request MCPOAuthConnectRequest) (*MCPOAuthStatus, 
 
 	clientID := strings.TrimSpace(request.ClientID)
 	clientSecret := request.ClientSecret
+	if clientID == "" && strings.EqualFold(discovery.Config.AuthorizationURL, "https://accounts.google.com/o/oauth2/v2/auth") {
+		return nil, fmt.Errorf("OAuth Client ID is required for Google Workspace MCP servers")
+	}
 	if clientID == "" && discovery.RegistrationURL != "" {
 		clientID, clientSecret, err = registerMCPOAuthClient(discovery.RegistrationURL, redirectURI)
 		if err != nil {
@@ -127,6 +134,10 @@ func (a *App) ConnectMCPOAuth(request MCPOAuthConnectRequest) (*MCPOAuthStatus, 
 	}
 	if discovery.Config.Resource != "" {
 		values.Set("resource", discovery.Config.Resource)
+	}
+	if strings.EqualFold(discovery.Config.AuthorizationURL, "https://accounts.google.com/o/oauth2/v2/auth") {
+		values.Set("access_type", "offline")
+		values.Set("prompt", "consent")
 	}
 
 	type callbackResult struct{ code, err string }
@@ -262,10 +273,9 @@ func discoverMCPOAuth(serverURL string) (*mcpOAuthDiscovery, error) {
 	metadataURL := ""
 	if probeErr == nil {
 		defer probeResponse.Body.Close()
-		if probeResponse.StatusCode != http.StatusUnauthorized {
-			return nil, fmt.Errorf("MCP server did not request OAuth authentication (status %d)", probeResponse.StatusCode)
+		if probeResponse.StatusCode == http.StatusUnauthorized {
+			metadataURL = bearerParameter(probeResponse.Header.Get("WWW-Authenticate"), "resource_metadata")
 		}
-		metadataURL = bearerParameter(probeResponse.Header.Get("WWW-Authenticate"), "resource_metadata")
 	}
 	if metadataURL == "" {
 		metadataURL = server.Scheme + "://" + server.Host + "/.well-known/oauth-protected-resource"
@@ -276,6 +286,9 @@ func discoverMCPOAuth(serverURL string) (*mcpOAuthDiscovery, error) {
 		ScopesSupported      []string `json:"scopes_supported"`
 	}
 	if err := fetchMCPOAuthJSON(metadataURL, &resource); err != nil {
+		if discovery := googleWorkspaceMCPOAuthDiscovery(server); discovery != nil {
+			return discovery, nil
+		}
 		if probeErr != nil {
 			return nil, fmt.Errorf("MCP OAuth probe failed: %v; metadata discovery failed: %w", probeErr, err)
 		}
@@ -323,6 +336,24 @@ func discoverMCPOAuth(serverURL string) (*mcpOAuthDiscovery, error) {
 		resourceURL = server.String()
 	}
 	return &mcpOAuthDiscovery{Config: mcpOAuthConfig{AuthorizationURL: authorization.AuthorizationEndpoint, TokenURL: authorization.TokenEndpoint, Scopes: scopes, Resource: resourceURL}, RegistrationURL: authorization.RegistrationEndpoint}, nil
+}
+
+func googleWorkspaceMCPOAuthDiscovery(server *url.URL) *mcpOAuthDiscovery {
+	if !strings.HasSuffix(strings.ToLower(server.Hostname()), ".googleapis.com") || !strings.Contains(strings.ToLower(server.String()), "mcp") {
+		return nil
+	}
+	scopes := []string{"https://www.googleapis.com/auth/cloud-platform"}
+	if strings.EqualFold(server.Hostname(), "gmailmcp.googleapis.com") {
+		scopes = []string{
+			"https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/gmail.compose",
+		}
+	}
+	return &mcpOAuthDiscovery{Config: mcpOAuthConfig{
+		AuthorizationURL: "https://accounts.google.com/o/oauth2/v2/auth",
+		TokenURL:         "https://oauth2.googleapis.com/token",
+		Scopes:           scopes,
+	}}
 }
 
 func registerMCPOAuthClient(registrationURL, redirectURI string) (string, string, error) {

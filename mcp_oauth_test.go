@@ -42,6 +42,59 @@ func TestDiscoverMCPOAuth(t *testing.T) {
 	}
 }
 
+func TestDiscoverMCPOAuthCanBeStartedManuallyAfterSuccessfulProbe(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/mcp":
+			_ = json.NewEncoder(response).Encode(map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{}})
+		case "/.well-known/oauth-protected-resource":
+			_ = json.NewEncoder(response).Encode(map[string]any{"resource": server.URL + "/mcp", "authorization_servers": []string{server.URL}})
+		case "/.well-known/oauth-authorization-server":
+			_ = json.NewEncoder(response).Encode(map[string]any{"authorization_endpoint": server.URL + "/authorize", "token_endpoint": server.URL + "/token", "registration_endpoint": server.URL + "/register"})
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+
+	discovery, err := discoverMCPOAuth(server.URL + "/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if discovery.Config.AuthorizationURL != server.URL+"/authorize" {
+		t.Fatalf("unexpected OAuth discovery: %#v", discovery.Config)
+	}
+}
+
+func TestGoogleWorkspaceMCPOAuthDiscovery(t *testing.T) {
+	server, err := url.Parse("https://gmailmcp.googleapis.com/mcp/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovery := googleWorkspaceMCPOAuthDiscovery(server)
+	if discovery == nil {
+		t.Fatal("expected Gmail MCP OAuth fallback")
+	}
+	if discovery.Config.AuthorizationURL != "https://accounts.google.com/o/oauth2/v2/auth" || discovery.Config.TokenURL != "https://oauth2.googleapis.com/token" {
+		t.Fatalf("unexpected Google OAuth endpoints: %#v", discovery.Config)
+	}
+	if !strings.Contains(strings.Join(discovery.Config.Scopes, " "), "gmail.readonly") {
+		t.Fatalf("missing Gmail OAuth scopes: %#v", discovery.Config.Scopes)
+	}
+}
+
+func TestGoogleCloudMCPOAuthDiscovery(t *testing.T) {
+	server, err := url.Parse("https://logging.googleapis.com/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovery := googleWorkspaceMCPOAuthDiscovery(server)
+	if discovery == nil || strings.Join(discovery.Config.Scopes, " ") != "https://www.googleapis.com/auth/cloud-platform" {
+		t.Fatalf("unexpected Google Cloud MCP OAuth fallback: %#v", discovery)
+	}
+}
+
 func TestRegisterMCPOAuthClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		var registration map[string]any

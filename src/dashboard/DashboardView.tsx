@@ -1340,11 +1340,18 @@ export function DashboardView({
       const content = typeof widget.config.content === "string"
         ? widget.config.content
         : "";
-      if (!fileName || !filePath || content || widget.config.externalOnly === true || docKindFor(fileName) === "external") return;
+      const reloadBinaryFromDisk = isBinaryDocumentFileName(fileName);
+      if (!fileName || !filePath || (content && !reloadBinaryFromDisk) || widget.config.externalOnly === true || docKindFor(fileName) === "external") return;
 
       const hydrateKey = `${widget.id}:${filePath}`;
       if (hydratedFilePathsRef.current.has(hydrateKey)) return;
       hydratedFilePathsRef.current.add(hydrateKey);
+      // Older Dashboard files can contain stale or text-decoded binary
+      // content. Never hand that persisted value to a media viewer while the
+      // authoritative file is being restored from disk.
+      if (content && reloadBinaryFromDisk) {
+        updateFileWidget(widget.id, { content: "" });
+      }
 
       void (async () => {
         try {
@@ -1364,7 +1371,7 @@ export function DashboardView({
         }
       })();
     });
-  }, [data.widgets, openFileInWidget, readKnownPath, resolveOpenedFile]);
+  }, [data.widgets, openFileInWidget, readKnownPath, resolveOpenedFile, updateFileWidget]);
 
   useEffect(() => {
     if (previousWorkspaceBaseRef.current === workspaceBase) return;
