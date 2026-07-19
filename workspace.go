@@ -11,6 +11,8 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+const defaultWorkspaceDirectoryName = "GemiHubWorkspace"
+
 type Workspace struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -39,13 +41,13 @@ func (a *App) defaultWorkspacePath(configDir string) (string, error) {
 	// the config directory. Production workspaces belong somewhere users can
 	// reach directly from Explorer or Finder.
 	if a.workspaceConfigDir != "" {
-		return filepath.Join(configDir, "GemiHub Workspace"), nil
+		return filepath.Join(configDir, defaultWorkspaceDirectoryName), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "Documents", "GemiHub Workspace"), nil
+	return filepath.Join(home, "Documents", defaultWorkspaceDirectoryName), nil
 }
 
 var workspaceResourceDirectories = []string{"Dashboards", "Memos", "Secrets", "skills", "workflows"}

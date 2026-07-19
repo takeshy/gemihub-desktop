@@ -17,7 +17,7 @@ func TestSingleWorkspaceInitializeAndChangeDirectory(t *testing.T) {
 	if len(state.Workspaces) != 1 || state.Workspaces[0].Name != "Workspace" || state.ActiveWorkspaceID != "workspace" {
 		t.Fatalf("unexpected defaults: %#v", state)
 	}
-	if want := filepath.Join(config, "GemiHub Workspace"); state.Workspaces[0].Path != want {
+	if want := filepath.Join(config, "GemiHubWorkspace"); state.Workspaces[0].Path != want {
 		t.Fatalf("default workspace path = %q, want %q", state.Workspaces[0].Path, want)
 	}
 	if app.GetDirectoryBase() != "" {
