@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsLeft, Code, CornerUpLeft, Link2Off, PenLine, Pencil, Pin, Send, X } from "lucide-react";
+import { Bot, Check, ChevronsLeft, Code, CornerUpLeft, Link2Off, PenLine, Pencil, Pin, Send, X } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { WysiwygEditor } from "../components/WysiwygEditor";
 import type { MemoEntry } from "../lib/memoTimeline";
@@ -282,6 +282,7 @@ export function MemoTimelinePanel({
   flashEntryId,
   onJumpToAnchor,
   onOpenPath,
+  onAskAI,
   onCollapse,
   onClose,
 }: {
@@ -300,6 +301,7 @@ export function MemoTimelinePanel({
   flashEntryId: string | null;
   onJumpToAnchor: (entry: MemoEntry) => void;
   onOpenPath: (path: string) => void;
+  onAskAI?: () => void;
   onCollapse: () => void;
   onClose: () => void;
 }) {
@@ -353,6 +355,11 @@ export function MemoTimelinePanel({
       <header className="memo-panel-header">
         <strong>{tr("memo.panelTitle")}</strong>
         <div className="memo-panel-header-actions">
+          {onAskAI && (
+            <button type="button" className="widget-icon-button" onClick={onAskAI} title="メモ全体についてAIに質問">
+              <Bot size={14} />
+            </button>
+          )}
           <button type="button" className="widget-icon-button" onClick={onCollapse} title={tr("memo.collapse")}>
             <ChevronsLeft size={14} />
           </button>

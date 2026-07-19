@@ -3412,6 +3412,16 @@ body.resizing-side-pane * {
   max-width: 100%;
 }
 
+.workflow-file-view { display: flex; min-height: 0; height: 100%; flex-direction: column; }
+.workflow-file-toolbar { display: flex; justify-content: flex-end; gap: 3px; border-bottom: 1px solid var(--border); background: var(--panel); padding: 5px 8px; }
+.workflow-file-toolbar button { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); padding: 5px 9px; cursor: pointer; }
+.workflow-file-toolbar button.active { background: var(--hover); color: var(--text); }
+.workflow-file-preview { min-height: 0; flex: 1; overflow: auto; padding: 16px; }
+.workflow-file-preview .mermaid-block { min-height: 100%; align-items: center; }
+.workflow-file-source { min-height: 0; flex: 1; }
+.workflow-file-error { display: flex; min-height: 100%; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--danger); text-align: center; }
+.workflow-file-error span { max-width: 640px; color: var(--muted); }
+
 .error-block {
   color: var(--danger);
 }

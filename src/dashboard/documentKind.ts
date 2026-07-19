@@ -12,7 +12,8 @@ export type DocKind =
   | "external"
   | "canvas"
   | "base"
-  | "kanban";
+  | "kanban"
+  | "workflow";
 
 /** Files returned by the desktop backend as data URLs, never editable text. */
 export function isBinaryDocumentFileName(fileName: string): boolean {
@@ -25,6 +26,7 @@ export function docKindFor(fileName: string): DocKind {
   if (lower.endsWith(".canvas")) return "canvas";
   if (lower.endsWith(".base")) return "base";
   if (lower.endsWith(".kanban")) return "kanban";
+  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "workflow";
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
   if (isEpubFileName(lower)) return "epub";

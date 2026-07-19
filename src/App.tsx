@@ -939,6 +939,7 @@ export default function App() {
   );
   const [pluginViewRequest, setPluginViewRequest] = useState(0);
   const [chatOpenRequest, setChatOpenRequest] = useState(0);
+  const [chatDraftRequest, setChatDraftRequest] = useState({ id: 0, text: "" });
   const [pluginWidgetRequest, setPluginWidgetRequest] = useState<{
     id: number;
     type: string;
@@ -2067,6 +2068,11 @@ export default function App() {
                     setChatViewOpen(true);
                     setChatOpenRequest((value) => value + 1);
                   }}
+                  onAskMemoAI={(draft) => {
+                    setChatDraftRequest((current) => ({ id: current.id + 1, text: draft }));
+                    setChatViewOpen(true);
+                    setChatOpenRequest((value) => value + 1);
+                  }}
                   chatSettings={chatSettings}
                   directoryBase={activeProjectPath}
                   workspaceBase={directoryBase}
@@ -2105,6 +2111,7 @@ export default function App() {
                 aiEnabled={aiEnabled}
                 pluginViewRequest={pluginViewRequest}
                 chatOpenRequest={chatOpenRequest}
+                chatDraftRequest={chatDraftRequest}
                 settingsOpen={settingsOpen && settingsSection === "plugins"}
                 onCollapse={() => setChatViewOpen(false)}
                 onOpenPluginView={() => {

@@ -835,6 +835,13 @@ func parseGeminiGeneratedImages(parts []map[string]any) []GeneratedImage {
 	return images
 }
 
+func looksLikeStalledToolNarration(text string) bool {
+	normalized := strings.ToLower(text)
+	toolMentions := strings.Count(normalized, "tool") + strings.Count(normalized, "read_file") + strings.Count(normalized, "list_files")
+	actionPromises := strings.Count(normalized, "let's call") + strings.Count(normalized, "i will call") + strings.Count(normalized, "let's do") + strings.Count(normalized, "let's run")
+	return toolMentions >= 6 && actionPromises >= 4
+}
+
 func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers map[string]string, providerName string) (*ChatResult, error) {
 	contents := make([]map[string]any, 0, len(request.Messages))
 	for _, message := range request.Messages {
@@ -859,6 +866,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 	functionCallCount := 0
 	functionCallLimit := 50
 	lastLimitPrompt := 0
+	stalledToolRecoveryUsed := false
 	for iteration := 0; iteration < 256; iteration++ {
 		payload := map[string]any{"contents": contents}
 		if config := geminiThinkingConfig(request.Model, request.EnableThinking); config != nil {
@@ -940,6 +948,12 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 		generatedImages = append(generatedImages, parseGeminiGeneratedImages(parts)...)
 		if strings.TrimSpace(thinking) != "" {
 			thinkingUsed = append(thinkingUsed, thinking)
+		}
+		if len(calls) == 0 && len(declarations) > 0 && !stalledToolRecoveryUsed && looksLikeStalledToolNarration(text) {
+			stalledToolRecoveryUsed = true
+			contents = append(contents, map[string]any{"role": "model", "parts": modelParts})
+			contents = append(contents, map[string]any{"role": "user", "parts": []map[string]any{{"text": "You described calling a tool repeatedly but did not emit a function call. Stop narrating tool usage. Emit the required functionCall now, or provide the final answer if no tool is needed."}}})
+			continue
 		}
 		functionResponses := []map[string]any{}
 		remaining := functionCallLimit - functionCallCount

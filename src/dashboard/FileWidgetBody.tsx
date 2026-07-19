@@ -40,6 +40,8 @@ import { CanvasFileView } from "../canvas/CanvasFileView";
 import { docKindFor } from "./documentKind";
 import type { ActiveSelection } from "../llm/selection";
 import { appendTimelineEntry, memoTimelineBody } from "./timelineEvents";
+import { WorkflowFileView } from "../workflow/WorkflowFileView";
+import { memoChatDraft } from "./memoChat";
 
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
@@ -185,6 +187,7 @@ export function FileWidgetBody({
   onSelectionChange,
   aiAvailable,
   onAskAI,
+  onAskMemoAI,
 }: {
   widget: DashboardWidget;
   fallbackFileName: string;
@@ -199,6 +202,7 @@ export function FileWidgetBody({
   onSelectionChange: (selection: ActiveSelection | null) => void;
   aiAvailable: boolean;
   onAskAI: (selection: ActiveSelection) => void;
+  onAskMemoAI: (draft: string) => void;
 }) {
   const { t: tr } = useI18n();
   const filePath = typeof widget.config.filePath === "string" ? widget.config.filePath : typeof widget.config.path === "string" ? widget.config.path : "";
@@ -940,6 +944,16 @@ export function FileWidgetBody({
       );
     }
 
+    if (kind === "workflow") {
+      return (
+        <WorkflowFileView
+          content={documentContent}
+          isDark={isDark}
+          onChange={(content) => onConfigChange({ ...widget.config, fileName, content })}
+        />
+      );
+    }
+
     if (kind === "html" || kind === "epub") {
       return (
         <HtmlDocumentFrame
@@ -1081,6 +1095,7 @@ export function FileWidgetBody({
           flashEntryId={flashEntryId}
           onJumpToAnchor={jumpToAnchor}
           onOpenPath={onOpenPath}
+          onAskAI={aiAvailable && memoFilePath ? () => onAskMemoAI(memoChatDraft(memoFilePath, selectionPath)) : undefined}
           onCollapse={() => onConfigChange({ ...widget.config, memoPanelCollapsed: true })}
           onClose={() => onConfigChange({ ...widget.config, memoPanelOpen: false })}
         />

@@ -38,6 +38,16 @@ func TestFileToolDefinitionsForMode(t *testing.T) {
 	}
 }
 
+func TestLooksLikeStalledToolNarration(t *testing.T) {
+	stalled := "I will call read_file. Let's call the tool. Let's do it. read_file now. Let's call read_file. Let's run the tool. Let's do it with read_file."
+	if !looksLikeStalledToolNarration(stalled) {
+		t.Fatal("repeated tool narration was not detected")
+	}
+	if looksLikeStalledToolNarration("I will read the file and summarize its contents.") {
+		t.Fatal("ordinary tool preamble was incorrectly detected")
+	}
+}
+
 func TestAgentSkillFileToolAliases(t *testing.T) {
 	base := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(base, "skills", "review"), 0o755); err != nil {

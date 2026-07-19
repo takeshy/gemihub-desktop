@@ -537,6 +537,7 @@ export function DashboardView({
   onActiveFileChange,
   onActiveSelectionChange,
   onAskAI,
+  onAskMemoAI,
   chatSettings,
   directoryBase,
   workspaceBase,
@@ -582,6 +583,7 @@ export function DashboardView({
   onActiveFileChange: (file: { path: string; content: string } | null) => void;
   onActiveSelectionChange: (selection: ActiveSelection | null) => void;
   onAskAI: (selection: ActiveSelection) => void;
+  onAskMemoAI: (draft: string) => void;
   chatSettings: ChatSettings;
   directoryBase: string;
   workspaceBase: string;
@@ -2866,6 +2868,7 @@ export function DashboardView({
                         onSelectionChange={onActiveSelectionChange}
                         aiAvailable={aiEnabled && configuredChatProviders(chatSettings).length > 0}
                         onAskAI={onAskAI}
+                        onAskMemoAI={onAskMemoAI}
                       />
                     )}
                     {widget.type === "workflow" && (

@@ -57,8 +57,6 @@ import {
 import { executeWorkflow } from "../workflow/executor";
 import { appendWorkflowHistory } from "../workflow/history";
 import { parseWorkflowFile } from "../workflow/parser";
-import { WorkflowProgressModal } from "../workflow/WorkflowProgressModal";
-import type { Workflow, WorkflowLog } from "../workflow/types";
 import {
   getWorkflowNodeSpec,
   getWorkflowSpecTool,
@@ -392,6 +390,7 @@ export function ChatPanel({
   onSettingsChange,
   activeFile,
   activeSelection,
+  draftRequest,
   externalAttachments,
   pluginCommands = [],
   onOpenSettings,
@@ -405,6 +404,7 @@ export function ChatPanel({
   onSettingsChange: (settings: ChatSettings) => void;
   activeFile: { path: string; content: string } | null;
   activeSelection: ActiveSelection | null;
+  draftRequest?: { id: number; text: string };
   externalAttachments?: {
     id: number;
     files: Array<{ path: string; content: string; rag?: boolean }>;
@@ -433,15 +433,6 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [okfBundles, setOkfBundles] = useState<OkfBundle[]>([]);
-  const [skillProgress, setSkillProgress] = useState<
-    {
-      workflow: Workflow;
-      logs: WorkflowLog[];
-      thinking: Record<string, string>;
-      running: boolean;
-      controller: AbortController;
-    } | null
-  >(null);
   const [dismissedAutomaticPath, setDismissedAutomaticPath] = useState<
     string | null
   >(null);
@@ -457,6 +448,12 @@ export function ChatPanel({
   const filePickerRef = useRef<HTMLDivElement | null>(null);
   const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!draftRequest?.id || !draftRequest.text) return;
+    setInput(draftRequest.text);
+    queueMicrotask(() => composerRef.current?.focus());
+  }, [draftRequest?.id, draftRequest?.text]);
 
   const activeSession = sessions.find((session) => session.id === activeID) ??
     sessions[0];
@@ -883,43 +880,18 @@ export function ChatPanel({
               : JSON.stringify(value),
           );
         }
-        const controller = new AbortController();
-        setSkillProgress({
-          workflow,
-          logs: [],
-          thinking: {},
-          running: true,
-          controller,
-        });
         const run = await executeWorkflow(workflow, entry.workflowPath, {
           chatSettings: settings,
           activeFile,
           openFile: onOpenFile,
           interactionMode: "panel",
-          signal: controller.signal,
           loadWorkflow: async (path) => {
             const nested = await readFile(path);
             if (!nested) throw new Error(`Workflow file not found: ${path}`);
             return parseWorkflowFile(nested.content, path);
           },
-          onLog: (log) =>
-            setSkillProgress((current) =>
-              current ? { ...current, logs: [...current.logs, log] } : current
-            ),
-          onThinking: (nodeId, value) =>
-            setSkillProgress((current) =>
-              current
-                ? {
-                  ...current,
-                  thinking: { ...current.thinking, [nodeId]: value },
-                }
-                : current
-            ),
         }, initial);
         await appendWorkflowHistory(run, projectBase);
-        setSkillProgress((current) =>
-          current ? { ...current, running: false } : current
-        );
         if (run.status !== "completed") {
           return {
             error: `Workflow execution failed: ${
@@ -943,9 +915,6 @@ export function ChatPanel({
         }));
         return { success: true, workflowId, variables, logs };
       } catch (caught) {
-        setSkillProgress((current) =>
-          current ? { ...current, running: false } : current
-        );
         return {
           error: `Workflow execution failed: ${
             caught instanceof Error ? caught.message : String(caught)
@@ -2411,16 +2380,6 @@ export function ChatPanel({
           )}
         </div>
       </footer>
-      {skillProgress && (
-        <WorkflowProgressModal
-          workflow={skillProgress.workflow}
-          logs={skillProgress.logs}
-          thinking={skillProgress.thinking}
-          running={skillProgress.running}
-          onStop={() => skillProgress.controller.abort()}
-          onClose={() => setSkillProgress(null)}
-        />
-      )}
     </section>
   );
 }
