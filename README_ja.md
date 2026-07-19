@@ -194,6 +194,8 @@ GemiHub に組み込まれている Markdown、Base、Canvas の Agent Skill に
 
 GemiHub の WYSIWYG Markdown エディターには、[portive/wysimark](https://github.com/portive/wysimark) を軽量化したフォークである [takeshy/wysimark-lite](https://github.com/takeshy/wysimark-lite) を使用しています。MIT License のもとで基盤を公開してくださった Wysimark の作者とコントリビューターの皆様に、敬意と感謝を表します。
 
+GemiHub Desktop は [Wails](https://wails.io/)（[wailsapp/wails](https://github.com/wailsapp/wails)）で構築されています。MIT License のもとでフレームワークを公開してくださった Lea Anthony 氏と Wails のコントリビューターの皆様に、敬意と感謝を表します。
+
 GemiHub は独立したプロジェクトであり、Obsidian との提携、Obsidian による承認または後援を受けたものではありません。
 
 ## ビジョン

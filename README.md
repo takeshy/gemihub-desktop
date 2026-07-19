@@ -194,6 +194,8 @@ We are grateful to Steph Ango (@kepano), the project contributors, and the maint
 
 GemiHub's WYSIWYG Markdown editor uses [takeshy/wysimark-lite](https://github.com/takeshy/wysimark-lite), a lightweight fork of [portive/wysimark](https://github.com/portive/wysimark). We thank the Wysimark authors and contributors for the foundation they made available under the MIT License.
 
+GemiHub Desktop is built with [Wails](https://wails.io/) ([wailsapp/wails](https://github.com/wailsapp/wails)). We thank Lea Anthony and the Wails contributors for making the framework available under the MIT License.
+
 GemiHub is an independent project and is not affiliated with, endorsed by, or sponsored by Obsidian.
 
 ## Vision
