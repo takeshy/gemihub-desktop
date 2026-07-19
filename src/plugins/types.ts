@@ -88,6 +88,8 @@ export interface PluginAPI {
   onActiveFileChanged(callback: (detail: { path: string | null; name: string | null }) => void): () => void;
   selectFile(path: string): void;
   files?: {
+    current(): Promise<Project | null>;
+    inventory(): Promise<DirectoryFileEntry[]>;
     read(path: string): Promise<string>;
     search(query: string, limit?: number): Promise<FileSearchResult[]>;
     tree(): Promise<FileTreeNode[]>;

@@ -1,5 +1,10 @@
 /**
  * Built-in agent skills for the workspace's supported file formats.
+ *
+ * The Markdown, Base, and Canvas skill documentation is adapted from
+ * kepano/obsidian-skills under the MIT License. See THIRD_PARTY_NOTICES.md.
+ * GemiHub's file-format implementations are independently written and do not
+ * incorporate Obsidian source code.
  */
 import type { WorkspaceSkill } from "./skills";
 export const BUILTIN_SKILL_PREFIX = "__builtin__/";

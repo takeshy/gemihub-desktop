@@ -1,4 +1,6 @@
 import { useRef } from "react";
+// wysimark-lite is derived from portive/wysimark under the MIT License.
+// See THIRD_PARTY_NOTICES.md for attribution and the full license text.
 import { Editable, useEditor } from "wysimark-lite";
 
 type SlateEntry = [unknown, number[]];

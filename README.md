@@ -127,6 +127,8 @@ Available release artifacts:
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
 
+Each release also includes `THIRD_PARTY_NOTICES.md`. The same notices are available in the app under **Settings → General → Third-party notices**.
+
 On Linux and macOS, make the downloaded file executable:
 
 ```bash
@@ -183,6 +185,16 @@ deno task desktop:build
 ```
 
 Developer Tools are enabled in desktop builds. Press `Ctrl+Shift+I` (`Cmd+Option+I` on macOS) to open the WebView inspector.
+
+## Acknowledgments
+
+GemiHub's built-in Markdown, Base, and Canvas Agent Skills include documentation adapted from [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills). The corresponding file-format support in GemiHub was independently implemented from the publicly described formats and behavior; it does not incorporate Obsidian source code. Canvas support follows the open [JSON Canvas specification](https://jsoncanvas.org/).
+
+We are grateful to Steph Ango (@kepano), the project contributors, and the maintainers of JSON Canvas for making their work available to the community. See [Third-Party Notices](THIRD_PARTY_NOTICES.md) for copyright and license details.
+
+GemiHub's WYSIWYG Markdown editor uses [takeshy/wysimark-lite](https://github.com/takeshy/wysimark-lite), a lightweight fork of [portive/wysimark](https://github.com/portive/wysimark). We thank the Wysimark authors and contributors for the foundation they made available under the MIT License.
+
+GemiHub is an independent project and is not affiliated with, endorsed by, or sponsored by Obsidian.
 
 ## Vision
 

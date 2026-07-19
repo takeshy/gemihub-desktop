@@ -6,12 +6,14 @@ import {
   deleteProjectFile,
   deleteFile,
   externalHTTPRequest,
+  fileInventory,
   fetchManagedPluginAsset,
   listProjectFiles,
   listProjects,
   listFileTree,
   readFile,
   readProjectFile,
+  getDirectoryBase,
   renameFile,
   renameProjectFile,
   searchFiles,
@@ -78,6 +80,18 @@ export function createPluginAPI(
 
   if (has("files")) {
     api.files = {
+      async current() {
+        const path = await getDirectoryBase();
+        if (!path) return null;
+        const normalized = path.replace(/[\\/]+$/, "");
+        return {
+          id: `workspace:${normalized}`,
+          name: normalized.split(/[\\/]/).pop() || "Workspace",
+          path: normalized,
+          createdAt: 0,
+        };
+      },
+      inventory: fileInventory,
       async read(path) {
         const result = await readFile(path);
         if (!result) throw new Error(`File not found: ${path}`);

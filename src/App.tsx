@@ -121,6 +121,7 @@ import { AgentSkillsSettings } from "./skills/AgentSkillsSettings";
 import { APP_NAME } from "./appIdentity";
 import { isBinaryDocumentFileName } from "./dashboard/documentKind";
 import { configureOrUnlockHistoryEncryption, historyEncryptionConfigured, historyEncryptionPreferences, migrateWorkflowHistoryStorage, setHistoryEncryptionPreferences } from "./lib/historyEncryption";
+import { THIRD_PARTY_NOTICES } from "./thirdPartyNotices";
 
 type Translate = (key: keyof TranslationStrings) => string;
 
@@ -2192,6 +2193,10 @@ export default function App() {
                           {isDark ? "Dark" : "Light"}
                         </button>
                       </label>
+                      <details className="third-party-notices">
+                        <summary>Third-party notices</summary>
+                        <pre>{THIRD_PARTY_NOTICES}</pre>
+                      </details>
                     </>
                   )}
                   {settingsSection === "encryption" && (

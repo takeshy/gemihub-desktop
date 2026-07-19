@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,6 +108,19 @@ func TestAudioScoreFormatsUseBinaryProjectIO(t *testing.T) {
 		if !shouldReadAsDataURL(name) {
 			t.Errorf("%s was not classified as binary", name)
 		}
+	}
+	dir := t.TempDir()
+	content := []byte("ID3\x04\x00\x00test audio payload")
+	if err := os.WriteFile(filepath.Join(dir, "track.mp3"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err := fileInventoryForBase(dir)
+	if err != nil || len(inventory) != 1 {
+		t.Fatalf("audio inventory = %#v, %v", inventory, err)
+	}
+	expected := md5.Sum(content)
+	if !inventory[0].Binary || inventory[0].MD5 != hex.EncodeToString(expected[:]) {
+		t.Fatalf("audio inventory should include a streaming checksum: %#v", inventory[0])
 	}
 }
 

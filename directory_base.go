@@ -5,12 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -40,6 +42,35 @@ type DirectoryFileEntry struct {
 	ModTime     int64  `json:"modTime"`
 	MD5         string `json:"md5"`
 	Binary      bool   `json:"binary"`
+}
+
+type fileChecksumCacheEntry struct {
+	size    int64
+	modTime int64
+	md5     string
+}
+
+var fileChecksumCache sync.Map
+
+func streamedFileMD5(path string, info os.FileInfo) (string, error) {
+	if cached, ok := fileChecksumCache.Load(path); ok {
+		entry := cached.(fileChecksumCacheEntry)
+		if entry.size == info.Size() && entry.modTime == info.ModTime().UnixNano() {
+			return entry.md5, nil
+		}
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	value := hex.EncodeToString(hash.Sum(nil))
+	fileChecksumCache.Store(path, fileChecksumCacheEntry{size: info.Size(), modTime: info.ModTime().UnixNano(), md5: value})
+	return value, nil
 }
 
 func (a *App) SelectDirectoryBase() (string, error) {
@@ -642,8 +673,15 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 		}
 		rel, _ := filepath.Rel(base, path)
 		if isBinaryFileName(entry.Name()) {
+			checksum := ""
+			// Files transported through the project API need a content checksum
+			// for Drive sync conflict resolution. Hash them as a stream and cache
+			// by size+mtime so repeated inventories do not reread large media.
+			if shouldReadAsDataURL(entry.Name()) {
+				checksum, _ = streamedFileMD5(path, info)
+			}
 			result = append(result, DirectoryFileEntry{
-				Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(info), ModTime: info.ModTime().UnixMilli(), Binary: true,
+				Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(info), ModTime: info.ModTime().UnixMilli(), MD5: checksum, Binary: true,
 			})
 			return nil
 		}
