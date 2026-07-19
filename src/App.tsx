@@ -82,6 +82,7 @@ import {
   openDeveloperTools,
   type ProjectState,
   selectExternalEditor,
+  selectDirectoryBase,
   selectProjectDirectory,
   selectVertexOAuthClient,
   setProjectDirectory,
@@ -1711,6 +1712,14 @@ export default function App() {
             <FileTree
               directoryBase={directoryBase}
               projectPath={activeProjectPath}
+              onOpenDirectory={async () => {
+                try {
+                  const path = await selectDirectoryBase();
+                  if (path) setDirectoryBaseState(path);
+                } catch (error) {
+                  alert(error instanceof Error ? error.message : String(error));
+                }
+              }}
               onOpenFile={(path) => {
                 if (
                   !path.startsWith("workspace://") &&

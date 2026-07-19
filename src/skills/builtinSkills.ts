@@ -23,17 +23,17 @@ export interface BuiltinSkillDefinition {
 const WORKSPACE_MARKDOWN: BuiltinSkillDefinition = {
   id: "markdown",
   name: "markdown",
-  description: "Create and edit extended Markdown with wikilinks, embeds, callouts, frontmatter properties, tags, and comments. Use when working with .md files or these extensions.",
+  description: "Create and edit GFM Markdown with wikilinks, image embeds, callouts, frontmatter properties, and tags. Use when working with .md files or these extensions.",
   instructions: `# Extended Markdown Skill
 
-Create and edit the extended Markdown supported by GemiHub Desktop. In addition to CommonMark and GFM, the workspace recognizes wikilinks, embeds, callouts, frontmatter properties, tags, and comments. Standard Markdown syntax is assumed knowledge.
+Create and edit the extended Markdown supported by GemiHub Desktop. In addition to CommonMark and GFM, the workspace recognizes wikilinks, image embeds, callouts, frontmatter properties, and tags. Standard Markdown syntax is assumed knowledge.
 
 ## Workflow: Creating a Markdown Note
 
 1. **Add frontmatter** with properties (title, tags, aliases) at the top of the file.
 2. **Write content** using standard Markdown for structure, plus the supported extensions below.
 3. **Link related notes** using wikilinks (\`[[Note]]\`) for internal vault connections, or standard Markdown links for external URLs.
-4. **Embed content** from other notes, images, or PDFs using the \`![[embed]]\` syntax.
+4. **Embed images** using the \`![[image.png]]\` syntax.
 5. **Add callouts** for highlighted information using \`> [!type]\` syntax.
 
 > Use \`[[wikilinks]]\` for workspace files and \`[text](url)\` for external URLs.
@@ -43,27 +43,14 @@ Create and edit the extended Markdown supported by GemiHub Desktop. In addition 
 \`\`\`markdown
 [[Note Name]]                          Link to note
 [[Note Name|Display Text]]             Custom display text
-[[Note Name#Heading]]                  Link to heading
-[[Note Name#^block-id]]                Link to block
-[[#Heading in same note]]              Same-note heading link
-\`\`\`
-
-Define a block ID by appending \`^block-id\` to any paragraph:
-
-\`\`\`markdown
-This paragraph can be linked to. ^my-block-id
 \`\`\`
 
 ## Embeds
 
-Prefix any wikilink with \`!\` to embed its content inline:
+Prefix an image wikilink with \`!\` to embed it inline:
 
 \`\`\`markdown
-![[Note Name]]                         Embed full note
-![[Note Name#Heading]]                 Embed section
 ![[image.png]]                         Embed image
-![[image.png|300]]                     Embed image with width
-![[document.pdf#page=3]]               Embed PDF page
 \`\`\`
 
 ## Callouts
@@ -75,8 +62,6 @@ Prefix any wikilink with \`!\` to embed its content inline:
 > [!warning] Custom Title
 > Callout with a custom title.
 
-> [!faq]- Collapsed by default
-> Foldable callout (- collapsed, + expanded).
 \`\`\`
 
 Common types: \`note\`, \`tip\`, \`warning\`, \`info\`, \`example\`, \`quote\`, \`bug\`, \`danger\`, \`success\`, \`failure\`, \`question\`, \`abstract\`, \`todo\`.
@@ -92,12 +77,10 @@ tags:
   - active
 aliases:
   - Alternative Name
-cssclasses:
-  - custom-class
 ---
 \`\`\`
 
-Default properties: \`tags\` (searchable labels), \`aliases\` (alternative note names for link suggestions), \`cssclasses\` (CSS classes for styling).
+Common properties include \`tags\` (searchable labels) and \`aliases\` (alternative note names). Other YAML properties are preserved and can be queried by Bases, but do not automatically change the Markdown renderer.
 
 ## Tags
 
@@ -108,42 +91,9 @@ Default properties: \`tags\` (searchable labels), \`aliases\` (alternative note 
 
 Tags can contain letters, numbers (not first character), underscores, hyphens, and forward slashes.
 
-## Comments
+## Compatibility Notes
 
-\`\`\`markdown
-This is visible %%but this is hidden%% text.
-
-%%
-This entire block is hidden in reading view.
-%%
-\`\`\`
-
-## Extended Markdown Formatting
-
-\`\`\`markdown
-==Highlighted text==                   Highlight syntax
-\`\`\`
-
-## Math (LaTeX)
-
-\`\`\`markdown
-Inline: $e^{i\\pi} + 1 = 0$
-
-Block:
-$$
-\\frac{a}{b} = c
-$$
-\`\`\`
-
-## Footnotes
-
-\`\`\`markdown
-Text with a footnote[^1].
-
-[^1]: Footnote content.
-
-Inline footnote.^[This is inline.]
-\`\`\``,
+Obsidian comments (\`%%...%%\`), highlights (\`==...==\`), LaTeX math, footnotes, block IDs, heading-target navigation, foldable callouts, note/section embeds, and PDF page embeds are not rendered as special syntax by GemiHub Desktop. Use ordinary Markdown or HTML when the visual result matters.`,
   references: [
     `[CALLOUTS.md]
 # Callouts Reference
@@ -166,13 +116,6 @@ Inline footnote.^[This is inline.]
 | \`example\` | - |
 | \`quote\` | \`cite\` |
 
-## Foldable Callouts
-
-\`\`\`markdown
-> [!faq]- Collapsed by default
-> [!faq]+ Expanded by default
-\`\`\`
-
 ## Nested Callouts
 
 \`\`\`markdown
@@ -184,28 +127,10 @@ Inline footnote.^[This is inline.]
     `[EMBEDS.md]
 # Embeds Reference
 
-## Notes
-\`\`\`markdown
-![[Note Name]]
-![[Note Name#Heading]]
-![[Note Name#^block-id]]
-\`\`\`
-
 ## Images
 \`\`\`markdown
 ![[image.png]]
-![[image.png|640x480]]    Width x Height
-![[image.png|300]]        Width only
 ![Alt text](https://example.com/image.png)
-![Alt text|300](https://example.com/image.png)
-\`\`\`
-
-## Audio & PDF
-\`\`\`markdown
-![[audio.mp3]]
-![[document.pdf]]
-![[document.pdf#page=3]]
-![[document.pdf#height=400]]
 \`\`\``,
 
     `[PROPERTIES.md]
@@ -227,7 +152,7 @@ Inline footnote.^[This is inline.]
 
 - \`tags\` - Note tags (searchable, shown in graph view)
 - \`aliases\` - Alternative names for the note (used in link suggestions)
-- \`cssclasses\` - CSS classes applied to the note
+- Other properties are preserved and available to Bases queries, but are not interpreted as renderer configuration.
 
 ## Tags in Frontmatter
 
@@ -296,7 +221,6 @@ A canvas file (\`.canvas\`) contains two top-level arrays following the JSON Can
 | Attribute | Required | Description |
 |-----------|----------|-------------|
 | \`file\` | Yes | Path to file within the system |
-| \`subpath\` | No | Link to heading or block (starts with \`#\`) |
 
 ### Link Nodes
 
@@ -309,8 +233,8 @@ A canvas file (\`.canvas\`) contains two top-level arrays following the JSON Can
 | Attribute | Required | Description |
 |-----------|----------|-------------|
 | \`label\` | No | Text label for the group |
-| \`background\` | No | Path to background image |
-| \`backgroundStyle\` | No | \`cover\`, \`ratio\`, or \`repeat\` |
+
+GemiHub Desktop preserves JSON Canvas fields it does not edit. Group backgrounds and file-node subpaths are currently round-tripped but are not rendered by the Canvas UI.
 
 ## Edges
 
@@ -400,13 +324,15 @@ const BASE: BuiltinSkillDefinition = {
 
 Create Bases (\`.base\`) files that display dynamic, filtered views of workspace content.
 
+GemiHub Desktop supports table, cards, and list views. Map views and Markdown embedding of a Base are not currently supported.
+
 ## Workflow
 
 1. **Clarify the use case** — ask what data to show, how to filter, and how to group/sort if not clear.
 2. **Create the file** — use \`create_note\` with \`name: "<Name>.base"\` and \`folder: "Dashboards/Bases"\`.
 3. **Define filters** — narrow down which notes appear (by tag, folder, property, or date).
 4. **Add formulas** (optional) — compute derived values in the \`formulas\` section.
-5. **Configure views** — add one or more views (\`table\`, \`cards\`, \`list\`, or \`map\`).
+5. **Configure views** — add one or more views (\`table\`, \`cards\`, or \`list\`).
 6. **Validate YAML** — ensure valid YAML with no syntax errors, proper quoting.
 
 ## File Structure
@@ -600,7 +526,7 @@ views:
 
 | Field | Description |
 |-------|-------------|
-| \`type\` | View layout: \`table\`, \`cards\`, \`list\`, \`map\` |
+| \`type\` | View layout: \`table\`, \`cards\`, or \`list\` |
 | \`name\` | Display name; first view in list loads by default |
 | \`limit\` | Max number of rows |
 | \`filters\` | View-level filters (same syntax as global, concatenated with AND) |
@@ -615,11 +541,6 @@ views:
 | \`table\` | Rows in a table, columns from properties | 1.9 |
 | \`cards\` | Grid of cards, gallery-like with images | 1.9 |
 | \`list\` | Bulleted or numbered list | 1.10 |
-| \`map\` | Pins on interactive map (requires Maps plugin) | 1.10 |
-
-### Embedding
-
-Embed a base in any file: \`![[File.base]]\` (uses first view) or \`![[File.base#View]]\` (specific view).
 
 ## File Properties
 
@@ -803,7 +724,7 @@ views:
 - [ ] Filter statements are strings (quoted)
 - [ ] Formula strings properly quoted with nested quotes for literals
 - [ ] Property references use correct prefix (\`note.\`, \`file.\`, \`formula.\`)
-- [ ] View \`type\` is valid (\`table\`, \`cards\`, \`list\`, \`map\`)
+- [ ] View \`type\` is valid (\`table\`, \`cards\`, or \`list\`)
 - [ ] No circular formula references
 - [ ] \`groupBy.direction\` is \`ASC\` or \`DESC\``,
   references: [
@@ -976,7 +897,6 @@ Duration units: y/year/years, M/month/months, d/day/days, w/week/weeks, h/hour/h
 | table | Rows in a table, columns from properties | 1.9 |
 | cards | Grid of cards, gallery-like with images | 1.9 |
 | list | Bulleted or numbered list | 1.10 |
-| map | Pins on interactive map (requires Maps plugin) | 1.10 |
 
 ## View Configuration
 
@@ -1001,22 +921,9 @@ Sort direction depends on property type:
 - Number: 0->1 or 1->0
 - Date: old->new or new->old
 
-## Embedding Bases
+## GemiHub Desktop UI
 
-\`\`\`markdown
-![[MyBase.base]]           # Uses first view
-![[MyBase.base#View Name]]  # Specific view
-\`\`\`
-
-## Toolbar
-
-- View menu: create, edit, switch views
-- Results: limit, copy, export files
-- Sort: sort and group files
-- Filter: filter files
-- Properties: choose properties to display, create formulas
-- Search: search displayed properties
-- New: create a new file in the current view`,
+The Base editor can create, rename, duplicate, delete, and switch views; edit filters, sort/group rules, visible properties, formulas, and summaries; search the displayed result; and change table/card/list presentation options. Map views and Markdown embedding of a Base are not currently supported.`,
   ],
 };
 
@@ -1057,7 +964,7 @@ grid:
   gap: 8          # pixels between cells
 widgets:
   - id: <uuid>
-    type: base | file | web | workflow | kanban | timeline | memo-list
+    type: base | file | web | workflow | kanban | timeline | calendar | memo-list | secret-manager
     layout:
       lg: { x: 0, y: 0, w: 6, h: 4 }   # required: position on the wide grid
       sm: { x: 0, y: 0, w: 12, h: 4 }  # optional: auto-derived (stacked) if omitted
@@ -1075,7 +982,7 @@ widgets:
 ### \`base\` — embed a Bases view (the primary data widget)
 
 Renders a named view of a \`.base\` file using the workspace's Bases UI
-(table / cards / list / map). **Use this for any list/table/card of notes** —
+(table / cards / list). **Use this for any list/table/card of notes** —
 do not reimplement those; create a \`.base\` and point a \`base\` widget at it.
 
 \`\`\`yaml
@@ -1126,9 +1033,9 @@ Lists memo sidecar files created by file widgets under the Workspace's Memos dir
 ### \`workflow\` — run a workflow and render its output
 
 Runs an existing workflow (from \`workflows/\`) headlessly and renders the result
-as Markdown or HTML. The workflow must store its output string in a variable
-(default \`result\`). Card/table outputs are not supported — produce a Markdown or
-HTML string.
+as Markdown, HTML, a table, or cards. The workflow must store its output in a variable
+(default \`result\`). Markdown/HTML outputs use a string; table/card outputs accept
+structured rows encoded by the workflow runner.
 
 \`\`\`yaml
 - id: digest-1
@@ -1136,7 +1043,7 @@ HTML string.
   layout: { lg: { x: 0, y: 6, w: 6, h: 5 } }
   config:
     workflow: workflows/daily-digest.workflow.yaml  # Project workflow path
-    output: markdown                     # markdown | html
+    output: markdown                     # markdown | html | table | card
     outputVariable: result               # variable holding the output string
     refreshInterval: 60                  # minutes; 0/omit = manual refresh only; re-runs periodically while the dashboard is open
 \`\`\`
@@ -1219,7 +1126,7 @@ widgets:
 - [ ] Valid YAML (no tabs, consistent indentation)
 - [ ] \`version: 1\`, and \`grid\` with \`cols\`/\`rowHeight\`/\`gap\`
 - [ ] Every widget has a unique \`id\`, a \`type\`, and \`layout.lg\`
-- [ ] \`type\` is one of \`base\`, \`file\`, \`web\`, \`workflow\`, \`kanban\`, \`timeline\`, \`memo-list\`
+- [ ] \`type\` is one of \`base\`, \`file\`, \`web\`, \`workflow\`, \`kanban\`, \`timeline\`, \`calendar\`, \`memo-list\`, \`secret-manager\`
 - [ ] \`base\` widgets point at an existing \`.base\` path; \`view\` matches a view name
 - [ ] \`file\` widgets point at an existing supported vault file path
 - [ ] \`kanban\` widgets define \`statusProperty\` and at least one column with \`value\` and \`label\`

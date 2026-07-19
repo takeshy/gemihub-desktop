@@ -43,6 +43,21 @@ Deno.test("built-in agent skills include the four migrated skill families", () =
   assertEquals(contextualBuiltinFolderPath("home.dashboard"), "__builtin__/dashboard");
 });
 
+Deno.test("built-in skill guidance matches implemented format capabilities", () => {
+  const markdownSkill = loadBuiltinSkill("__builtin__/markdown")!;
+  const canvasSkill = loadBuiltinSkill("__builtin__/json-canvas")!;
+  const baseSkill = loadBuiltinSkill("__builtin__/base")!;
+  const dashboardSkill = loadBuiltinSkill("__builtin__/dashboard")!;
+
+  assertEquals(markdownSkill.instructions.includes("not rendered as special syntax"), true);
+  assertEquals(markdownSkill.instructions.includes("heading-target navigation, foldable callouts"), true);
+  assertEquals(canvasSkill.instructions.includes("round-tripped but are not rendered"), true);
+  assertEquals(baseSkill.instructions.includes("`map` | Pins"), false);
+  assertEquals(baseSkill.instructions.includes("Map views and Markdown embedding of a Base are not currently supported"), true);
+  assertEquals(dashboardSkill.instructions.includes("markdown | html | table | card"), true);
+  assertEquals(dashboardSkill.instructions.includes("calendar | memo-list | secret-manager"), true);
+});
+
 Deno.test("active workspace skills load nested reference materials", async () => {
   const runtime = globalThis as unknown as { window?: { go?: { main: { App: Record<string, unknown> } } } };
   const previousWindow = runtime.window;
