@@ -1,27 +1,23 @@
 import type { PluginView } from "./types";
 
-/**
- * Older desktop plugin patches registered file-backed main views as sidebar
- * views. An extension list identifies those views and lets current hosts route
- * them through the dashboard widget path.
- */
+/** Normalize the legacy Desktop representation of a companion main view. */
 export function normalizeDesktopPluginView(view: PluginView): PluginView {
-  if (view.location === "sidebar" && view.extensions?.length) {
-    return { ...view, location: "main" };
-  }
-  return view;
+  return view.location === "sidebar" && view.extensions?.length
+    ? { ...view, location: "main" }
+    : view;
 }
 
+/** Find the plugin main view registered for a file extension. */
 export function pluginViewForPath(
   views: PluginView[],
-  filePath: string,
+  path: string,
 ): PluginView | undefined {
-  if (!filePath) return undefined;
-  const normalizedPath = filePath.toLowerCase();
+  if (!path) return undefined;
+  const lowerPath = path.toLowerCase();
   return views.find((view) =>
-    view.location === "main" &&
-    view.extensions?.some((extension) =>
-      normalizedPath.endsWith(extension.toLowerCase())
-    )
+    view.location === "main" && view.extensions?.some((extension) => {
+      const normalized = extension.startsWith(".") ? extension : `.${extension}`;
+      return lowerPath.endsWith(normalized.toLowerCase());
+    })
   );
 }
