@@ -8,7 +8,7 @@ import {
 import type { PluginConfig, PluginManifest, PluginPermission } from "./types";
 
 export const PLUGIN_HOST_ID = "gemihub-desktop";
-export const PLUGIN_HOST_VERSION = "0.10.0";
+export const PLUGIN_HOST_VERSION = "0.13.0";
 const LEGACY_PLUGIN_HOST_ID = "llm-hub-workspace";
 const OFFICIAL_PLUGIN_OWNERS = new Set(["takeshy"]);
 
