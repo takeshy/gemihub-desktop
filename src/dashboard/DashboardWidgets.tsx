@@ -1,8 +1,8 @@
 import {
   type DragEvent,
   type FormEvent,
-  type MouseEvent as ReactMouseEvent,
   Fragment,
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -40,7 +40,12 @@ import { WysiwygEditor } from "../components/WysiwygEditor";
 import { EncryptedFileModal } from "../components/EncryptedFileModal";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 import { decodeMemoPath } from "../lib/memoPath";
-import { isLocalDocumentHref, localHrefToPathCandidates, transformWikiLinks, wikiTargetToPath } from "../lib/wikiLinks";
+import {
+  isLocalDocumentHref,
+  localHrefToPathCandidates,
+  transformWikiLinks,
+  wikiTargetToPath,
+} from "../lib/wikiLinks";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import {
   appendEntryBlock,
@@ -91,7 +96,7 @@ import {
   searchBaseRows,
   sortBaseRows,
 } from "./dashboardData";
-import { queryBaseFiles, type BaseQueryData } from "./baseEngine";
+import { type BaseQueryData, queryBaseFiles } from "./baseEngine";
 import { BaseViewRenderer } from "./BaseViewRenderer";
 import type { DashboardWidget } from "./types";
 import { KanbanCardModal } from "./KanbanCardModal";
@@ -113,12 +118,19 @@ function localDateKey(value: unknown): string {
     const direct = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
     if (direct) return direct[1];
   }
-  const date = new Date(typeof value === "number" || typeof value === "string" ? value : NaN);
+  const date = new Date(
+    typeof value === "number" || typeof value === "string" ? value : NaN,
+  );
   if (Number.isNaN(date.getTime())) return "";
   const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${
+    pad(date.getDate())
+  }`;
 }
-function isBaseDateProperty(property: string, rows: DashboardDataRow[]): boolean {
+function isBaseDateProperty(
+  property: string,
+  rows: DashboardDataRow[],
+): boolean {
   if (/^(?:file\.)?[cm]time$/.test(property)) return true;
   return rows.some((row) => localDateKey(baseCellValue(row, property)) !== "");
 }
@@ -201,7 +213,7 @@ export function WebDashboardWidget(
                 src={url}
                 title={url}
                 onLoad={() => setLoading(false)}
-                sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+                sandbox="allow-forms allow-scripts allow-popups"
                 referrerPolicy="no-referrer"
               />
               {loading && (
@@ -595,18 +607,21 @@ export function TimelineDashboardWidget(
     setPinnedOnly(false);
   };
   const hasFilters = !!(word || tag || from || to || pinnedOnly);
-  const handleTimelineLinkClick = useCallback((href: string, event: ReactMouseEvent<HTMLElement>) => {
-    if (!isLocalDocumentHref(href)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const path = href.startsWith("#wiki:")
-      ? wikiTargetToPath("", decodeURIComponent(href.slice("#wiki:".length)))
-      : localHrefToPathCandidates(folder, href)[0];
-    if (path) {
-      if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) onExternalPathOpened(path);
-      setPreviewPath(path);
-    }
-  }, [folder, onExternalPathOpened]);
+  const handleTimelineLinkClick = useCallback(
+    (href: string, event: ReactMouseEvent<HTMLElement>) => {
+      if (!isLocalDocumentHref(href)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const path = href.startsWith("#wiki:")
+        ? wikiTargetToPath("", decodeURIComponent(href.slice("#wiki:".length)))
+        : localHrefToPathCandidates(folder, href)[0];
+      if (path) {
+        if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) onExternalPathOpened(path);
+        setPreviewPath(path);
+      }
+    },
+    [folder, onExternalPathOpened],
+  );
   if (!name) {
     return (
       <div className="dashboard-widget-empty centered">
@@ -1087,11 +1102,23 @@ export function KanbanDashboardWidget(
     );
     const timelineName = configText(definition, "timelineName");
     if (timelineName && oldStatus !== status) {
-      const oldLabel = boardColumns.find((column) => column.value === oldStatus)?.label || oldStatus || "Unspecified";
-      const nextLabel = boardColumns.find((column) => column.value === status)?.label || status || "Unspecified";
-      const kanbanName = configText(definition, "title", baseName(configText(config, "kanban")).replace(/\.kanban$/i, "") || "Kanban");
+      const oldLabel = boardColumns.find((column) =>
+        column.value === oldStatus
+      )?.label || oldStatus || "Unspecified";
+      const nextLabel = boardColumns.find((column) =>
+        column.value === status
+      )?.label || status || "Unspecified";
+      const kanbanName = configText(
+        definition,
+        "title",
+        baseName(configText(config, "kanban")).replace(/\.kanban$/i, "") ||
+          "Kanban",
+      );
       const title = String(row.frontmatter[titleKey] || row.name);
-      await appendTimelineEntry(timelineName, `> [!info] Kanban · ${kanbanName}\n> [[${row.path}|${title}]]\n> \`${oldLabel}\` → \`${nextLabel}\``);
+      await appendTimelineEntry(
+        timelineName,
+        `> [!info] Kanban · ${kanbanName}\n> [[${row.path}|${title}]]\n> \`${oldLabel}\` → \`${nextLabel}\``,
+      );
     }
     const currentOrder = Array.isArray(config.cardOrder)
         ? config.cardOrder.filter((item): item is string =>
@@ -1698,7 +1725,10 @@ export function BaseDashboardWidget({
                   <header>
                     <strong>Search</strong>
                     {query && (
-                      <button type="button" onClick={() => setQuery("")}>
+                      <button
+                        type="button"
+                        onClick={() => setQuery("")}
+                      >
                         Reset
                       </button>
                     )}
@@ -2072,7 +2102,11 @@ export function SecretManagerDashboardWidget(
       setBusy(true);
       setError("");
       try {
-        await encryptWorkspaceFile(selectedFile, password, metadataRecord(metadataFields));
+        await encryptWorkspaceFile(
+          selectedFile,
+          password,
+          metadataRecord(metadataFields),
+        );
         setSecretManagerSessionPassword(managerId, password);
         await load();
         setCreateOpen(false);
@@ -2361,7 +2395,13 @@ export function SecretManagerDashboardWidget(
           className="primary"
           onClick={() => {
             resetCreate();
-            void fileInventory().then((items) => setFileChoices(items.map((item) => item.path).filter((path) => !path.toLowerCase().endsWith(".encrypted"))));
+            void fileInventory().then((items) =>
+              setFileChoices(
+                items.map((item) => item.path).filter((path) =>
+                  !path.toLowerCase().endsWith(".encrypted")
+                ),
+              )
+            );
             setCreateOpen(true);
           }}
         >
@@ -2397,32 +2437,66 @@ export function SecretManagerDashboardWidget(
           <form className="secret-dialog-form" onSubmit={create}>
             <fieldset className="secret-create-kind">
               <legend>Encrypt</legend>
-              <label><input type="radio" name="secret-create-kind" checked={createKind === "secret"} onChange={() => setCreateKind("secret")} />Secret value</label>
-              <label><input type="radio" name="secret-create-kind" checked={createKind === "file"} onChange={() => setCreateKind("file")} />Existing file</label>
+              <label>
+                <input
+                  type="radio"
+                  name="secret-create-kind"
+                  checked={createKind === "secret"}
+                  onChange={() => setCreateKind("secret")}
+                />Secret value
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="secret-create-kind"
+                  checked={createKind === "file"}
+                  onChange={() => setCreateKind("file")}
+                />Existing file
+              </label>
             </fieldset>
-            {createKind === "secret" ? <label>
-              Name<input
-                autoFocus
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Secret name"
-              />
-            </label> : <label>
-              File<select autoFocus required value={selectedFile} onChange={(event) => setSelectedFile(event.target.value)}>
-                <option value="">Select a workspace/project file…</option>
-                {fileChoices.map((path) => <option key={path} value={path}>{path}</option>)}
-              </select>
-              <small>The source is replaced with a self-contained .encrypted file.</small>
-            </label>}
-            {createKind === "secret" && <label>
-              Directory{" "}
-              <small>Optional, relative to the configured secret folder.</small>
-              <input
-                value={directory}
-                onChange={(event) => setDirectory(event.target.value)}
-                placeholder="Accounts/Work"
-              />
-            </label>}
+            {createKind === "secret"
+              ? (
+                <label>
+                  Name<input
+                    autoFocus
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Secret name"
+                  />
+                </label>
+              )
+              : (
+                <label>
+                  File<select
+                    autoFocus
+                    required
+                    value={selectedFile}
+                    onChange={(event) => setSelectedFile(event.target.value)}
+                  >
+                    <option value="">Select a Workspace file…</option>
+                    {fileChoices.map((path) => (
+                      <option key={path} value={path}>{path}</option>
+                    ))}
+                  </select>
+                  <small>
+                    The source is replaced with a self-contained .encrypted
+                    file.
+                  </small>
+                </label>
+              )}
+            {createKind === "secret" && (
+              <label>
+                Directory{" "}
+                <small>
+                  Optional, relative to the configured secret folder.
+                </small>
+                <input
+                  value={directory}
+                  onChange={(event) => setDirectory(event.target.value)}
+                  placeholder="Accounts/Work"
+                />
+              </label>
+            )}
             <label>
               Description{" "}
               <small>Visible metadata must not contain a secret.</small>
@@ -2432,15 +2506,17 @@ export function SecretManagerDashboardWidget(
               />
             </label>
             {metadataEditor}
-            {createKind === "secret" && <label>
-              Value<textarea
-                required
-                rows={7}
-                value={secretValue}
-                onChange={(event) => setSecretValue(event.target.value)}
-                spellCheck={false}
-              />
-            </label>}
+            {createKind === "secret" && (
+              <label>
+                Value<textarea
+                  required
+                  rows={7}
+                  value={secretValue}
+                  onChange={(event) => setSecretValue(event.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+            )}
             <label>
               Manager password<input
                 required
@@ -2460,9 +2536,15 @@ export function SecretManagerDashboardWidget(
               <button
                 type="submit"
                 className="primary"
-                disabled={busy || !password || (createKind === "secret" ? !name.trim() || !secretValue : !selectedFile)}
+                disabled={busy || !password || (createKind === "secret"
+                  ? !name.trim() || !secretValue
+                  : !selectedFile)}
               >
-                {busy ? "Encrypting…" : createKind === "file" ? "Encrypt file" : "Create"}
+                {busy
+                  ? "Encrypting…"
+                  : createKind === "file"
+                  ? "Encrypt file"
+                  : "Create"}
               </button>
             </footer>
           </form>
@@ -2583,7 +2665,13 @@ export function SecretManagerDashboardWidget(
             )}
         </WidgetDialog>
       )}
-      {fileViewing && <EncryptedFileModal path={fileViewing} onClose={() => setFileViewing("")} onChanged={() => void load()} />}
+      {fileViewing && (
+        <EncryptedFileModal
+          path={fileViewing}
+          onClose={() => setFileViewing("")}
+          onChanged={() => void load()}
+        />
+      )}
     </div>
   );
 }

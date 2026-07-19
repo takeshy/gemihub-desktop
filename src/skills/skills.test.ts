@@ -62,8 +62,8 @@ Deno.test("active workspace skills load nested reference materials", async () =>
   const runtime = globalThis as unknown as { window?: { go?: { main: { App: Record<string, unknown> } } } };
   const previousWindow = runtime.window;
   runtime.window = { go: { main: { App: {
-    ListProjectFiles: () => Promise.resolve([{ path: "skills/code-review/references/checklist.md", size: 10, createdTime: 0, modTime: 0, md5: "", binary: false }]),
-    ReadProjectFile: (path: string) => Promise.resolve({ path, fileName: "checklist.md", content: "Run tests before approval." }),
+    ListWorkspaceFiles: () => Promise.resolve([{ path: "skills/code-review/references/checklist.md", size: 10, createdTime: 0, modTime: 0, md5: "", binary: false }]),
+    ReadWorkspaceFile: (path: string) => Promise.resolve({ path, fileName: "checklist.md", content: "Run tests before approval." }),
   } } } };
   try {
     const skill = parseWorkspaceSkill("skills/code-review/SKILL.md", markdown)!;

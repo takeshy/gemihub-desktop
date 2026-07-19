@@ -22,7 +22,8 @@ export interface DecryptedWorkspaceFile {
 const sessionPasswords = new Map<string, string>();
 
 function fileName(path: string): string {
-  return path.replace(/^workspace:\/\//, "").split(/[\\/]/).pop() || path;
+  return path.replace(/^(?:workspace|files):\/\//, "").split(/[\\/]/).pop() ||
+    path;
 }
 
 function withoutEncryptedExtension(path: string): string {
@@ -36,34 +37,50 @@ function mimeFromContent(name: string, content: string): string {
   if (dataMime) return dataMime;
   const extension = name.split(".").pop()?.toLowerCase() || "";
   return ({
-    md: "text/markdown", markdown: "text/markdown", txt: "text/plain",
-    json: "application/json", yaml: "application/yaml", yml: "application/yaml",
-    html: "text/html", htm: "text/html", css: "text/css",
-    js: "text/javascript", ts: "text/typescript", csv: "text/csv",
-    pdf: "application/pdf", epub: "application/epub+zip",
-    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
-    webp: "image/webp", svg: "image/svg+xml",
+    md: "text/markdown",
+    markdown: "text/markdown",
+    txt: "text/plain",
+    json: "application/json",
+    yaml: "application/yaml",
+    yml: "application/yaml",
+    html: "text/html",
+    htm: "text/html",
+    css: "text/css",
+    js: "text/javascript",
+    ts: "text/typescript",
+    csv: "text/csv",
+    pdf: "application/pdf",
+    epub: "application/epub+zip",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
   } as Record<string, string>)[extension] || "application/octet-stream";
 }
 
 export function rememberFilePassword(path: string, password: string): void {
-  const key = path.replace(/^workspace:\/\//i, "");
+  const key = path.replace(/^files:\/\//i, "");
   if (password) sessionPasswords.set(key, password);
   else sessionPasswords.delete(key);
 }
 
 export function rememberedFilePassword(path: string): string {
-  return sessionPasswords.get(path.replace(/^workspace:\/\//i, "")) || "";
+  return sessionPasswords.get(path.replace(/^files:\/\//i, "")) || "";
 }
 
 export function encryptedPathFor(path: string): string {
-  return path.toLowerCase().endsWith(ENCRYPTED_EXTENSION) ? path : `${path}${ENCRYPTED_EXTENSION}`;
+  return path.toLowerCase().endsWith(ENCRYPTED_EXTENSION)
+    ? path
+    : `${path}${ENCRYPTED_EXTENSION}`;
 }
 
 export async function encryptWorkspaceFile(
   path: string,
   password: string,
   extraMetadata: Record<string, string> = {},
+  description = "",
 ): Promise<string> {
   const source = await readFile(path);
   if (!source) throw new Error(`File not found: ${path}`);
@@ -77,6 +94,7 @@ export async function encryptWorkspaceFile(
     protectedKey.encryptedPrivateKey,
     protectedKey.salt,
     {
+      description,
       publicMetadata: {
         ...extraMetadata,
         originalName,
@@ -92,10 +110,14 @@ export async function encryptWorkspaceFile(
   return destination;
 }
 
-export async function openEncryptedWorkspaceFile(path: string, password: string): Promise<DecryptedWorkspaceFile> {
+export async function openEncryptedWorkspaceFile(
+  path: string,
+  password: string,
+): Promise<DecryptedWorkspaceFile> {
   const source = await readFile(path);
   if (!source) throw new Error(`File not found: ${path}`);
-  const metadata = getEncryptedFileMetadata(source.content).publicMetadata || {};
+  const metadata = getEncryptedFileMetadata(source.content).publicMetadata ||
+    {};
   const fallbackPath = withoutEncryptedExtension(path);
   const originalName = metadata.originalName || fileName(fallbackPath);
   const content = await decryptFileContent(source.content, password);
@@ -110,14 +132,25 @@ export async function openEncryptedWorkspaceFile(path: string, password: string)
   };
 }
 
-export async function saveEncryptedWorkspaceFile(file: DecryptedWorkspaceFile, content: string, password: string): Promise<DecryptedWorkspaceFile> {
-  const encryptedContent = await reencryptFileContent(file.encryptedContent, content, password);
+export async function saveEncryptedWorkspaceFile(
+  file: DecryptedWorkspaceFile,
+  content: string,
+  password: string,
+): Promise<DecryptedWorkspaceFile> {
+  const encryptedContent = await reencryptFileContent(
+    file.encryptedContent,
+    content,
+    password,
+  );
   await writeFile(file.encryptedPath, encryptedContent);
   rememberFilePassword(file.encryptedPath, password);
   return { ...file, content, encryptedContent };
 }
 
-export async function decryptWorkspaceFile(path: string, password: string): Promise<string> {
+export async function decryptWorkspaceFile(
+  path: string,
+  password: string,
+): Promise<string> {
   const file = await openEncryptedWorkspaceFile(path, password);
   await writeFile(file.originalPath, file.content);
   await deleteFile(path);

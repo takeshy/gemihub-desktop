@@ -92,7 +92,7 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	workingDirectory := a.GetActiveProjectPath()
+	workingDirectory := a.GetWorkspacePath()
 	if workingDirectory == "" {
 		return nil, fmt.Errorf("active Workspace is not configured")
 	}
@@ -124,6 +124,7 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 	if stdoutPipe != nil {
 		err = cmd.Start()
 		if err == nil {
+			waited := false
 			scanner := bufio.NewScanner(stdoutPipe)
 			scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 			for scanner.Scan() {
@@ -152,8 +153,15 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 			}
 			if scanErr := scanner.Err(); scanErr != nil {
 				err = scanErr
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
 			} else {
 				err = cmd.Wait()
+				waited = true
+			}
+			if !waited {
+				_ = cmd.Wait()
 			}
 		}
 	} else {

@@ -30,7 +30,7 @@ DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspace
 
 ## ワークスペースとドキュメント
 
-* [WorkspaceとFilesタブ](/features/workspace-projects.md) - Workspace資産と関連付けで開いたファイルの扱い。
+* [WorkspaceとFilesタブ](/features/workspace-files.md) - Workspace資産と関連付けで開いたファイルの扱い。
 * [ファイル管理](/features/file-management.md) - ファイルを開く方法、FileTree、外部エディタ、保存とエクスポート。
 * [ドキュメントビューア](/features/document-viewers.md) - PDF、EPUB、HTML、テキスト、画像の表示。
 * [Markdown編集](/features/markdown-editing.md) - Preview、WYSIWYG、Rawの編集モードと拡張記法。

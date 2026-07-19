@@ -6,9 +6,7 @@ function modelURL(profile: ModelProviderProfile): string {
     .replace(/\/chat\/completions$/i, "")
     .replace(/\/messages$/i, "");
   if (profile.provider === "gemini") {
-    return `${base}/models${
-      profile.apiKey ? `?key=${encodeURIComponent(profile.apiKey)}` : ""
-    }`;
+    return `${base}/models`;
   }
   return base.endsWith("/v1") ? `${base}/models` : `${base}/v1/models`;
 }
@@ -17,8 +15,12 @@ export async function fetchProviderModels(
   profile: ModelProviderProfile,
 ): Promise<string[]> {
   const headers: Record<string, string> = {};
-  if (profile.apiKey && profile.provider !== "gemini") {
-    headers.Authorization = `Bearer ${profile.apiKey}`;
+  if (profile.apiKey) {
+    if (profile.provider === "gemini") {
+      headers["x-goog-api-key"] = profile.apiKey;
+    } else {
+      headers.Authorization = `Bearer ${profile.apiKey}`;
+    }
   }
   if (profile.provider === "anthropic" && profile.apiKey) {
     delete headers.Authorization;

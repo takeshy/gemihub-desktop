@@ -69,14 +69,22 @@ type mcpOAuthTokenResponse struct {
 	Description  string `json:"error_description"`
 }
 
-var mcpOAuthHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var mcpOAuthHTTPClient = &http.Client{Timeout: 30 * time.Second, Transport: oauthNetworkTransport(), CheckRedirect: func(next *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return fmt.Errorf("too many OAuth redirects")
+	}
+	if _, err := validateMCPOAuthURL(next.URL.String()); err != nil {
+		return err
+	}
+	return nil
+}}
 
 func (a *App) ConnectMCPOAuth(request MCPOAuthConnectRequest) (*MCPOAuthStatus, error) {
 	serverID := strings.TrimSpace(request.ServerID)
 	if serverID == "" {
 		return nil, fmt.Errorf("MCP server ID is required")
 	}
-	serverURL, err := validateExternalURL(request.ServerURL, true)
+	serverURL, err := validateMCPOAuthURL(request.ServerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -318,12 +326,12 @@ func discoverMCPOAuth(serverURL string) (*mcpOAuthDiscovery, error) {
 		return nil, fmt.Errorf("MCP OAuth metadata is missing authorization or token endpoint")
 	}
 	for _, endpoint := range []string{authorization.AuthorizationEndpoint, authorization.TokenEndpoint} {
-		if _, err := validateExternalURL(endpoint, true); err != nil {
+		if _, err := validateMCPOAuthURL(endpoint); err != nil {
 			return nil, fmt.Errorf("invalid OAuth endpoint: %w", err)
 		}
 	}
 	if authorization.RegistrationEndpoint != "" {
-		if _, err := validateExternalURL(authorization.RegistrationEndpoint, true); err != nil {
+		if _, err := validateMCPOAuthURL(authorization.RegistrationEndpoint); err != nil {
 			return nil, fmt.Errorf("invalid OAuth registration endpoint: %w", err)
 		}
 	}
@@ -441,11 +449,25 @@ func applyMCPOAuthToken(credential *mcpOAuthCredential, token *mcpOAuthTokenResp
 }
 
 func newMCPOAuthRequest(method, rawURL string, body io.Reader) (*http.Request, error) {
-	parsed, err := validateExternalURL(rawURL, true)
+	parsed, err := validateMCPOAuthURL(rawURL)
 	if err != nil {
 		return nil, err
 	}
 	return http.NewRequest(method, parsed.String(), body)
+}
+
+func validateMCPOAuthURL(rawURL string) (*url.URL, error) {
+	parsed, err := validateExternalURL(rawURL, true)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme == "http" {
+		host := net.ParseIP(parsed.Hostname())
+		if host == nil || !host.IsLoopback() {
+			return nil, fmt.Errorf("OAuth plain HTTP is allowed only on loopback")
+		}
+	}
+	return parsed, nil
 }
 
 func fetchMCPOAuthJSON(rawURL string, target any) error {

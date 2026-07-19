@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { docKindFor } from "./documentKind.ts";
+import { docKindFor, isFileWidgetFileName } from "./documentKind.ts";
 import { memoChatDraft } from "./memoChat.ts";
 
 Deno.test("File widgets route .base files to the Base editor", () => {
@@ -26,6 +26,23 @@ Deno.test("File widgets route office and archive files to external-app view", ()
   assertEquals(docKindFor("report.xlsx"), "external");
   assertEquals(docKindFor("proposal.docx"), "external");
   assertEquals(docKindFor("assets.zip"), "external");
+});
+
+Deno.test("File widget picker includes all supported media, office, data, and workflow formats", () => {
+  for (
+    const path of [
+      "clip.mp4",
+      "audio.flac",
+      "report.xlsx",
+      "slides.pptx",
+      "data.json",
+      "workflow.yaml",
+      "page.htm",
+    ]
+  ) {
+    assertEquals(isFileWidgetFileName(path), true, path);
+  }
+  assertEquals(isFileWidgetFileName("program.exe"), false);
 });
 
 Deno.test("memo AI chat draft passes paths without file contents", () => {

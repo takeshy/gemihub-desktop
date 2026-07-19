@@ -12,9 +12,11 @@ type SlateEditor = ReturnType<typeof useEditor> & {
 export function WysiwygEditor({
   value,
   onChange,
+  onImageChange,
 }: {
   value: string;
   onChange: (value: string) => void;
+  onImageChange?: (file: File) => Promise<string>;
 }) {
   const editor = useEditor();
   const patchedRef = useRef(false);
@@ -26,7 +28,10 @@ export function WysiwygEditor({
     slateEditor.normalizeNode = (entry: SlateEntry) => {
       const [, path] = entry;
       if (path.length === 0 && slateEditor.children.length === 0) {
-        slateEditor.children = [{ type: "paragraph", children: [{ text: "" }] }];
+        slateEditor.children = [{
+          type: "paragraph",
+          children: [{ text: "" }],
+        }];
       }
       originalNormalizeNode(entry);
     };
@@ -38,6 +43,7 @@ export function WysiwygEditor({
         editor={editor}
         value={value || "\n"}
         onChange={onChange}
+        onImageChange={onImageChange}
         placeholder="Write Markdown..."
       />
     </div>

@@ -36,7 +36,9 @@ function dirname(path: string): string {
 }
 
 function joinPath(basePath: string, relativePath: string): string {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(relativePath) || relativePath.startsWith("#")) return relativePath;
+  if (
+    /^[a-z][a-z0-9+.-]*:/i.test(relativePath) || relativePath.startsWith("#")
+  ) return relativePath;
   return normalizePath(`${dirname(basePath)}${relativePath}`);
 }
 
@@ -69,17 +71,30 @@ function escapeHtml(value: string): string {
 }
 
 function firstTextByLocalName(doc: Document, localName: string): string {
-  return [...doc.getElementsByTagName("*")].find((element) => element.localName === localName)?.textContent?.trim() || "";
+  return [...doc.getElementsByTagName("*")].find((element) =>
+    element.localName === localName
+  )?.textContent?.trim() || "";
 }
 
-function firstElementByLocalName(doc: Document, localName: string): Element | undefined {
-  return [...doc.getElementsByTagName("*")].find((element) => element.localName === localName);
+function firstElementByLocalName(
+  doc: Document,
+  localName: string,
+): Element | undefined {
+  return [...doc.getElementsByTagName("*")].find((element) =>
+    element.localName === localName
+  );
 }
 
-function dataUrlFor(path: string, mediaType: string, entries: ZipEntries): string | null {
+function dataUrlFor(
+  path: string,
+  mediaType: string,
+  entries: ZipEntries,
+): string | null {
   const bytes = entries[path];
   if (!bytes) return null;
-  return `data:${mediaType || "application/octet-stream"};base64,${bytesToBase64(bytes)}`;
+  return `data:${mediaType || "application/octet-stream"};base64,${
+    bytesToBase64(bytes)
+  }`;
 }
 
 function stripQuery(path: string): string {
@@ -99,13 +114,19 @@ function epubDomId(spineIndex: number, sourceId: string): string {
   return `epub-c${spineIndex + 1}-${sourceId}`;
 }
 
-export function resolveEpubHref(href: string, chapter: SpineLinkTarget, spineByPath: Map<string, SpineLinkTarget>): string | null {
+export function resolveEpubHref(
+  href: string,
+  chapter: SpineLinkTarget,
+  spineByPath: Map<string, SpineLinkTarget>,
+): string | null {
   if (!href || /^[a-z][a-z0-9+.-]*:/i.test(href)) return href || null;
 
   const hashIndex = href.indexOf("#");
   const pathPart = hashIndex === -1 ? href : href.slice(0, hashIndex);
   const fragment = hashIndex === -1 ? "" : href.slice(hashIndex + 1);
-  const targetPath = pathPart ? stripQuery(joinPath(chapter.path, pathPart)) : chapter.path;
+  const targetPath = pathPart
+    ? stripQuery(joinPath(chapter.path, pathPart))
+    : chapter.path;
   const target = spineByPath.get(targetPath);
 
   if (!target) return null;
@@ -113,7 +134,10 @@ export function resolveEpubHref(href: string, chapter: SpineLinkTarget, spineByP
   return `#epub-chapter-${target.index + 1}`;
 }
 
-function readManifest(opf: Document, opfPath: string): Map<string, ManifestItem> {
+function readManifest(
+  opf: Document,
+  opfPath: string,
+): Map<string, ManifestItem> {
   const items = new Map<string, ManifestItem>();
   opf.querySelectorAll("manifest > item").forEach((item) => {
     const id = attr(item, "id");
@@ -175,27 +199,46 @@ export async function epubToHtml(file: File): Promise<string> {
   if (!containerBytes) throw new Error("EPUB container.xml was not found.");
 
   const container = parseXml(decodeText(containerBytes), "EPUB container");
-  const opfPath = firstElementByLocalName(container, "rootfile")?.getAttribute("full-path");
-  if (!opfPath || !entries[opfPath]) throw new Error("EPUB package file was not found.");
+  const opfPath = firstElementByLocalName(container, "rootfile")?.getAttribute(
+    "full-path",
+  );
+  if (!opfPath || !entries[opfPath]) {
+    throw new Error("EPUB package file was not found.");
+  }
 
   const opf = parseXml(decodeText(entries[opfPath]), "EPUB package");
   const title = firstTextByLocalName(opf, "title") || file.name;
   const manifest = readManifest(opf, opfPath);
-  const manifestByPath = new Map([...manifest.values()].map((item) => [item.path, item]));
+  const manifestByPath = new Map(
+    [...manifest.values()].map((item) => [item.path, item]),
+  );
   const spine = [...opf.querySelectorAll("spine > itemref")]
     .map((item) => manifest.get(attr(item, "idref")))
     .filter((item): item is ManifestItem => !!item && !!entries[item.path]);
 
   if (!spine.length) throw new Error("EPUB spine is empty.");
 
-  const spineByPath = new Map(spine.map((item, index) => [item.path, { index, path: item.path }]));
+  const spineByPath = new Map(
+    spine.map((item, index) => [item.path, { index, path: item.path }]),
+  );
   const chapters = spine.map((item, index) => {
-    const doc = new DOMParser().parseFromString(decodeText(entries[item.path]), "text/html");
+    const doc = new DOMParser().parseFromString(
+      decodeText(entries[item.path]),
+      "text/html",
+    );
     rewriteIds(doc, index);
-    rewriteUrls(doc, { index, path: item.path }, manifestByPath, spineByPath, entries);
+    rewriteUrls(
+      doc,
+      { index, path: item.path },
+      manifestByPath,
+      spineByPath,
+      entries,
+    );
     const body = doc.body?.innerHTML || "";
     const heading = chapterTitle(doc);
-    return `<section class="epub-chapter" id="epub-chapter-${index + 1}">${heading ? `<h1>${escapeHtml(heading)}</h1>` : ""}${body}</section>`;
+    return `<section class="epub-chapter" id="epub-chapter-${index + 1}">${
+      heading ? `<h1>${escapeHtml(heading)}</h1>` : ""
+    }${body}</section>`;
   });
 
   return `<!doctype html>

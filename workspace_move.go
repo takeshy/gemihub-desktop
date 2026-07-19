@@ -120,11 +120,11 @@ func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName 
 			return nil, err
 		}
 	}
-	projectBase := a.GetActiveProjectPath()
-	if projectBase == "" {
+	workspaceBase := a.GetWorkspacePath()
+	if workspaceBase == "" {
 		return nil, fmt.Errorf("active Workspace is not configured")
 	}
-	targetParent, err := a.projectPath(destinationDirectory, true)
+	targetParent, err := a.workspacePath(destinationDirectory, true)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName 
 		return nil, fmt.Errorf("Workspace destination is not a directory")
 	}
 	destination := filepath.Join(targetParent, name)
-	if err := requirePathInside(projectBase, destination); err != nil {
+	if err := requirePathInside(workspaceBase, destination); err != nil {
 		return nil, err
 	}
 	entries, err := os.ReadDir(targetParent)
@@ -146,7 +146,7 @@ func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName 
 		}
 	}
 	if info.IsDir() {
-		if err := requireIndependentDirectories(source, projectBase); err != nil {
+		if err := requireIndependentDirectories(source, workspaceBase); err != nil {
 			return nil, err
 		}
 		if err := moveDirectory(source, destination); err != nil {
@@ -166,7 +166,7 @@ func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName 
 		}
 		linked = true
 	}
-	relative, _ := filepath.Rel(projectBase, destination)
+	relative, _ := filepath.Rel(workspaceBase, destination)
 	return &WorkspaceDirectoryMoveResult{WorkspacePath: filepath.ToSlash(relative), OriginalPath: source, LinkCreated: linked}, nil
 }
 
@@ -192,15 +192,15 @@ func (a *App) MoveDirectoryIntoWorkspace(path, destinationName string, leaveLink
 	if err := ensureTreeHasNoSymlinks(source); err != nil {
 		return nil, err
 	}
-	projectBase := a.GetActiveProjectPath()
-	if projectBase == "" {
+	workspaceBase := a.GetWorkspacePath()
+	if workspaceBase == "" {
 		return nil, fmt.Errorf("active Workspace is not configured")
 	}
-	destination := filepath.Join(projectBase, name)
-	if err := requirePathInside(projectBase, destination); err != nil {
+	destination := filepath.Join(workspaceBase, name)
+	if err := requirePathInside(workspaceBase, destination); err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(projectBase)
+	entries, err := os.ReadDir(workspaceBase)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (a *App) MoveDirectoryIntoWorkspace(path, destinationName string, leaveLink
 		}
 		return nil, err
 	}
-	if err := requireIndependentDirectories(source, projectBase); err != nil {
+	if err := requireIndependentDirectories(source, workspaceBase); err != nil {
 		return nil, err
 	}
 	if err := moveDirectory(source, destination); err != nil {
@@ -235,8 +235,8 @@ func (a *App) MoveDirectoryIntoWorkspace(path, destinationName string, leaveLink
 	return &WorkspaceDirectoryMoveResult{WorkspacePath: filepath.ToSlash(name), OriginalPath: source, LinkCreated: linked}, nil
 }
 
-func requireIndependentDirectories(source, project string) error {
-	for _, pair := range [][2]string{{source, project}, {project, source}} {
+func requireIndependentDirectories(source, workspace string) error {
+	for _, pair := range [][2]string{{source, workspace}, {workspace, source}} {
 		relative, err := filepath.Rel(pair[0], pair[1])
 		if err == nil && (relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)))) {
 			return fmt.Errorf("source directory and Workspace cannot contain each other")

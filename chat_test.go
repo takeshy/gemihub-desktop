@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type chatRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -48,6 +49,68 @@ func TestLooksLikeStalledToolNarration(t *testing.T) {
 	}
 }
 
+func TestApplyPendingAppendCreatesMissingFile(t *testing.T) {
+	base := t.TempDir()
+	app := NewApp()
+	app.directoryBase = base
+	if err := app.ApplyPendingFileAction(PendingFileAction{Kind: "write", Mode: "append", Path: "new.md", Content: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(base, "new.md"))
+	if err != nil || string(content) != "hello" {
+		t.Fatalf("unexpected content: %q, %v", content, err)
+	}
+}
+
+func TestGeminiAPIKeyUsesHeader(t *testing.T) {
+	previousClient := chatHTTPClient
+	defer func() { chatHTTPClient = previousClient }()
+	chatHTTPClient = &http.Client{Transport: chatRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if strings.Contains(request.URL.RawQuery, "key=") {
+			t.Errorf("API key leaked into URL: %s", request.URL.String())
+		}
+		if request.Header.Get("x-goog-api-key") != "secret" {
+			t.Errorf("missing API key header")
+		}
+		body := "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]}\n"
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	app := NewApp()
+	result, err := app.chatGemini(ChatRequest{Endpoint: "https://gemini.test/v1beta", APIKey: "secret", Model: "gemini-test", Messages: []ChatMessage{{Role: "user", Content: "hi"}}})
+	if err != nil || result.Content != "ok" {
+		t.Fatalf("unexpected result: %#v, %v", result, err)
+	}
+}
+
+func TestCancelChatCancelsProviderRequest(t *testing.T) {
+	previousClient := chatHTTPClient
+	defer func() { chatHTTPClient = previousClient }()
+	started := make(chan struct{})
+	chatHTTPClient = &http.Client{Transport: chatRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		close(started)
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})}
+	app := NewApp()
+	done := make(chan error, 1)
+	go func() {
+		_, err := app.Chat(ChatRequest{Provider: "openai", Endpoint: "https://openai.test", Model: "test", StreamID: "stream-1", Messages: []ChatMessage{{Role: "user", Content: "hi"}}})
+		done <- err
+	}()
+	<-started
+	if !app.CancelChat("stream-1") {
+		t.Fatal("active chat was not cancelled")
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancelled chat unexpectedly succeeded")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled chat did not return")
+	}
+}
+
 func TestAgentSkillFileToolAliases(t *testing.T) {
 	base := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(base, "skills", "review"), 0o755); err != nil {
@@ -56,13 +119,13 @@ func TestAgentSkillFileToolAliases(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "skills", "review", "SKILL.md"), []byte("instructions"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{directoryBase: t.TempDir(), projectState: ProjectState{ActiveProjectID: "project", Projects: []Project{{ID: "project", Path: base}}}}
+	app := &App{directoryBase: t.TempDir(), workspaceState: WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: base}}}}
 	value, pending, err := app.executeFileTool("read_note", `{"path":"skills/review/SKILL.md"}`)
 	if err != nil || pending != nil || value.(*LocalFileResult).Content != "instructions" {
 		t.Fatalf("read_note failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}
 	_, pending, err = app.executeFileTool("create_note", `{"name":"index.md","folder":"Knowledge/demo","content":"# Demo"}`)
-	if err != nil || pending == nil || pending.Path != "project://Knowledge/demo/index.md" || pending.Content != "# Demo" {
+	if err != nil || pending == nil || pending.Path != "workspace://Knowledge/demo/index.md" || pending.Content != "# Demo" {
 		t.Fatalf("create_note failed: pending=%#v error=%v", pending, err)
 	}
 	if _, _, err = app.executeFileTool("create_note", `{"name":"escape.md","folder":"../outside","content":"no"}`); err == nil {
@@ -79,13 +142,13 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(external, "outside.md"), []byte("external needle"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{directoryBase: external, projectState: ProjectState{ActiveProjectID: "project", Projects: []Project{{ID: "project", Path: workspace}}}}
+	app := &App{directoryBase: external, workspaceState: WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: workspace}}}}
 
 	value, _, err := app.executeFileTool("read_file", `{"path":"inside.md"}`)
 	if err != nil || value.(*LocalFileResult).Content != "workspace needle" {
 		t.Fatalf("Workspace read failed: %#v, %v", value, err)
 	}
-	if _, _, err := app.executeFileTool("read_file", `{"path":"workspace://outside.md"}`); err == nil {
+	if _, _, err := app.executeFileTool("read_file", `{"path":"files://outside.md"}`); err == nil {
 		t.Fatal("AI read_file accessed external Files")
 	}
 	for _, path := range []string{"/etc/passwd", `C:\\Users\\outside.md`, `\\\\server\\share\\outside.md`} {
@@ -110,7 +173,7 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 		t.Fatalf("AI list escaped Workspace: %#v", items)
 	}
 	_, pending, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md","content":"draft"}`)
-	if err != nil || pending == nil || pending.Path != "project://draft.md" {
+	if err != nil || pending == nil || pending.Path != "workspace://draft.md" {
 		t.Fatalf("AI edit was not Workspace-scoped: %#v, %v", pending, err)
 	}
 }
@@ -266,7 +329,7 @@ func TestAnthropicThinkingBlocksArePreservedAcrossToolCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := NewApp()
-	app.projectConfigDir = t.TempDir()
+	app.workspaceConfigDir = t.TempDir()
 	app.startup(context.Background())
 	if _, err := app.SetDirectoryBase(directory); err != nil {
 		t.Fatal(err)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, FileSearch, X } from "lucide-react";
-import { listProjectFiles } from "../lib/wailsBackend";
+import { listWorkspaceFiles } from "../lib/wailsBackend";
 import type { WorkflowDialogResult, WorkflowPromptEventDetail, WorkflowPromptResult, WorkflowSelectionResult } from "./promptService";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { computeWorkflowLineDiff, workflowDiffFeedback } from "./diff";
@@ -31,7 +31,7 @@ export function WorkflowPromptHost() {
     if (request.kind === "value") setValue(request.defaultValue ?? "");
     else if (request.kind === "file") {
       setValue(request.defaultPath ?? "");
-      void listProjectFiles().then((items) => setPaths(items.filter((item) => (request.allowBinary || !item.binary) && (!request.extensions?.length || request.extensions.includes(item.path.split(".").pop()?.toLowerCase() || ""))).map((item) => item.path)));
+      void listWorkspaceFiles().then((items) => setPaths(items.filter((item) => (request.allowBinary || !item.binary) && (!request.extensions?.length || request.extensions.includes(item.path.split(".").pop()?.toLowerCase() || ""))).map((item) => item.path)));
     } else if (request.kind === "dialog") {
       setValue(request.defaults?.input ?? "");
       setSelected(request.defaults?.selected ?? []);

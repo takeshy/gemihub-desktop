@@ -8,25 +8,25 @@ import (
 	"sync"
 )
 
-var projectStateFileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-var projectStateFileMu sync.Mutex
+var workspaceStateFileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+var workspaceStateFileMu sync.Mutex
 
-func (a *App) projectStateFilePath(name string) (string, error) {
-	if !projectStateFileName.MatchString(name) {
-		return "", fmt.Errorf("invalid project state file name")
+func (a *App) workspaceStateFilePath(name string) (string, error) {
+	if !workspaceStateFileName.MatchString(name) {
+		return "", fmt.Errorf("invalid Workspace state file name")
 	}
-	base := a.GetActiveProjectPath()
+	base := a.GetWorkspacePath()
 	if base == "" {
-		return "", fmt.Errorf("project is required for %s", name)
+		return "", fmt.Errorf("Workspace is required for %s", name)
 	}
 	return filepath.Join(base, ".llm-hub", "state", name+".data"), nil
 }
 
-// ReadProjectStateFile reads hidden application state owned by the active
-// Project.
+// ReadWorkspaceStateFile reads hidden application state owned by the active
+// Workspace.
 // An absent state file is represented by an empty string.
-func (a *App) ReadProjectStateFile(name string) (string, error) {
-	path, err := a.projectStateFilePath(name)
+func (a *App) ReadWorkspaceStateFile(name string) (string, error) {
+	path, err := a.workspaceStateFilePath(name)
 	if err != nil {
 		return "", err
 	}
@@ -40,15 +40,15 @@ func (a *App) ReadProjectStateFile(name string) (string, error) {
 	return string(content), nil
 }
 
-// WriteProjectStateFile atomically stores hidden application state instead of
+// WriteWorkspaceStateFile atomically stores hidden application state instead of
 // browser localStorage.
-func (a *App) WriteProjectStateFile(name, content string) error {
-	path, err := a.projectStateFilePath(name)
+func (a *App) WriteWorkspaceStateFile(name, content string) error {
+	path, err := a.workspaceStateFilePath(name)
 	if err != nil {
 		return err
 	}
-	projectStateFileMu.Lock()
-	defer projectStateFileMu.Unlock()
+	workspaceStateFileMu.Lock()
+	defer workspaceStateFileMu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}

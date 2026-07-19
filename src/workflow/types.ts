@@ -1,9 +1,34 @@
 import type { ChatUsage, McpAppInfo } from "../lib/wailsBackend";
 
 export const workflowNodeTypes = [
-  "variable", "set", "if", "while", "command", "http", "json", "note", "note-read",
-  "note-search", "note-list", "folder-list", "note-delete", "drive-delete", "open", "dialog", "prompt-value", "prompt-file", "prompt-selection",
-  "workflow", "rag-sync", "file-explorer", "file-save", "mcp", "sleep", "script", "shell",
+  "variable",
+  "set",
+  "if",
+  "while",
+  "command",
+  "http",
+  "json",
+  "note",
+  "note-read",
+  "note-search",
+  "note-list",
+  "folder-list",
+  "note-delete",
+  "drive-delete",
+  "open",
+  "dialog",
+  "prompt-value",
+  "prompt-file",
+  "prompt-selection",
+  "workflow",
+  "rag-sync",
+  "file-explorer",
+  "file-save",
+  "gemihub-command",
+  "mcp",
+  "sleep",
+  "script",
+  "shell",
 ] as const;
 
 export type WorkflowNodeType = typeof workflowNodeTypes[number];
@@ -57,12 +82,15 @@ export interface WorkflowRun {
 }
 
 export function isWorkflowNodeType(value: unknown): value is WorkflowNodeType {
-  return typeof value === "string" && (workflowNodeTypes as readonly string[]).includes(value);
+  return typeof value === "string" &&
+    (workflowNodeTypes as readonly string[]).includes(value);
 }
 
 export function normalizeWorkflowValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
   return JSON.stringify(value);
 }

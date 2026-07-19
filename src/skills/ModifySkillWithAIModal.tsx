@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw, Sparkles, X } from "lucide-react";
-import { chat, readProjectFile as readFile, writeProjectFile as writeFile } from "../lib/wailsBackend";
+import { chat, readWorkspaceFile as readFile, writeWorkspaceFile as writeFile } from "../lib/wailsBackend";
 import {
   chatModelChoices,
   type ChatProvider,

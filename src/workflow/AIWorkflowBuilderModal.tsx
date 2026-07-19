@@ -5,7 +5,7 @@ import {
   type ChatAttachment,
   type ChatUsage,
   onChatStream,
-  readProjectFile as readFile,
+  readWorkspaceFile as readFile,
 } from "../lib/wailsBackend";
 import {
   chatModelChoices,

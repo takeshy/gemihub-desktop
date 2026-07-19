@@ -41,3 +41,14 @@ Deno.test("plugin API exposes the Web registerWidget contract", () => {
   assertEquals(dashboardWidgetDefinition("summary")?.render, render);
   assertEquals(dashboardWidgetDefinition("example:summary"), null);
 });
+
+Deno.test("plugin file APIs expose explicit Workspace and Files roots", () => {
+  const api = createPluginAPI("example", "en", ["files"], {
+    onRegisterView: () => undefined,
+    onRegisterSettingsTab: () => undefined,
+    onRegisterSlashCommand: () => undefined,
+  });
+  assertEquals(typeof api.workspaceFiles?.read, "function");
+  assertEquals(typeof api.files?.read, "function");
+  assertEquals("projectFiles" in api, false);
+});

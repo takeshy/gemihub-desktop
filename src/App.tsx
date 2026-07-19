@@ -71,33 +71,39 @@ import {
   connectMCPOAuth,
   connectVertexOAuth,
   deleteRAGIndex,
+  type DirectoryFileEntry,
   disconnectMCPOAuth,
   disconnectVertexOAuth,
   type DiscordBotRequest,
   type DiscordStatus,
-  getDiscordStatus,
   getDirectoryBase,
+  getDiscordStatus,
   getRAGStatus,
   getVertexOAuthStatus,
-  listProjects,
+  getWorkspaceState,
+  listWorkspaceFiles,
   onRAGSyncProgress,
   openDeveloperTools,
+  readWorkspaceFile,
   renameRAGIndex,
-  type ProjectState,
-  selectExternalEditor,
   selectDirectoryBase,
-  selectProjectDirectory,
+  selectExternalEditor,
   selectVertexOAuthClient,
-  setProjectDirectory,
+  selectWorkspaceDirectory,
   setDirectoryBase,
+  setWorkspaceDirectory,
   startDiscordBot,
   startupFilePaths,
   stopDiscordBot,
   syncRAG,
   verifyDiscordToken,
+  type WorkspaceState,
   writeFile,
 } from "./lib/wailsBackend";
-import { parseRecentDirectories, updateRecentDirectories } from "./lib/recentDirectories";
+import {
+  parseRecentDirectories,
+  updateRecentDirectories,
+} from "./lib/recentDirectories";
 import { selectCLIPath, verifyCLI } from "./lib/wailsBackend";
 import {
   chatModelChoices,
@@ -126,7 +132,13 @@ import {
 import { AgentSkillsSettings } from "./skills/AgentSkillsSettings";
 import { APP_NAME } from "./appIdentity";
 import { isBinaryDocumentFileName } from "./dashboard/documentKind";
-import { configureOrUnlockHistoryEncryption, historyEncryptionConfigured, historyEncryptionPreferences, migrateWorkflowHistoryStorage, setHistoryEncryptionPreferences } from "./lib/historyEncryption";
+import {
+  configureOrUnlockHistoryEncryption,
+  historyEncryptionConfigured,
+  historyEncryptionPreferences,
+  migrateWorkflowHistoryStorage,
+  setHistoryEncryptionPreferences,
+} from "./lib/historyEncryption";
 import { THIRD_PARTY_NOTICES } from "./thirdPartyNotices";
 
 type Translate = (key: keyof TranslationStrings) => string;
@@ -174,7 +186,8 @@ const STORAGE_KEY = "gemihub-desktop:document";
 const NAME_KEY = "gemihub-desktop:fileName";
 const EXTERNAL_EDITOR_KEY = "gemihub-desktop:externalEditorPath";
 const MEMO_SYNC_TIMELINE_KEY = "gemihub-desktop:memoSyncTimeline";
-const MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY = "gemihub-desktop:memoSyncTimelineDefaultV1";
+const MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY =
+  "gemihub-desktop:memoSyncTimelineDefaultV1";
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
 const LANGUAGE_KEY = "gemihub-desktop:language";
 const LAST_OPENED_DIRECTORY_KEY = "llm-hub:lastOpenedDirectory";
@@ -224,10 +237,12 @@ function parentFilesystemPath(path: string): string {
 }
 
 function pathIsInside(path: string, base: string): boolean {
-  const normalize = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLocaleLowerCase();
+  const normalize = (value: string) =>
+    value.replace(/\\/g, "/").replace(/\/+$/, "").toLocaleLowerCase();
   const candidate = normalize(path);
   const root = normalize(base);
-  return !!candidate && !!root && (candidate === root || candidate.startsWith(`${root}/`));
+  return !!candidate && !!root &&
+    (candidate === root || candidate.startsWith(`${root}/`));
 }
 
 function CommaSeparatedInput({ value, onChange }: {
@@ -262,11 +277,20 @@ function LineSeparatedTextarea({ value, onChange }: {
   const [draft, setDraft] = useState(serialized);
   useEffect(() => setDraft(serialized), [serialized]);
   const commit = () => {
-    const next = draft.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const next = draft.split(/\r?\n/).map((item) => item.trim()).filter(
+      Boolean,
+    );
     onChange(next);
     setDraft(next.join("\n"));
   };
-  return <textarea rows={3} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} />;
+  return (
+    <textarea
+      rows={3}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+    />
+  );
 }
 
 function readDashboard(): DashboardData {
@@ -669,25 +693,28 @@ function SplitDiffView({ lines }: { lines: DiffLine[] }) {
 function HistoryDiffPanel({
   checkpoint,
   previous,
+  comparisonTarget,
   viewMode,
   onViewModeChange,
 }: {
   checkpoint?: HistoryCheckpoint;
   previous?: HistoryCheckpoint;
+  comparisonTarget?: DiffTarget | null;
   viewMode: DiffViewMode;
   onViewModeChange: (value: DiffViewMode) => void;
 }) {
   const { t: tr } = useI18n();
-  if (!checkpoint) {
+  if (!comparisonTarget && !checkpoint) {
     return (
       <div className="history-diff-empty">{tr("history.selectCheckpoint")}</div>
     );
   }
-  if (!previous) {
+  if (!comparisonTarget && !previous) {
     return <div className="history-diff-empty">{tr("history.noPrevious")}</div>;
   }
 
-  const target = checkpointDiffTargets(previous, checkpoint)[0];
+  const target = comparisonTarget ??
+    checkpointDiffTargets(previous!, checkpoint!)[0];
   if (!target) {
     return (
       <section className="history-diff-panel">
@@ -865,10 +892,16 @@ export default function App() {
     | "plugins"
   >("general");
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
-  const [historyEncryption, setHistoryEncryption] = useState(historyEncryptionPreferences);
-  const [historyEncryptionPassword, setHistoryEncryptionPassword] = useState("");
+  const [historyEncryption, setHistoryEncryption] = useState(
+    historyEncryptionPreferences,
+  );
+  const [historyEncryptionPassword, setHistoryEncryptionPassword] = useState(
+    "",
+  );
   const [historyEncryptionStatus, setHistoryEncryptionStatus] = useState("");
-  const [historyEncryptionReady, setHistoryEncryptionReady] = useState(historyEncryptionConfigured);
+  const [historyEncryptionReady, setHistoryEncryptionReady] = useState(
+    historyEncryptionConfigured,
+  );
   const [cliStatus, setCLIStatus] = useState("");
   const [mcpStatus, setMCPStatus] = useState<Record<string, string>>({});
   const [ragStatus, setRAGStatus] = useState("");
@@ -893,13 +926,21 @@ export default function App() {
   const [historyDiffViewMode, setHistoryDiffViewMode] = useState<DiffViewMode>(
     "split",
   );
+  const [comparisonFiles, setComparisonFiles] = useState<DirectoryFileEntry[]>(
+    [],
+  );
+  const [comparisonTarget, setComparisonTarget] = useState<DiffTarget | null>(
+    null,
+  );
   const [externalEditorPath, setExternalEditorPath] = useState(() =>
     readStored(EXTERNAL_EDITOR_KEY, "")
   );
   const [memoSyncTimeline, setMemoSyncTimeline] = useState(() => {
     const stored = readStored(MEMO_SYNC_TIMELINE_KEY, "");
     try {
-      if (localStorage.getItem(MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY) !== "1") {
+      if (
+        localStorage.getItem(MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY) !== "1"
+      ) {
         localStorage.setItem(MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY, "1");
         return stored.trim() || "Timeline";
       }
@@ -918,11 +959,15 @@ export default function App() {
   ]);
   const [memoListOpen, setMemoListOpen] = useState(false);
   const [openPathRequest, setOpenPathRequest] = useState<
-    { id: number; path: string; source?: "local" | "directory" | "filetree" | "startup" }
+    {
+      id: number;
+      path: string;
+      source?: "local" | "directory" | "filetree" | "startup";
+    }
   >({ id: 0, path: "" });
-  const [projectState, setProjectState] = useState<ProjectState>({
-    activeProjectId: "",
-    projects: [],
+  const [workspaceState, setWorkspaceState] = useState<WorkspaceState>({
+    activeWorkspaceId: "",
+    workspaces: [],
   });
   const [directoryBase, setDirectoryBaseState] = useState("");
   const [recentDirectories, setRecentDirectories] = useState(() =>
@@ -932,7 +977,7 @@ export default function App() {
   const appMenuRef = useRef<HTMLDivElement>(null);
   const [directoryContextLoaded, setDirectoryContextLoaded] = useState(false);
   const [startupPaths, setStartupPaths] = useState<string[] | null>(null);
-  const [projectsContextLoaded, setProjectsContextLoaded] = useState(false);
+  const [workspaceContextLoaded, setWorkspaceContextLoaded] = useState(false);
   const [dashboardContextReady, setDashboardContextReady] = useState(false);
   const [aiEnabled, setAIEnabled] = useState(() =>
     readStored(AI_ENABLED_KEY, "true") !== "false"
@@ -945,20 +990,28 @@ export default function App() {
     type: string;
     config: Record<string, unknown>;
   }>({ id: 0, type: "", config: {} });
-  const activeProjectPath =
-    projectState.projects.find((project) =>
-      project.id === projectState.activeProjectId
+  const workspacePath =
+    workspaceState.workspaces.find((workspace) =>
+      workspace.id === workspaceState.activeWorkspaceId
     )?.path || "";
-  const handleExternalPathOpened = useCallback((path: string, isDirectory = false) => {
-    if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path) || pathIsInside(path, activeProjectPath)) return;
-    const directory = isDirectory ? path : parentFilesystemPath(path);
-    if (!directory) return;
-    if (isDirectory) {
-      void setDirectoryBase(directory).then((selected) => {
-        setDirectoryBaseState(selected || directory);
-      }).catch((error) => alert(error instanceof Error ? error.message : String(error)));
-    } else setDirectoryBaseState(directory);
-  }, [activeProjectPath]);
+  const handleExternalPathOpened = useCallback(
+    (path: string, isDirectory = false) => {
+      if (
+        !/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path) ||
+        pathIsInside(path, workspacePath)
+      ) return;
+      const directory = isDirectory ? path : parentFilesystemPath(path);
+      if (!directory) return;
+      if (isDirectory) {
+        void setDirectoryBase(directory).then((selected) => {
+          setDirectoryBaseState(selected || directory);
+        }).catch((error) =>
+          alert(error instanceof Error ? error.message : String(error))
+        );
+      } else setDirectoryBaseState(directory);
+    },
+    [workspacePath],
+  );
   const handleDirectoryBaseUnavailable = useCallback(() => {
     setDirectoryBaseState("");
   }, []);
@@ -974,7 +1027,9 @@ export default function App() {
       alert(error instanceof Error ? error.message : String(error));
     }
   }, []);
-  const memoDirPath = activeProjectPath ? `${activeProjectPath.replace(/[\\/]+$/, "")}/Memos` : "";
+  const memoDirPath = workspacePath
+    ? `${workspacePath.replace(/[\\/]+$/, "")}/Memos`
+    : "";
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [chatViewOpen, setChatViewOpen] = useState(() =>
     readStored(AI_ENABLED_KEY, "true") !== "false"
@@ -1016,11 +1071,12 @@ export default function App() {
   const selectedRAG = chatSettings.selectedRagSetting
     ? chatSettings.ragSettings[chatSettings.selectedRagSetting]
     : undefined;
-  useEffect(() => onRAGSyncProgress((progress) => {
-    if (progress.name !== chatSettings.selectedRagSetting) return;
-    const file = progress.filePath ? ` · ${progress.filePath}` : "";
-    setRAGStatus(`Syncing ${progress.processed}/${progress.total}${file}`);
-  }), [chatSettings.selectedRagSetting]);
+  useEffect(() =>
+    onRAGSyncProgress((progress) => {
+      if (progress.name !== chatSettings.selectedRagSetting) return;
+      const file = progress.filePath ? ` · ${progress.filePath}` : "";
+      setRAGStatus(`Syncing ${progress.processed}/${progress.total}${file}`);
+    }), [chatSettings.selectedRagSetting]);
   const discordProviders = configuredChatProviders(chatSettings);
   const preferredDiscordProvider = chatSettings.discord.provider ||
     chatSettings.provider;
@@ -1084,14 +1140,16 @@ export default function App() {
       return false;
     }
     replaceDashboard(loaded, path);
-    if (projectState.activeProjectId) {
+    if (workspaceState.activeWorkspaceId) {
       localStorage.setItem(
-        `gemihub-desktop:last-dashboard:${encodeURIComponent(projectState.activeProjectId)}`,
+        `gemihub-desktop:last-dashboard:${
+          encodeURIComponent(workspaceState.activeWorkspaceId)
+        }`,
         path,
       );
     }
     return true;
-  }, [projectState.activeProjectId, replaceDashboard]);
+  }, [workspaceState.activeWorkspaceId, replaceDashboard]);
 
   const undoDashboard = useCallback(() => {
     const previous = dashboardPastRef.current.at(-1);
@@ -1138,8 +1196,8 @@ export default function App() {
     [activeDashboardPath, dashboard],
   );
 
-  const applyProjectState = useCallback((state: ProjectState) => {
-    setProjectState(state);
+  const applyWorkspaceState = useCallback((state: WorkspaceState) => {
+    setWorkspaceState(state);
   }, []);
 
   const prepareProjectChange = useCallback(() => {
@@ -1156,24 +1214,24 @@ export default function App() {
   const changeProjectDirectory = useCallback(async (path: string) => {
     prepareProjectChange();
     try {
-      const state = await setProjectDirectory(path);
-      applyProjectState(state);
-      window.dispatchEvent(new Event("llm-hub:project-changed"));
+      const state = await setWorkspaceDirectory(path);
+      applyWorkspaceState(state);
+      window.dispatchEvent(new Event("llm-hub:workspace-changed"));
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
     } catch (error) {
       setDashboardError(error instanceof Error ? error.message : String(error));
     }
-  }, [applyProjectState, prepareProjectChange]);
+  }, [applyWorkspaceState, prepareProjectChange]);
 
   useEffect(() => {
     if (projectsLoadedRef.current) return;
     projectsLoadedRef.current = true;
     void (async () => {
-      applyProjectState(await listProjects());
+      applyWorkspaceState(await getWorkspaceState());
     })().catch((error) => {
       setDashboardError(error instanceof Error ? error.message : String(error));
-    }).finally(() => setProjectsContextLoaded(true));
-  }, [applyProjectState]);
+    }).finally(() => setWorkspaceContextLoaded(true));
+  }, [applyWorkspaceState]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
@@ -1267,7 +1325,6 @@ export default function App() {
     }
   }, [externalEditorPath]);
 
-
   useEffect(() => {
     try {
       localStorage.setItem(MEMO_SYNC_TIMELINE_KEY, memoSyncTimeline);
@@ -1294,33 +1351,42 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getDirectoryBase(), startupFilePaths()]).then(async ([startupDirectory, paths]) => {
-      if (cancelled) return;
-      if (paths.length > 0) {
-        setFileTreeOpen(false);
-        setChatViewOpen(false);
-      }
-      const startupFile = paths[0] || "";
-      const separator = Math.max(startupFile.lastIndexOf("/"), startupFile.lastIndexOf("\\"));
-      const associatedDirectory = separator >= 0 ? startupFile.slice(0, separator) : "";
-      const initialDirectory = associatedDirectory || startupDirectory ||
-        readStored(LAST_OPENED_DIRECTORY_KEY, "");
-      // Dashboard widgets mount as soon as this state is published. Ensure the
-      // backend resolves workspace:// paths against the same directory first,
-      // otherwise a restored binary document can be read from stale startup
-      // context and only work after the widget is reopened.
-      if (initialDirectory) await setDirectoryBase(initialDirectory);
-      if (cancelled) return;
-      setDirectoryBaseState(initialDirectory);
-      setStartupPaths(paths);
-      setDirectoryContextLoaded(true);
-    }).catch(() => {
+    void Promise.all([getDirectoryBase(), startupFilePaths()]).then(
+      async ([startupDirectory, paths]) => {
+        if (cancelled) return;
+        if (paths.length > 0) {
+          setFileTreeOpen(false);
+          setChatViewOpen(false);
+        }
+        const startupFile = paths[0] || "";
+        const separator = Math.max(
+          startupFile.lastIndexOf("/"),
+          startupFile.lastIndexOf("\\"),
+        );
+        const associatedDirectory = separator >= 0
+          ? startupFile.slice(0, separator)
+          : "";
+        const initialDirectory = associatedDirectory || startupDirectory ||
+          readStored(LAST_OPENED_DIRECTORY_KEY, "");
+        // Dashboard widgets mount as soon as this state is published. Ensure the
+        // backend resolves files:// paths against the same directory first,
+        // otherwise a restored binary document can be read from stale startup
+        // context and only work after the widget is reopened.
+        if (initialDirectory) await setDirectoryBase(initialDirectory);
+        if (cancelled) return;
+        setDirectoryBaseState(initialDirectory);
+        setStartupPaths(paths);
+        setDirectoryContextLoaded(true);
+      },
+    ).catch(() => {
       if (!cancelled) {
         setStartupPaths([]);
         setDirectoryContextLoaded(true);
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -1328,8 +1394,9 @@ export default function App() {
       setSettingsSection("general");
       setSettingsOpen(true);
     };
-    window.addEventListener("llm-hub:project-required", requireProject);
-    return () => window.removeEventListener("llm-hub:project-required", requireProject);
+    window.addEventListener("llm-hub:workspace-required", requireProject);
+    return () =>
+      window.removeEventListener("llm-hub:workspace-required", requireProject);
   }, []);
 
   useEffect(() => {
@@ -1346,24 +1413,44 @@ export default function App() {
       setActiveChatFile(null);
       setActiveChatSelection(null);
     };
-    window.addEventListener("llm-hub:release-dashboard-files", releaseDashboardFiles);
-    return () => window.removeEventListener("llm-hub:release-dashboard-files", releaseDashboardFiles);
+    window.addEventListener(
+      "llm-hub:release-dashboard-files",
+      releaseDashboardFiles,
+    );
+    return () =>
+      window.removeEventListener(
+        "llm-hub:release-dashboard-files",
+        releaseDashboardFiles,
+      );
   }, []);
 
   useEffect(() => {
-    if (!directoryContextLoaded || !projectsContextLoaded || !directoryBase) return;
-    if (activeProjectPath && (pathIsInside(directoryBase, activeProjectPath) || pathIsInside(activeProjectPath, directoryBase))) return;
+    if (!directoryContextLoaded || !workspaceContextLoaded || !directoryBase) {
+      return;
+    }
+    if (
+      workspacePath &&
+      (pathIsInside(directoryBase, workspacePath) ||
+        pathIsInside(workspacePath, directoryBase))
+    ) return;
     setRecentDirectories((current) => {
       const next = updateRecentDirectories(current, directoryBase);
       localStorage.setItem(RECENT_DIRECTORIES_KEY, JSON.stringify(next));
       return next;
     });
-  }, [activeProjectPath, directoryBase, directoryContextLoaded, projectsContextLoaded]);
+  }, [
+    workspacePath,
+    directoryBase,
+    directoryContextLoaded,
+    workspaceContextLoaded,
+  ]);
 
   useEffect(() => {
     if (!appMenuOpen) return;
     const close = (event: PointerEvent) => {
-      if (!appMenuRef.current?.contains(event.target as Node)) setAppMenuOpen(false);
+      if (!appMenuRef.current?.contains(event.target as Node)) {
+        setAppMenuOpen(false);
+      }
     };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setAppMenuOpen(false);
@@ -1392,15 +1479,21 @@ export default function App() {
       // dashboard. Load the persisted Workspace dashboard in the background,
       // then re-apply the file to its existing FileWidget.
       setDashboardContextReady(true);
-      if (!projectsContextLoaded || !projectState.activeProjectId) return;
+      if (!workspaceContextLoaded || !workspaceState.activeWorkspaceId) return;
       void (async () => {
         const files = await listDashboardFiles();
         if (cancelled) return;
         setDashboardFiles(files);
-        const homeKey = `gemihub-desktop:home-dashboard:${encodeURIComponent(projectState.activeProjectId)}`;
-        const lastKey = `gemihub-desktop:last-dashboard:${encodeURIComponent(projectState.activeProjectId)}`;
-        const preferred = localStorage.getItem(lastKey) || localStorage.getItem(homeKey);
-        const target = files.find((file) => file.path === preferred)?.path || files[0]?.path;
+        const homeKey = `gemihub-desktop:home-dashboard:${
+          encodeURIComponent(workspaceState.activeWorkspaceId)
+        }`;
+        const lastKey = `gemihub-desktop:last-dashboard:${
+          encodeURIComponent(workspaceState.activeWorkspaceId)
+        }`;
+        const preferred = localStorage.getItem(lastKey) ||
+          localStorage.getItem(homeKey);
+        const target = files.find((file) => file.path === preferred)?.path ||
+          files[0]?.path;
         setHomeDashboardPath(target || "");
         if (target) await openDashboardFile(target);
         else {
@@ -1413,13 +1506,25 @@ export default function App() {
           localStorage.setItem(homeKey, path);
           setHomeDashboardPath(path);
         }
-        if (!cancelled) setOpenPathRequest((current) => ({ id: current.id + 1, path: startupPaths[0], source: "startup" }));
+        if (!cancelled) {
+          setOpenPathRequest((current) => ({
+            id: current.id + 1,
+            path: startupPaths[0],
+            source: "startup",
+          }));
+        }
       })().catch((error) => {
-        if (!cancelled) setDashboardError(error instanceof Error ? error.message : String(error));
+        if (!cancelled) {
+          setDashboardError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       });
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
-    if (!projectsContextLoaded) return;
+    if (!workspaceContextLoaded) return;
     setDashboardContextReady(false);
     setActiveDashboardPath("");
     setHomeDashboardPath("");
@@ -1427,7 +1532,7 @@ export default function App() {
     setActiveChatFile(null);
     setDashboardRawMode(false);
     replaceDashboard(defaultDashboard(), "");
-    if (!projectState.activeProjectId) {
+    if (!workspaceState.activeWorkspaceId) {
       setDashboardContextReady(true);
       return;
     }
@@ -1436,12 +1541,13 @@ export default function App() {
       if (cancelled) return;
       setDashboardFiles(files);
       const homeKey = `gemihub-desktop:home-dashboard:${
-        encodeURIComponent(projectState.activeProjectId)
+        encodeURIComponent(workspaceState.activeWorkspaceId)
       }`;
       const lastKey = `gemihub-desktop:last-dashboard:${
-        encodeURIComponent(projectState.activeProjectId)
+        encodeURIComponent(workspaceState.activeWorkspaceId)
       }`;
-      const preferred = localStorage.getItem(lastKey) || localStorage.getItem(homeKey);
+      const preferred = localStorage.getItem(lastKey) ||
+        localStorage.getItem(homeKey);
       const target = files.find((file) => file.path === preferred)?.path ||
         files[0]?.path;
       setHomeDashboardPath(target || "");
@@ -1469,10 +1575,10 @@ export default function App() {
       cancelled = true;
     };
   }, [
-    activeProjectPath,
+    workspacePath,
     directoryContextLoaded,
-    projectsContextLoaded,
-    projectState.activeProjectId,
+    workspaceContextLoaded,
+    workspaceState.activeWorkspaceId,
     openDashboardFile,
     replaceDashboard,
     startupPaths,
@@ -1772,32 +1878,82 @@ export default function App() {
             </button>
             {appMenuOpen && (
               <div className="app-menu-popover" role="menu">
-                <button type="button" role="menuitem" onClick={() => void openFilesDirectory()}>
-                  <FolderOpen size={16} /><span>{tr("appMenu.openDirectory")}</span>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void openFilesDirectory()}
+                >
+                  <FolderOpen size={16} />
+                  <span>{tr("appMenu.openDirectory")}</span>
                 </button>
                 {recentDirectories.length > 0 && (
                   <section className="app-menu-recent">
                     <strong>{tr("appMenu.recent")}</strong>
                     {recentDirectories.map((path) => (
-                      <button type="button" role="menuitem" key={path} title={path} onClick={() => void openFilesDirectory(path)}>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        key={path}
+                        title={path}
+                        onClick={() => void openFilesDirectory(path)}
+                      >
                         <FolderOpen size={15} />
-                        <span><b>{path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path}</b><small>{path}</small></span>
+                        <span>
+                          <b>
+                            {path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ||
+                              path}
+                          </b>
+                          <small>{path}</small>
+                        </span>
                       </button>
                     ))}
                   </section>
                 )}
                 <div className="app-menu-separator" />
-                <button type="button" role="menuitem" onClick={() => { setPluginViewRequest((value) => value + 1); setChatViewOpen(true); setAppMenuOpen(false); }}>
-                  <Plug size={16} /><span>{tr("appMenu.plugins")}</span>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setPluginViewRequest((value) => value + 1);
+                    setChatViewOpen(true);
+                    setAppMenuOpen(false);
+                  }}
+                >
+                  <Plug size={16} />
+                  <span>{tr("appMenu.plugins")}</span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setMemoListOpen(true); setAppMenuOpen(false); }}>
-                  <NotebookText size={16} /><span>{tr("topbar.memoList")}</span>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMemoListOpen(true);
+                    setAppMenuOpen(false);
+                  }}
+                >
+                  <NotebookText size={16} />
+                  <span>{tr("topbar.memoList")}</span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setIsDark((value) => !value); setAppMenuOpen(false); }}>
-                  {isDark ? <Sun size={16} /> : <Moon size={16} />}<span>{tr("topbar.toggleTheme")}</span>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsDark((value) => !value);
+                    setAppMenuOpen(false);
+                  }}
+                >
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                  <span>{tr("topbar.toggleTheme")}</span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setSettingsOpen(true); setAppMenuOpen(false); }}>
-                  <Settings size={16} /><span>{tr("topbar.settings")}</span>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setSettingsOpen(true);
+                    setAppMenuOpen(false);
+                  }}
+                >
+                  <Settings size={16} />
+                  <span>{tr("topbar.settings")}</span>
                 </button>
               </div>
             )}
@@ -1863,11 +2019,11 @@ export default function App() {
           {fileTreeOpen && (
             <FileTree
               directoryBase={directoryBase}
-              projectPath={activeProjectPath}
+              workspacePath={workspacePath}
               onDirectoryBaseUnavailable={handleDirectoryBaseUnavailable}
               onOpenFile={(path) => {
                 if (
-                  !path.startsWith("workspace://") &&
+                  !path.startsWith("files://") &&
                   path.toLowerCase().endsWith(".dashboard")
                 ) void openDashboardFile(path);
                 else {setOpenPathRequest((value) => ({
@@ -1931,7 +2087,7 @@ export default function App() {
                   setActiveDashboardPath(path);
                   if (homeDashboardPath === previous) {
                     const key = `gemihub-desktop:home-dashboard:${
-                      encodeURIComponent(projectState.activeProjectId)
+                      encodeURIComponent(workspaceState.activeWorkspaceId)
                     }`;
                     localStorage.setItem(key, path);
                     setHomeDashboardPath(path);
@@ -1955,7 +2111,7 @@ export default function App() {
                   if (next) {
                     if (homeDashboardPath === removing) {
                       const key = `gemihub-desktop:home-dashboard:${
-                        encodeURIComponent(projectState.activeProjectId)
+                        encodeURIComponent(workspaceState.activeWorkspaceId)
                       }`;
                       localStorage.setItem(key, next.path);
                       setHomeDashboardPath(next.path);
@@ -1971,7 +2127,7 @@ export default function App() {
               onSetHome={() => {
                 if (!activeDashboardPath) return;
                 const key = `gemihub-desktop:home-dashboard:${
-                  encodeURIComponent(projectState.activeProjectId)
+                  encodeURIComponent(workspaceState.activeWorkspaceId)
                 }`;
                 localStorage.setItem(key, activeDashboardPath);
                 setHomeDashboardPath(activeDashboardPath);
@@ -2069,12 +2225,15 @@ export default function App() {
                     setChatOpenRequest((value) => value + 1);
                   }}
                   onAskMemoAI={(draft) => {
-                    setChatDraftRequest((current) => ({ id: current.id + 1, text: draft }));
+                    setChatDraftRequest((current) => ({
+                      id: current.id + 1,
+                      text: draft,
+                    }));
                     setChatViewOpen(true);
                     setChatOpenRequest((value) => value + 1);
                   }}
                   chatSettings={chatSettings}
-                  directoryBase={activeProjectPath}
+                  directoryBase={workspacePath}
                   workspaceBase={directoryBase}
                   dashboardPath={activeDashboardPath}
                   startupPaths={dashboardContextReady ? startupPaths : null}
@@ -2105,7 +2264,7 @@ export default function App() {
             ? (
               <PluginHost
                 directoryBase={directoryBase}
-                projectBase={activeProjectPath}
+                workspaceBase={workspacePath}
                 language={language}
                 isDark={isDark}
                 aiEnabled={aiEnabled}
@@ -2249,7 +2408,9 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        className={settingsSection === "commands" ? "active" : ""}
+                        className={settingsSection === "commands"
+                          ? "active"
+                          : ""}
                         onClick={() => setSettingsSection("commands")}
                       >
                         <Command size={16} /> Slash commands
@@ -2270,7 +2431,9 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        className={settingsSection === "discord" ? "active" : ""}
+                        className={settingsSection === "discord"
+                          ? "active"
+                          : ""}
                         onClick={() => setSettingsSection("discord")}
                       >
                         <Bot size={16} /> Discord
@@ -2294,13 +2457,27 @@ export default function App() {
                       <label className="settings-field">
                         <span>Workspace directory</span>
                         <div className="settings-path-row">
-                          <input value={activeProjectPath} readOnly placeholder="Select a Workspace directory" />
-                          <button type="button" className="settings-browse" onClick={async () => {
-                            const path = await selectProjectDirectory();
-                            if (path) await changeProjectDirectory(path);
-                          }}>{tr("common.browse")}</button>
+                          <input
+                            value={workspacePath}
+                            readOnly
+                            placeholder="Select a Workspace directory"
+                          />
+                          <button
+                            type="button"
+                            className="settings-browse"
+                            onClick={async () => {
+                              const path = await selectWorkspaceDirectory();
+                              if (path) await changeProjectDirectory(path);
+                            }}
+                          >
+                            {tr("common.browse")}
+                          </button>
                         </div>
-                        <small className="settings-hint">Dashboards, Memos, Secrets, skills, workflows, plugins, and application state are stored under this directory.</small>
+                        <small className="settings-hint">
+                          Dashboards, Memos, Secrets, skills, workflows,
+                          plugins, and application state are stored under this
+                          directory.
+                        </small>
                       </label>
                       <label className="settings-field">
                         <span>{tr("settings.externalEditor")}</span>
@@ -2327,7 +2504,8 @@ export default function App() {
                         <span>{tr("settings.memoSyncTimeline")}</span>
                         <input
                           value={memoSyncTimeline}
-                          onChange={(event) => setMemoSyncTimeline(event.target.value)}
+                          onChange={(event) =>
+                            setMemoSyncTimeline(event.target.value)}
                           placeholder="Timeline"
                         />
                         <small className="settings-hint">
@@ -2378,40 +2556,96 @@ export default function App() {
                         <LockKeyhole size={20} />
                         <div>
                           <strong>History encryption</strong>
-                          <p>The private key is password-protected. The password is retained in memory only until the app closes.</p>
+                          <p>
+                            The private key is password-protected. The password
+                            is retained in memory only until the app closes.
+                          </p>
                         </div>
                       </section>
                       <label className="settings-field">
-                        <span>{historyEncryptionReady ? "Unlock password" : "Create encryption password"}</span>
+                        <span>
+                          {historyEncryptionReady
+                            ? "Unlock password"
+                            : "Create encryption password"}
+                        </span>
                         <div className="settings-path-row">
-                          <input type="password" value={historyEncryptionPassword} onChange={(event) => setHistoryEncryptionPassword(event.target.value)} />
-                          <button type="button" className="settings-browse" disabled={!historyEncryptionPassword} onClick={async () => {
-                            try {
-                              await configureOrUnlockHistoryEncryption(historyEncryptionPassword);
-                              setHistoryEncryptionReady(true);
-                              setHistoryEncryptionPassword("");
-                              setHistoryEncryptionStatus("Encryption is unlocked for this session.");
-                            } catch (error) {
-                              setHistoryEncryptionStatus(error instanceof Error ? error.message : String(error));
-                            }
-                          }}>{historyEncryptionReady ? "Unlock" : "Create"}</button>
+                          <input
+                            type="password"
+                            value={historyEncryptionPassword}
+                            onChange={(event) =>
+                              setHistoryEncryptionPassword(event.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="settings-browse"
+                            disabled={!historyEncryptionPassword}
+                            onClick={async () => {
+                              try {
+                                await configureOrUnlockHistoryEncryption(
+                                  historyEncryptionPassword,
+                                );
+                                setHistoryEncryptionReady(true);
+                                setHistoryEncryptionPassword("");
+                                setHistoryEncryptionStatus(
+                                  "Encryption is unlocked for this session.",
+                                );
+                              } catch (error) {
+                                setHistoryEncryptionStatus(
+                                  error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                                );
+                              }
+                            }}
+                          >
+                            {historyEncryptionReady ? "Unlock" : "Create"}
+                          </button>
                         </div>
-                        {historyEncryptionStatus && <small className="settings-hint">{historyEncryptionStatus}</small>}
+                        {historyEncryptionStatus && (
+                          <small className="settings-hint">
+                            {historyEncryptionStatus}
+                          </small>
+                        )}
                       </label>
                       <label className="settings-field settings-switch-row">
                         <span>Encrypt Chat history</span>
-                        <input type="checkbox" checked={historyEncryption.chat} disabled={!historyEncryptionReady} onChange={(event) => {
-                          const next = { ...historyEncryption, chat: event.target.checked };
-                          setHistoryEncryption(next); setHistoryEncryptionPreferences(next);
-                        }} />
+                        <input
+                          type="checkbox"
+                          checked={historyEncryption.chat}
+                          disabled={!historyEncryptionReady}
+                          onChange={(event) => {
+                            const next = {
+                              ...historyEncryption,
+                              chat: event.target.checked,
+                            };
+                            setHistoryEncryption(next);
+                            setHistoryEncryptionPreferences(next);
+                          }}
+                        />
                       </label>
                       <label className="settings-field settings-switch-row">
                         <span>Encrypt Workflow logs</span>
-                        <input type="checkbox" checked={historyEncryption.workflow} disabled={!historyEncryptionReady} onChange={(event) => {
-                          const next = { ...historyEncryption, workflow: event.target.checked };
-                          setHistoryEncryption(next); setHistoryEncryptionPreferences(next);
-                          void migrateWorkflowHistoryStorage(next.workflow).catch((error) => setHistoryEncryptionStatus(error instanceof Error ? error.message : String(error)));
-                        }} />
+                        <input
+                          type="checkbox"
+                          checked={historyEncryption.workflow}
+                          disabled={!historyEncryptionReady}
+                          onChange={(event) => {
+                            const next = {
+                              ...historyEncryption,
+                              workflow: event.target.checked,
+                            };
+                            setHistoryEncryption(next);
+                            setHistoryEncryptionPreferences(next);
+                            void migrateWorkflowHistoryStorage(next.workflow)
+                              .catch((error) =>
+                                setHistoryEncryptionStatus(
+                                  error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                                )
+                              );
+                          }}
+                        />
                       </label>
                     </>
                   )}
@@ -2427,7 +2661,10 @@ export default function App() {
                             Discord.
                           </p>
                         </div>
-                        <label className="plugin-toggle" title="Use AI features">
+                        <label
+                          className="plugin-toggle"
+                          title="Use AI features"
+                        >
                           <input
                             type="checkbox"
                             checked={aiEnabled}
@@ -2442,249 +2679,266 @@ export default function App() {
                       </section>
                       {aiEnabled && (
                         <>
-                          <ModelProviderManager settings={chatSettings} onChange={setChatSettings} />
-                          <label className="settings-field">
-                        <span>Selected provider</span>
-                        <select
-                          className="settings-select"
-                          value={chatSettings.provider}
-                          onChange={(event) => {
-                            const provider = event.target.value as ChatProvider;
-                            setChatSettings((current) =>
-                              switchChatProvider(current, provider)
-                            );
-                            if (provider === "cli") setSettingsSection("cli");
-                          }}
-                        >
-                          <option value="openai">OpenAI compatible</option>
-                          <option value="gemini">Google Gemini</option>
-                          <option value="vertex">Vertex AI</option>
-                          <option value="anthropic">Anthropic</option>
-                          <option value="cli">Local CLI</option>
-                        </select>
-                      </label>
-                      {chatSettings.provider !== "vertex" && (
-                        <label className="settings-field">
-                          <span>Endpoint</span>
-                          <input
-                            value={chatSettings.endpoint}
-                            onChange={(event) =>
-                              setChatSettings((current) => ({
-                                ...current,
-                                endpoint: event.target.value,
-                              }))}
+                          <ModelProviderManager
+                            settings={chatSettings}
+                            onChange={setChatSettings}
                           />
-                        </label>
-                      )}
-                      <label className="settings-field">
-                        <span>Model</span>
-                        <input
-                          value={chatSettings.model}
-                          onChange={(event) =>
-                            setChatSettings((current) => ({
-                              ...current,
-                              model: event.target.value,
-                            }))}
-                        />
-                      </label>
-                      {chatSettings.provider === "vertex"
-                        ? (
-                          <>
-                            <section className="vertex-oauth-settings">
-                              <div>
-                                <strong>Google OAuth</strong>
-                                <span
-                                  className={vertexConnected ? "connected" : ""}
-                                >
-                                  {vertexStatus || "Not connected"}
-                                </span>
-                              </div>
-                              <label className="settings-field">
-                                <span>Desktop OAuth client ID</span>
-                                <div className="settings-path-row">
-                                  <input
-                                    value={chatSettings.vertexOAuthClientId}
-                                    placeholder="Select client_secret_*.json"
-                                    onChange={(event) =>
-                                      setChatSettings((current) => ({
-                                        ...current,
-                                        vertexOAuthClientId: event.target.value,
-                                      }))}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="settings-browse"
-                                    onClick={async () => {
-                                      const client =
-                                        await selectVertexOAuthClient();
-                                      if (!client) return;
-                                      setChatSettings((current) => ({
-                                        ...current,
-                                        vertexOAuthClientId: client.clientId,
-                                        vertexOAuthClientSecret:
-                                          client.clientSecret,
-                                        vertexProjectId: client.projectId ||
-                                          current.vertexProjectId,
-                                      }));
-                                      setVertexStatus(
-                                        client.projectId
-                                          ? `OAuth client loaded · ${client.projectId}`
-                                          : "OAuth client loaded",
-                                      );
-                                    }}
-                                  >
-                                    Browse JSON
-                                  </button>
-                                </div>
-                              </label>
-                              <label className="settings-field">
-                                <span>Desktop OAuth client secret</span>
-                                <input
-                                  type="password"
-                                  value={chatSettings.vertexOAuthClientSecret}
-                                  onChange={(event) =>
-                                    setChatSettings((current) => ({
-                                      ...current,
-                                      vertexOAuthClientSecret:
-                                        event.target.value,
-                                    }))}
-                                />
-                              </label>
-                              <div className="vertex-oauth-actions">
-                                {vertexConnected
-                                  ? (
-                                    <button
-                                      type="button"
-                                      className="settings-choice"
-                                      onClick={async () => {
-                                        await disconnectVertexOAuth();
-                                        setVertexConnected(false);
-                                        setVertexStatus("Disconnected");
-                                      }}
-                                    >
-                                      Disconnect
-                                    </button>
-                                  )
-                                  : (
-                                    <button
-                                      type="button"
-                                      className="settings-choice"
-                                      disabled={!chatSettings
-                                        .vertexOAuthClientId || ragBusy}
-                                      onClick={async () => {
-                                        setRAGBusy(true);
-                                        setVertexStatus(
-                                          "Waiting for Google login…",
-                                        );
-                                        try {
-                                          const status =
-                                            await connectVertexOAuth(
-                                              chatSettings.vertexOAuthClientId,
-                                              chatSettings
-                                                .vertexOAuthClientSecret,
-                                            );
-                                          setVertexConnected(status.connected);
-                                          setVertexStatus(
-                                            status.connected
-                                              ? "Google account connected"
-                                              : "Not connected",
-                                          );
-                                        } catch (caught) {
-                                          setVertexStatus(
-                                            caught instanceof Error
-                                              ? caught.message
-                                              : String(caught),
-                                          );
-                                        } finally {
-                                          setRAGBusy(false);
-                                        }
-                                      }}
-                                    >
-                                      Connect Google account
-                                    </button>
-                                  )}
-                                <small>
-                                  Uses the Cloud Platform scope. This account
-                                  needs Vertex AI User access on the project.
-                                </small>
-                              </div>
-                            </section>
-                            <details className="vertex-advanced">
-                              <summary>Advanced</summary>
-                              <div className="rag-number-grid">
-                                <label className="settings-field">
-                                  <span>Google Cloud project ID override</span>
-                                  <input
-                                    value={chatSettings.vertexProjectId}
-                                    placeholder="Loaded from OAuth JSON"
-                                    onChange={(event) =>
-                                      setChatSettings((current) => ({
-                                        ...current,
-                                        vertexProjectId: event.target.value,
-                                      }))}
-                                  />
-                                </label>
-                                <label className="settings-field">
-                                  <span>Location</span>
-                                  <input
-                                    value={chatSettings.vertexLocation}
-                                    placeholder="global"
-                                    list="vertex-chat-locations"
-                                    onChange={(event) =>
-                                      setChatSettings((current) => ({
-                                        ...current,
-                                        vertexLocation: event.target.value,
-                                      }))}
-                                  />
-                                  <datalist id="vertex-chat-locations">
-                                    <option value="global" />
-                                    <option value="us-central1" />
-                                    <option value="europe-west4" />
-                                    <option value="asia-northeast1" />
-                                  </datalist>
-                                </label>
-                              </div>
-                              <small>
-                                Only change these when Vertex AI runs in a
-                                different project or region from the OAuth
-                                client defaults.
-                              </small>
-                            </details>
-                          </>
-                        )
-                        : (
                           <label className="settings-field">
-                            <span>API key</span>
+                            <span>Selected provider</span>
+                            <select
+                              className="settings-select"
+                              value={chatSettings.provider}
+                              onChange={(event) => {
+                                const provider = event.target
+                                  .value as ChatProvider;
+                                setChatSettings((current) =>
+                                  switchChatProvider(current, provider)
+                                );
+                                if (provider === "cli") {
+                                  setSettingsSection("cli");
+                                }
+                              }}
+                            >
+                              <option value="openai">OpenAI compatible</option>
+                              <option value="gemini">Google Gemini</option>
+                              <option value="vertex">Vertex AI</option>
+                              <option value="anthropic">Anthropic</option>
+                              <option value="cli">Local CLI</option>
+                            </select>
+                          </label>
+                          {chatSettings.provider !== "vertex" && (
+                            <label className="settings-field">
+                              <span>Endpoint</span>
+                              <input
+                                value={chatSettings.endpoint}
+                                onChange={(event) =>
+                                  setChatSettings((current) => ({
+                                    ...current,
+                                    endpoint: event.target.value,
+                                  }))}
+                              />
+                            </label>
+                          )}
+                          <label className="settings-field">
+                            <span>Model</span>
                             <input
-                              type="password"
-                              value={chatSettings.apiKey}
+                              value={chatSettings.model}
                               onChange={(event) =>
                                 setChatSettings((current) => ({
                                   ...current,
-                                  apiKey: event.target.value,
+                                  model: event.target.value,
                                 }))}
                             />
                           </label>
-                        )}
-                      <label className="settings-field">
-                        <span>System prompt</span>
-                        <textarea
-                          rows={6}
-                          value={chatSettings.systemPrompt}
-                          onChange={(event) =>
-                            setChatSettings((current) => ({
-                              ...current,
-                              systemPrompt: event.target.value,
-                            }))}
-                        />
-                      </label>
-                      <small className="settings-hint">
-                        {chatSettings.provider === "vertex"
-                          ? "Vertex AI uses the connected Google account; API keys are not supported."
-                          : "API keys are kept in this app's WebView local storage."}
-                        {" "}
-                        Proposed API file writes still require Apply.
-                      </small>
+                          {chatSettings.provider === "vertex"
+                            ? (
+                              <>
+                                <section className="vertex-oauth-settings">
+                                  <div>
+                                    <strong>Google OAuth</strong>
+                                    <span
+                                      className={vertexConnected
+                                        ? "connected"
+                                        : ""}
+                                    >
+                                      {vertexStatus || "Not connected"}
+                                    </span>
+                                  </div>
+                                  <label className="settings-field">
+                                    <span>Desktop OAuth client ID</span>
+                                    <div className="settings-path-row">
+                                      <input
+                                        value={chatSettings.vertexOAuthClientId}
+                                        placeholder="Select client_secret_*.json"
+                                        onChange={(event) =>
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            vertexOAuthClientId:
+                                              event.target.value,
+                                          }))}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="settings-browse"
+                                        onClick={async () => {
+                                          const client =
+                                            await selectVertexOAuthClient();
+                                          if (!client) return;
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            vertexOAuthClientId:
+                                              client.clientId,
+                                            vertexOAuthClientSecret:
+                                              client.clientSecret,
+                                            vertexProjectId: client.projectId ||
+                                              current.vertexProjectId,
+                                          }));
+                                          setVertexStatus(
+                                            client.projectId
+                                              ? `OAuth client loaded · ${client.projectId}`
+                                              : "OAuth client loaded",
+                                          );
+                                        }}
+                                      >
+                                        Browse JSON
+                                      </button>
+                                    </div>
+                                  </label>
+                                  <label className="settings-field">
+                                    <span>Desktop OAuth client secret</span>
+                                    <input
+                                      type="password"
+                                      value={chatSettings
+                                        .vertexOAuthClientSecret}
+                                      onChange={(event) =>
+                                        setChatSettings((current) => ({
+                                          ...current,
+                                          vertexOAuthClientSecret:
+                                            event.target.value,
+                                        }))}
+                                    />
+                                  </label>
+                                  <div className="vertex-oauth-actions">
+                                    {vertexConnected
+                                      ? (
+                                        <button
+                                          type="button"
+                                          className="settings-choice"
+                                          onClick={async () => {
+                                            await disconnectVertexOAuth();
+                                            setVertexConnected(false);
+                                            setVertexStatus("Disconnected");
+                                          }}
+                                        >
+                                          Disconnect
+                                        </button>
+                                      )
+                                      : (
+                                        <button
+                                          type="button"
+                                          className="settings-choice"
+                                          disabled={!chatSettings
+                                            .vertexOAuthClientId || ragBusy}
+                                          onClick={async () => {
+                                            setRAGBusy(true);
+                                            setVertexStatus(
+                                              "Waiting for Google login…",
+                                            );
+                                            try {
+                                              const status =
+                                                await connectVertexOAuth(
+                                                  chatSettings
+                                                    .vertexOAuthClientId,
+                                                  chatSettings
+                                                    .vertexOAuthClientSecret,
+                                                );
+                                              setVertexConnected(
+                                                status.connected,
+                                              );
+                                              setVertexStatus(
+                                                status.connected
+                                                  ? "Google account connected"
+                                                  : "Not connected",
+                                              );
+                                            } catch (caught) {
+                                              setVertexStatus(
+                                                caught instanceof Error
+                                                  ? caught.message
+                                                  : String(caught),
+                                              );
+                                            } finally {
+                                              setRAGBusy(false);
+                                            }
+                                          }}
+                                        >
+                                          Connect Google account
+                                        </button>
+                                      )}
+                                    <small>
+                                      Uses the Cloud Platform scope. This
+                                      account needs Vertex AI User access on the
+                                      project.
+                                    </small>
+                                  </div>
+                                </section>
+                                <details className="vertex-advanced">
+                                  <summary>Advanced</summary>
+                                  <div className="rag-number-grid">
+                                    <label className="settings-field">
+                                      <span>
+                                        Google Cloud project ID override
+                                      </span>
+                                      <input
+                                        value={chatSettings.vertexProjectId}
+                                        placeholder="Loaded from OAuth JSON"
+                                        onChange={(event) =>
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            vertexProjectId: event.target.value,
+                                          }))}
+                                      />
+                                    </label>
+                                    <label className="settings-field">
+                                      <span>Location</span>
+                                      <input
+                                        value={chatSettings.vertexLocation}
+                                        placeholder="global"
+                                        list="vertex-chat-locations"
+                                        onChange={(event) =>
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            vertexLocation: event.target.value,
+                                          }))}
+                                      />
+                                      <datalist id="vertex-chat-locations">
+                                        <option value="global" />
+                                        <option value="us-central1" />
+                                        <option value="europe-west4" />
+                                        <option value="asia-northeast1" />
+                                      </datalist>
+                                    </label>
+                                  </div>
+                                  <small>
+                                    Only change these when Vertex AI runs in a
+                                    different project or region from the OAuth
+                                    client defaults.
+                                  </small>
+                                </details>
+                              </>
+                            )
+                            : (
+                              <label className="settings-field">
+                                <span>API key</span>
+                                <input
+                                  type="password"
+                                  value={chatSettings.apiKey}
+                                  onChange={(event) =>
+                                    setChatSettings((current) => ({
+                                      ...current,
+                                      apiKey: event.target.value,
+                                    }))}
+                                />
+                              </label>
+                            )}
+                          <label className="settings-field">
+                            <span>System prompt</span>
+                            <textarea
+                              rows={6}
+                              value={chatSettings.systemPrompt}
+                              onChange={(event) =>
+                                setChatSettings((current) => ({
+                                  ...current,
+                                  systemPrompt: event.target.value,
+                                }))}
+                            />
+                          </label>
+                          <small className="settings-hint">
+                            {chatSettings.provider === "vertex"
+                              ? "Vertex AI uses the connected Google account; API keys are not supported."
+                              : "API keys are kept in this app's WebView local storage."}
+                            {" "}
+                            Proposed API file writes still require Apply.
+                          </small>
                         </>
                       )}
                     </>
@@ -2704,14 +2958,54 @@ export default function App() {
                         </div>
                       </section>
                       <section className="model-provider-list">
-                        <header><div><strong>CLI providers</strong><small>Each verified CLI appears as a separate Chat model.</small></div></header>
+                        <header>
+                          <div>
+                            <strong>CLI providers</strong>
+                            <small>
+                              Each verified CLI appears as a separate Chat
+                              model.
+                            </small>
+                          </div>
+                        </header>
                         <div className="model-provider-cards">
-                          {(Object.entries(cliNames) as [CLIType, string][]).map(([type, label]) => (
-                            <button type="button" key={type} className={`model-provider-card ${chatSettings.cliType === type ? "selected" : ""}`} onClick={() => { setCLIStatus(""); setChatSettings((current) => ({ ...current, provider: "cli", cliType: type })); }}>
-                              <span><strong>{label}</strong><small>{chatSettings.cliPaths[type] || "Auto-detect from PATH"}</small></span>
-                              <i className={chatSettings.verifiedCliTypes.includes(type) ? "configured" : ""}>{chatSettings.verifiedCliTypes.includes(type) ? "Verified" : "Not verified"}</i>
-                            </button>
-                          ))}
+                          {(Object.entries(cliNames) as [CLIType, string][])
+                            .map(([type, label]) => (
+                              <button
+                                type="button"
+                                key={type}
+                                className={`model-provider-card ${
+                                  chatSettings.cliType === type
+                                    ? "selected"
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  setCLIStatus("");
+                                  setChatSettings((current) => ({
+                                    ...current,
+                                    provider: "cli",
+                                    cliType: type,
+                                  }));
+                                }}
+                              >
+                                <span>
+                                  <strong>{label}</strong>
+                                  <small>
+                                    {chatSettings.cliPaths[type] ||
+                                      "Auto-detect from PATH"}
+                                  </small>
+                                </span>
+                                <i
+                                  className={chatSettings.verifiedCliTypes
+                                      .includes(type)
+                                    ? "configured"
+                                    : ""}
+                                >
+                                  {chatSettings.verifiedCliTypes.includes(type)
+                                    ? "Verified"
+                                    : "Not verified"}
+                                </i>
+                              </button>
+                            ))}
                         </div>
                       </section>
                       <label className="settings-field">
@@ -3043,7 +3337,10 @@ export default function App() {
                     </>
                   )}
                   {settingsSection === "skills" && (
-                    <AgentSkillsSettings directoryBase={activeProjectPath} settings={chatSettings} />
+                    <AgentSkillsSettings
+                      directoryBase={workspacePath}
+                      settings={chatSettings}
+                    />
                   )}
                   {settingsSection === "mcp" && (
                     <>
@@ -3201,17 +3498,81 @@ export default function App() {
                                   <div className="rag-number-grid">
                                     <label className="settings-field">
                                       <span>OAuth Client ID</span>
-                                      <input value={server.oauthClientId || ""} placeholder="Google Cloud OAuth client ID" onChange={(event) => setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauthClientId: event.target.value } : item) }))} />
+                                      <input
+                                        value={server.oauthClientId || ""}
+                                        placeholder="Google Cloud OAuth client ID"
+                                        onChange={(event) =>
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            mcpServers: current.mcpServers.map((
+                                              item,
+                                            ) =>
+                                              item.id === server.id
+                                                ? {
+                                                  ...item,
+                                                  oauthClientId:
+                                                    event.target.value,
+                                                }
+                                                : item
+                                            ),
+                                          }))}
+                                      />
                                     </label>
                                     <label className="settings-field">
                                       <span>OAuth Client Secret</span>
-                                      <input type="password" value={server.oauthClientSecret || ""} placeholder="OAuth client secret" onChange={(event) => setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauthClientSecret: event.target.value } : item) }))} />
+                                      <input
+                                        type="password"
+                                        value={server.oauthClientSecret || ""}
+                                        placeholder="OAuth client secret"
+                                        onChange={(event) =>
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            mcpServers: current.mcpServers.map((
+                                              item,
+                                            ) =>
+                                              item.id === server.id
+                                                ? {
+                                                  ...item,
+                                                  oauthClientSecret:
+                                                    event.target.value,
+                                                }
+                                                : item
+                                            ),
+                                          }))}
+                                      />
                                     </label>
                                   </div>
                                   <label className="settings-field">
                                     <span>OAuth scopes</span>
-                                    <input value={(server.oauthScopes || []).join(" ")} placeholder="https://www.googleapis.com/auth/logging.read" onChange={(event) => setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauthScopes: event.target.value.split(/[\s,]+/).map((scope) => scope.trim()).filter(Boolean) } : item) }))} />
-                                    <small>Space-separated. Empty uses the Google MCP default scope.</small>
+                                    <input
+                                      value={(server.oauthScopes || []).join(
+                                        " ",
+                                      )}
+                                      placeholder="https://www.googleapis.com/auth/logging.read"
+                                      onChange={(event) =>
+                                        setChatSettings((current) => ({
+                                          ...current,
+                                          mcpServers: current.mcpServers.map((
+                                            item,
+                                          ) =>
+                                            item.id === server.id
+                                              ? {
+                                                ...item,
+                                                oauthScopes: event.target.value
+                                                  .split(/[\s,]+/).map((
+                                                    scope,
+                                                  ) => scope.trim()).filter(
+                                                    Boolean,
+                                                  ),
+                                              }
+                                              : item
+                                          ),
+                                        }))}
+                                    />
+                                    <small>
+                                      Space-separated. Empty uses the Google MCP
+                                      default scope.
+                                    </small>
                                   </label>
                                   <label className="settings-field">
                                     <span>Headers (JSON)</span>
@@ -3258,66 +3619,102 @@ export default function App() {
                                       }}
                                     />
                                   </label>
-                                  {!server.oauthClientId?.trim() && <button
-                                    type="button"
-                                    className="settings-choice"
-                                    disabled={!server.url}
-                                    onClick={async () => {
-                                      setMCPStatus((current) => ({
-                                        ...current,
-                                        [server.id]: "Connecting…",
-                                      }));
-                                      let usedOAuth = server.oauth;
-                                      let client = new McpHttpClient({ id: server.id, name: server.name, transport: "http", url: server.url, headers: server.headers, enabled: server.enabled, oauth: server.oauth });
-                                      try {
-                                        let tools;
+                                  {!server.oauthClientId?.trim() && (
+                                    <button
+                                      type="button"
+                                      className="settings-choice"
+                                      disabled={!server.url}
+                                      onClick={async () => {
+                                        setMCPStatus((current) => ({
+                                          ...current,
+                                          [server.id]: "Connecting…",
+                                        }));
+                                        let usedOAuth = server.oauth;
+                                        let client = new McpHttpClient({
+                                          id: server.id,
+                                          name: server.name,
+                                          transport: "http",
+                                          url: server.url,
+                                          headers: server.headers,
+                                          enabled: server.enabled,
+                                          oauth: server.oauth,
+                                        });
                                         try {
-                                          tools = await client.listTools();
-                                        } catch (initialError) {
-                                          if (usedOAuth || !(initialError instanceof McpHttpError && initialError.status === 401)) throw initialError;
+                                          let tools;
+                                          try {
+                                            tools = await client.listTools();
+                                          } catch (initialError) {
+                                            if (
+                                              usedOAuth ||
+                                              !(initialError instanceof
+                                                  McpHttpError &&
+                                                initialError.status === 401)
+                                            ) throw initialError;
+                                            await client.close();
+                                            setMCPStatus((current) => ({
+                                              ...current,
+                                              [server.id]:
+                                                "Opening browser for OAuth…",
+                                            }));
+                                            await connectMCPOAuth({
+                                              serverId: server.id,
+                                              serverUrl: server.url,
+                                              clientId: server.oauthClientId,
+                                              clientSecret:
+                                                server.oauthClientSecret,
+                                              scopes: server.oauthScopes,
+                                            });
+                                            usedOAuth = true;
+                                            client = new McpHttpClient({
+                                              id: server.id,
+                                              name: server.name,
+                                              transport: "http",
+                                              url: server.url,
+                                              headers: server.headers,
+                                              enabled: true,
+                                              oauth: true,
+                                            });
+                                            tools = await client.listTools();
+                                          }
+                                          setChatSettings((current) => ({
+                                            ...current,
+                                            mcpServers: current.mcpServers.map((
+                                              item,
+                                            ) =>
+                                              item.id === server.id
+                                                ? {
+                                                  ...item,
+                                                  toolHints: tools.map((tool) =>
+                                                    tool.name
+                                                  ),
+                                                  verified: true,
+                                                  enabled: true,
+                                                  oauth: usedOAuth,
+                                                }
+                                                : item
+                                            ),
+                                          }));
+                                          setMCPStatus((current) => ({
+                                            ...current,
+                                            [server.id]: `Connected${
+                                              usedOAuth ? " · OAuth" : ""
+                                            } · ${tools.length} tools`,
+                                          }));
+                                        } catch (caught) {
+                                          setMCPStatus((current) => ({
+                                            ...current,
+                                            [server.id]: caught instanceof Error
+                                              ? caught.message
+                                              : String(caught),
+                                          }));
+                                        } finally {
                                           await client.close();
-                                          setMCPStatus((current) => ({ ...current, [server.id]: "Opening browser for OAuth…" }));
-                                          await connectMCPOAuth({ serverId: server.id, serverUrl: server.url, clientId: server.oauthClientId, clientSecret: server.oauthClientSecret, scopes: server.oauthScopes });
-                                          usedOAuth = true;
-                                          client = new McpHttpClient({ id: server.id, name: server.name, transport: "http", url: server.url, headers: server.headers, enabled: true, oauth: true });
-                                          tools = await client.listTools();
                                         }
-                                        setChatSettings((current) => ({
-                                          ...current,
-                                          mcpServers: current.mcpServers.map((
-                                            item,
-                                          ) =>
-                                            item.id === server.id
-                                              ? {
-                                                ...item,
-                                                toolHints: tools.map((tool) =>
-                                                  tool.name
-                                                ),
-                                                verified: true,
-                                                enabled: true,
-                                                oauth: usedOAuth,
-                                              }
-                                              : item
-                                          ),
-                                        }));
-                                        setMCPStatus((current) => ({
-                                          ...current,
-                                          [server.id]: `Connected${usedOAuth ? " · OAuth" : ""} · ${tools.length} tools`,
-                                        }));
-                                      } catch (caught) {
-                                        setMCPStatus((current) => ({
-                                          ...current,
-                                          [server.id]: caught instanceof Error
-                                            ? caught.message
-                                            : String(caught),
-                                        }));
-                                      } finally {
-                                        await client.close();
-                                      }
-                                    }}
-                                  >
-                                    Test connection
-                                  </button>}
+                                      }}
+                                    >
+                                      Test connection
+                                    </button>
+                                  )}
                                 </>
                               )
                               : (
@@ -3512,26 +3909,120 @@ export default function App() {
                             )}
                             {server.transport === "http" && (
                               <div className="vertex-oauth-actions">
-                                <small>{server.oauth ? "OAuth configured · tokens are stored by the desktop app" : "Authenticate this MCP server with OAuth"}</small>
-                                <button type="button" className="settings-choice" onClick={async () => {
-                                  setMCPStatus((current) => ({ ...current, [server.id]: `Opening browser for OAuth${server.oauth ? " re-authorization" : " authentication"}…` }));
-                                  try {
-                                    await connectMCPOAuth({ serverId: server.id, serverUrl: server.url, clientId: server.oauthClientId, clientSecret: server.oauthClientSecret, scopes: server.oauthScopes });
-                                    setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauth: true } : item) }));
-                                    const client = new McpHttpClient({ id: server.id, name: server.name, transport: "http", url: server.url, headers: server.headers, enabled: true, oauth: true });
-                                    const tools = await client.listTools();
-                                    await client.close();
-                                    setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauth: true, verified: true, enabled: true, toolHints: tools.map((tool) => tool.name) } : item) }));
-                                    setMCPStatus((current) => ({ ...current, [server.id]: `Connected · OAuth · ${tools.length} tools` }));
-                                  } catch (caught) {
-                                    setMCPStatus((current) => ({ ...current, [server.id]: caught instanceof Error ? caught.message : String(caught) }));
-                                  }
-                                }}>{server.oauth ? "Re-authorize" : "Authenticate with OAuth"}</button>
-                                {server.oauth && <button type="button" className="settings-choice" onClick={() => {
-                                  void disconnectMCPOAuth(server.id);
-                                  setChatSettings((current) => ({ ...current, mcpServers: current.mcpServers.map((item) => item.id === server.id ? { ...item, oauth: false, verified: false, enabled: false, toolHints: [] } : item) }));
-                                  setMCPStatus((current) => ({ ...current, [server.id]: "OAuth disconnected." }));
-                                }}>Disconnect OAuth</button>}
+                                <small>
+                                  {server.oauth
+                                    ? "OAuth configured · tokens are stored by the desktop app"
+                                    : "Authenticate this MCP server with OAuth"}
+                                </small>
+                                <button
+                                  type="button"
+                                  className="settings-choice"
+                                  onClick={async () => {
+                                    setMCPStatus((current) => ({
+                                      ...current,
+                                      [server.id]: `Opening browser for OAuth${
+                                        server.oauth
+                                          ? " re-authorization"
+                                          : " authentication"
+                                      }…`,
+                                    }));
+                                    try {
+                                      await connectMCPOAuth({
+                                        serverId: server.id,
+                                        serverUrl: server.url,
+                                        clientId: server.oauthClientId,
+                                        clientSecret: server.oauthClientSecret,
+                                        scopes: server.oauthScopes,
+                                      });
+                                      setChatSettings((current) => ({
+                                        ...current,
+                                        mcpServers: current.mcpServers.map((
+                                          item,
+                                        ) =>
+                                          item.id === server.id
+                                            ? { ...item, oauth: true }
+                                            : item
+                                        ),
+                                      }));
+                                      const client = new McpHttpClient({
+                                        id: server.id,
+                                        name: server.name,
+                                        transport: "http",
+                                        url: server.url,
+                                        headers: server.headers,
+                                        enabled: true,
+                                        oauth: true,
+                                      });
+                                      const tools = await client.listTools();
+                                      await client.close();
+                                      setChatSettings((current) => ({
+                                        ...current,
+                                        mcpServers: current.mcpServers.map((
+                                          item,
+                                        ) =>
+                                          item.id === server.id
+                                            ? {
+                                              ...item,
+                                              oauth: true,
+                                              verified: true,
+                                              enabled: true,
+                                              toolHints: tools.map((tool) =>
+                                                tool.name
+                                              ),
+                                            }
+                                            : item
+                                        ),
+                                      }));
+                                      setMCPStatus((current) => ({
+                                        ...current,
+                                        [server.id]:
+                                          `Connected · OAuth · ${tools.length} tools`,
+                                      }));
+                                    } catch (caught) {
+                                      setMCPStatus((current) => ({
+                                        ...current,
+                                        [server.id]: caught instanceof Error
+                                          ? caught.message
+                                          : String(caught),
+                                      }));
+                                    }
+                                  }}
+                                >
+                                  {server.oauth
+                                    ? "Re-authorize"
+                                    : "Authenticate with OAuth"}
+                                </button>
+                                {server.oauth && (
+                                  <button
+                                    type="button"
+                                    className="settings-choice"
+                                    onClick={() => {
+                                      void disconnectMCPOAuth(server.id);
+                                      setChatSettings((current) => ({
+                                        ...current,
+                                        mcpServers: current.mcpServers.map((
+                                          item,
+                                        ) =>
+                                          item.id === server.id
+                                            ? {
+                                              ...item,
+                                              oauth: false,
+                                              verified: false,
+                                              enabled: false,
+                                              toolHints: [],
+                                            }
+                                            : item
+                                        ),
+                                      }));
+                                      setMCPStatus((current) => ({
+                                        ...current,
+                                        [server.id]: "OAuth disconnected.",
+                                      }));
+                                    }}
+                                  >
+                                    Disconnect OAuth
+                                  </button>
+                                )}
                               </div>
                             )}
                             {mcpStatus[server.id] && (
@@ -3634,8 +4125,13 @@ export default function App() {
                               index++;
                               name = `RAG ${index}`;
                             }
-                            const embeddingProvider = configuredChatProviders(chatSettings)
-                              .find((provider) => provider === "gemini" || provider === "vertex" || provider === "openai") as "gemini" | "vertex" | "openai" | undefined;
+                            const embeddingProvider = configuredChatProviders(
+                              chatSettings,
+                            )
+                              .find((provider) =>
+                                provider === "gemini" ||
+                                provider === "vertex" || provider === "openai"
+                              ) as "gemini" | "vertex" | "openai" | undefined;
                             setChatSettings((current) => ({
                               ...current,
                               selectedRagSetting: name,
@@ -3643,7 +4139,8 @@ export default function App() {
                                 ...current.ragSettings,
                                 [name]: {
                                   ...structuredClone(defaultRAGSetting),
-                                  embeddingProvider: embeddingProvider ?? "gemini",
+                                  embeddingProvider: embeddingProvider ??
+                                    "gemini",
                                 },
                               },
                             }));
@@ -3659,24 +4156,32 @@ export default function App() {
                           onClick={async () => {
                             const oldName = chatSettings.selectedRagSetting;
                             if (!oldName) return;
-                            const requested = window.prompt("RAG name", oldName);
+                            const requested = window.prompt(
+                              "RAG name",
+                              oldName,
+                            );
                             const newName = requested?.trim() ?? "";
                             if (!newName || newName === oldName) return;
                             if (chatSettings.ragSettings[newName]) {
-                              setRAGStatus(`A RAG setting named ${newName} already exists.`);
+                              setRAGStatus(
+                                `A RAG setting named ${newName} already exists.`,
+                              );
                               return;
                             }
                             try {
                               await renameRAGIndex(oldName, newName);
                               setChatSettings((current) => {
                                 const ragSettings = Object.fromEntries(
-                                  Object.entries(current.ragSettings).map(([name, setting]) => [
+                                  Object.entries(current.ragSettings).map((
+                                    [name, setting],
+                                  ) => [
                                     name,
                                     {
                                       ...setting,
-                                      sourceRagSettings: setting.sourceRagSettings.map((source) =>
-                                        source === oldName ? newName : source
-                                      ),
+                                      sourceRagSettings: setting
+                                        .sourceRagSettings.map((source) =>
+                                          source === oldName ? newName : source
+                                        ),
                                     },
                                   ]),
                                 );
@@ -3688,15 +4193,20 @@ export default function App() {
                                   ragSettings,
                                   discord: {
                                     ...current.discord,
-                                    ragSetting: current.discord.ragSetting === oldName
-                                      ? newName
-                                      : current.discord.ragSetting,
+                                    ragSetting:
+                                      current.discord.ragSetting === oldName
+                                        ? newName
+                                        : current.discord.ragSetting,
                                   },
                                 };
                               });
                               setRAGStatus(`Renamed ${oldName} to ${newName}.`);
                             } catch (caught) {
-                              setRAGStatus(caught instanceof Error ? caught.message : String(caught));
+                              setRAGStatus(
+                                caught instanceof Error
+                                  ? caught.message
+                                  : String(caught),
+                              );
                             }
                           }}
                         >
@@ -3711,7 +4221,11 @@ export default function App() {
                           onClick={async () => {
                             const name = chatSettings.selectedRagSetting;
                             if (!name) return;
-                            if (!window.confirm(`Delete RAG setting "${name}" and its local index?`)) return;
+                            if (
+                              !window.confirm(
+                                `Delete RAG setting "${name}" and its local index?`,
+                              )
+                            ) return;
                             await deleteRAGIndex(name);
                             setChatSettings((current) => {
                               const ragSettings = { ...current.ragSettings };
@@ -3736,7 +4250,9 @@ export default function App() {
                               className="settings-select"
                               value={selectedRAG.embeddingSource}
                               onChange={(event) => {
-                                const embeddingSource = event.target.value as "ai" | "custom";
+                                const embeddingSource = event.target.value as
+                                  | "ai"
+                                  | "custom";
                                 setChatSettings((current) => ({
                                   ...current,
                                   ragSettings: {
@@ -3747,16 +4263,22 @@ export default function App() {
                                           current.selectedRagSetting!
                                         ],
                                       embeddingSource,
-                                      embeddingProvider: embeddingSource === "custom"
-                                        ? "openai"
-                                        : current.ragSettings[current.selectedRagSetting!].embeddingProvider,
+                                      embeddingProvider:
+                                        embeddingSource === "custom"
+                                          ? "openai"
+                                          : current
+                                            .ragSettings[
+                                              current.selectedRagSetting!
+                                            ].embeddingProvider,
                                     },
                                   },
                                 }));
                               }}
                             >
                               <option value="ai">Use AI settings</option>
-                              <option value="custom">Custom URL and API key</option>
+                              <option value="custom">
+                                Custom URL and API key
+                              </option>
                             </select>
                           </label>
                           {selectedRAG.embeddingSource === "ai" && (
@@ -3765,38 +4287,66 @@ export default function App() {
                               <select
                                 className="settings-select"
                                 value={selectedRAG.embeddingProvider}
-                                disabled={!configuredChatProviders(chatSettings).some((provider) =>
-                                  provider === "gemini" || provider === "vertex" || provider === "openai"
-                                )}
+                                disabled={!configuredChatProviders(chatSettings)
+                                  .some((provider) =>
+                                    provider === "gemini" ||
+                                    provider === "vertex" ||
+                                    provider === "openai"
+                                  )}
                                 onChange={(event) => {
-                                  const embeddingProvider = event.target.value as "gemini" | "vertex" | "openai";
+                                  const embeddingProvider = event.target
+                                    .value as "gemini" | "vertex" | "openai";
                                   setChatSettings((current) => ({
                                     ...current,
                                     ragSettings: {
                                       ...current.ragSettings,
                                       [current.selectedRagSetting!]: {
-                                        ...current.ragSettings[current.selectedRagSetting!],
+                                        ...current
+                                          .ragSettings[
+                                            current.selectedRagSetting!
+                                          ],
                                         embeddingProvider,
-                                        embeddingModel: embeddingProvider === "vertex"
-                                          ? "gemini-embedding-2"
-                                          : current.ragSettings[current.selectedRagSetting!].embeddingModel,
+                                        embeddingModel:
+                                          embeddingProvider === "vertex"
+                                            ? "gemini-embedding-2"
+                                            : current
+                                              .ragSettings[
+                                                current.selectedRagSetting!
+                                              ].embeddingModel,
                                       },
                                     },
                                   }));
                                 }}
                               >
-                                {!configuredChatProviders(chatSettings).some((provider) =>
-                                  provider === "gemini" || provider === "vertex" || provider === "openai"
-                                ) && <option value="">No embedding-capable AI provider configured</option>}
+                                {!configuredChatProviders(chatSettings).some((
+                                  provider,
+                                ) =>
+                                  provider === "gemini" ||
+                                  provider === "vertex" || provider === "openai"
+                                ) && (
+                                  <option value="">
+                                    No embedding-capable AI provider configured
+                                  </option>
+                                )}
                                 {configuredChatProviders(chatSettings)
-                                  .filter((provider) => provider === "gemini" || provider === "vertex" || provider === "openai")
+                                  .filter((provider) =>
+                                    provider === "gemini" ||
+                                    provider === "vertex" ||
+                                    provider === "openai"
+                                  )
                                   .map((provider) => (
                                     <option key={provider} value={provider}>
-                                      {provider === "gemini" ? "Gemini" : provider === "vertex" ? "Vertex AI" : "OpenAI compatible"}
+                                      {provider === "gemini"
+                                        ? "Gemini"
+                                        : provider === "vertex"
+                                        ? "Vertex AI"
+                                        : "OpenAI compatible"}
                                     </option>
                                   ))}
                               </select>
-                              <small className="settings-hint">Credentials and endpoint come from AI settings.</small>
+                              <small className="settings-hint">
+                                Credentials and endpoint come from AI settings.
+                              </small>
                             </label>
                           )}
                           {selectedRAG.embeddingSource === "custom" && (
@@ -4021,7 +4571,8 @@ export default function App() {
                                 </small>
                               </label>
                             )}
-                          {selectedRAG.embeddingSource === "custom" && selectedRAG.embeddingProvider === "vertex" && (
+                          {selectedRAG.embeddingSource === "custom" &&
+                            selectedRAG.embeddingProvider === "vertex" && (
                             <details className="vertex-advanced">
                               <summary>Advanced</summary>
                               <div className="rag-number-grid">
@@ -4282,23 +4833,32 @@ export default function App() {
                                 }));
                               }}
                             />
-                            <small className="settings-hint">Markdown, TXT, and PDF are indexed. Gemini Embedding 2 also indexes supported images, audio, and video directly. This filter limits search results.</small>
+                            <small className="settings-hint">
+                              Markdown, TXT, and PDF are indexed. Gemini
+                              Embedding 2 also indexes supported images, audio,
+                              and video directly. This filter limits search
+                              results.
+                            </small>
                           </label>
                           <div className="rag-sync-row">
                             <button
                               type="button"
                               className="settings-choice"
-                              disabled={ragBusy || !activeProjectPath ||
+                              disabled={ragBusy || !workspacePath ||
                                 (selectedRAG.embeddingProvider === "vertex" &&
                                   !vertexConnected)}
-                              title={!activeProjectPath
+                              title={!workspacePath
                                 ? "An active Workspace is required"
-                                : selectedRAG.embeddingProvider === "vertex" && !vertexConnected
+                                : selectedRAG.embeddingProvider === "vertex" &&
+                                    !vertexConnected
                                 ? "Connect Vertex AI before syncing"
                                 : "Sync the active Workspace index"}
                               onClick={async () => {
                                 const name = chatSettings.selectedRagSetting!;
-                                const setting = resolveRAGSetting(chatSettings, selectedRAG);
+                                const setting = resolveRAGSetting(
+                                  chatSettings,
+                                  selectedRAG,
+                                );
                                 setRAGBusy(true);
                                 setRAGStatus("Syncing…");
                                 setRAGErrors([]);
@@ -4773,6 +5333,40 @@ export default function App() {
                 </div>
                 <button
                   type="button"
+                  onClick={() =>
+                    void listWorkspaceFiles().then((files) =>
+                      setComparisonFiles(files.filter((entry) => !entry.binary))
+                    )}
+                >
+                  Compare file
+                </button>
+                {comparisonFiles.length > 0 && (
+                  <select
+                    defaultValue=""
+                    aria-label="Compare with file"
+                    onChange={(event) => {
+                      const path = event.target.value;
+                      if (!path) return;
+                      void readWorkspaceFile(path).then((file) => {
+                        if (!file) return;
+                        setComparisonTarget({
+                          label: `${fileName || "Current document"} ↔ ${path}`,
+                          before: content,
+                          after: file.content,
+                        });
+                      });
+                    }}
+                  >
+                    <option value="">Choose a file…</option>
+                    {comparisonFiles.map((entry) => (
+                      <option key={entry.path} value={entry.path}>
+                        {entry.path}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="button"
                   className="icon-button"
                   onClick={() => setHistoryOpen(false)}
                   title={tr("common.close")}
@@ -4806,7 +5400,10 @@ export default function App() {
                           className={`history-item ${
                             isSelected ? "selected" : ""
                           }`}
-                          onClick={() => setSelectedHistoryId(checkpoint.id)}
+                          onClick={() => {
+                            setComparisonTarget(null);
+                            setSelectedHistoryId(checkpoint.id);
+                          }}
                         >
                           <div className="history-item-main">
                             <strong>
@@ -4850,6 +5447,7 @@ export default function App() {
                 <HistoryDiffPanel
                   checkpoint={selectedHistoryCheckpoint}
                   previous={selectedHistoryPrevious}
+                  comparisonTarget={comparisonTarget}
                   viewMode={historyDiffViewMode}
                   onViewModeChange={setHistoryDiffViewMode}
                 />

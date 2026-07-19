@@ -57,7 +57,11 @@ func (a *App) doExternalHTTPRequest(request ExternalHTTPRequest, allowHTTP bool)
 	if method == "" {
 		method = http.MethodGet
 	}
-	httpRequest, err := http.NewRequestWithContext(a.ctx, method, parsed.String(), bytes.NewReader(body))
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, method, parsed.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +72,7 @@ func (a *App) doExternalHTTPRequest(request ExternalHTTPRequest, allowHTTP bool)
 	}
 	client := &http.Client{
 		Timeout:   5 * time.Minute,
-		Transport: linkLocalGuardedTransport(),
+		Transport: publicNetworkTransport(),
 		CheckRedirect: func(next *http.Request, via []*http.Request) error {
 			if next.URL.Scheme != "https" && !(allowHTTP && next.URL.Scheme == "http") {
 				return fmt.Errorf("redirect to unsupported URL scheme denied")
@@ -76,15 +80,29 @@ func (a *App) doExternalHTTPRequest(request ExternalHTTPRequest, allowHTTP bool)
 			if len(via) >= 5 {
 				return fmt.Errorf("too many redirects")
 			}
+			if len(via) > 0 && !strings.EqualFold(next.URL.Host, via[len(via)-1].URL.Host) {
+				for key := range next.Header {
+					lower := strings.ToLower(key)
+					if lower != "accept" && lower != "content-type" && lower != "user-agent" {
+						next.Header.Del(key)
+					}
+				}
+			}
 			return nil
 		},
+	}
+	if allowHTTP {
+		// Workflow nodes deliberately support private and loopback services, but
+		// still deny link-local metadata endpoints at dial time.
+		client.Transport = linkLocalGuardedTransport()
 	}
 	response, err := client.Do(httpRequest)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 64*1024*1024))
+	const maxExternalHTTPResponseBytes = 64 * 1024 * 1024
+	responseBody, err := readLimitedHTTPBody(response.Body, maxExternalHTTPResponseBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +116,17 @@ func (a *App) doExternalHTTPRequest(request ExternalHTTPRequest, allowHTTP bool)
 	}, nil
 }
 
+func readLimitedHTTPBody(reader io.Reader, limit int64) ([]byte, error) {
+	content, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(content)) > limit {
+		return nil, fmt.Errorf("HTTP response exceeds %d byte limit", limit)
+	}
+	return content, nil
+}
+
 // linkLocalGuardedTransport denies connections to link-local addresses
 // (169.254.0.0/16, fe80::/10). This closes off cloud instance metadata
 // endpoints such as 169.254.169.254 while still allowing loopback and private
@@ -105,6 +134,20 @@ func (a *App) doExternalHTTPRequest(request ExternalHTTPRequest, allowHTTP bool)
 // The check runs at dial time, so it also covers redirects and any DNS name
 // that resolves to a link-local address.
 func linkLocalGuardedTransport() *http.Transport {
+	return guardedTransport(false, false)
+}
+
+// publicNetworkTransport additionally denies loopback and private ranges.
+// Use it for remote package assets and OAuth discovery endpoints.
+func publicNetworkTransport() *http.Transport {
+	return guardedTransport(true, false)
+}
+
+func oauthNetworkTransport() *http.Transport {
+	return guardedTransport(true, true)
+}
+
+func guardedTransport(publicOnly, allowLoopback bool) *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
@@ -114,8 +157,8 @@ func linkLocalGuardedTransport() *http.Transport {
 			if err != nil {
 				return err
 			}
-			if ip := net.ParseIP(host); ip != nil && (ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
-				return fmt.Errorf("connection to link-local address %s denied", ip)
+			if ip := net.ParseIP(host); ip != nil && (ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || (publicOnly && ((!allowLoopback && ip.IsLoopback()) || (ip.IsPrivate() && !ip.IsLoopback())))) {
+				return fmt.Errorf("connection to non-public address %s denied", ip)
 			}
 			return nil
 		},

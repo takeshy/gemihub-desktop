@@ -2,25 +2,25 @@ import React from "react";
 import ReactDOM from "react-dom";
 import {
   createDirectory,
-  createProjectDirectory,
-  deleteProjectFile,
+  createWorkspaceDirectory,
+  deleteWorkspaceFile,
   deleteFile,
   externalHTTPRequest,
   fileInventory,
   fetchManagedPluginAsset,
-  listProjectFiles,
-  listProjects,
+  listWorkspaceFiles,
+  getWorkspaceState,
   listFileTree,
   readFile,
-  readProjectFile,
+  readWorkspaceFile,
   getDirectoryBase,
   renameFile,
-  renameProjectFile,
+  renameWorkspaceFile,
   searchFiles,
   writeFile,
   writeBinaryFile,
-  writeProjectBinaryFile,
-  writeProjectFile,
+  writeWorkspaceBinaryFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import type { PluginAPI, PluginLLMChatOptions, PluginLLMModel, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
 import { registerPluginWidget } from "../dashboard/widgetRegistry";
@@ -36,6 +36,15 @@ export interface PluginRegistrationCallbacks {
 function safePluginId(pluginId: string): string {
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(pluginId)) throw new Error("Invalid plugin id");
   return pluginId;
+}
+
+function pluginFilePath(path: string, scope: "workspace" | "files"): string {
+  const value = path.trim();
+  const match = /^(workspace|files):\/\//i.exec(value);
+  if (match && match[1].toLowerCase() !== scope) {
+    throw new Error(`${scope} file API cannot access ${match[1].toLowerCase()} paths.`);
+  }
+  return `${scope}://${match ? value.slice(match[0].length) : value}`;
 }
 
 export function createPluginAPI(
@@ -85,15 +94,15 @@ export function createPluginAPI(
         if (!path) return null;
         const normalized = path.replace(/[\\/]+$/, "");
         return {
-          id: `workspace:${normalized}`,
-          name: normalized.split(/[\\/]/).pop() || "Workspace",
+          id: `files:${normalized}`,
+          name: normalized.split(/[\\/]/).pop() || "Files",
           path: normalized,
           createdAt: 0,
         };
       },
       inventory: fileInventory,
       async read(path) {
-        const result = await readFile(path);
+        const result = await readFile(pluginFilePath(path, "files"));
         if (!result) throw new Error(`File not found: ${path}`);
         return result.content;
       },
@@ -104,45 +113,46 @@ export function createPluginAPI(
           const bytes = new Uint8Array(content);
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
-          await writeBinaryFile(path, btoa(binary));
-        } else await writeFile(path, content);
+          await writeBinaryFile(pluginFilePath(path, "files"), btoa(binary));
+        } else await writeFile(pluginFilePath(path, "files"), content);
       },
       async update(path, content) {
         if (content instanceof ArrayBuffer) {
           const bytes = new Uint8Array(content);
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
-          await writeBinaryFile(path, btoa(binary));
-        } else await writeFile(path, content);
+          await writeBinaryFile(pluginFilePath(path, "files"), btoa(binary));
+        } else await writeFile(pluginFilePath(path, "files"), content);
       },
-      createDirectory,
-      rename: renameFile,
-      delete: deleteFile,
+      createDirectory(path) { return createDirectory(pluginFilePath(path, "files")); },
+      rename(oldPath, newPath) { return renameFile(pluginFilePath(oldPath, "files"), pluginFilePath(newPath, "files")); },
+      delete(path) { return deleteFile(pluginFilePath(path, "files")); },
     };
-    const writeProjectContent = async (path: string, content: string | ArrayBuffer) => {
+    const writeWorkspaceContent = async (path: string, content: string | ArrayBuffer) => {
       if (content instanceof ArrayBuffer) {
         const bytes = new Uint8Array(content);
         let binary = "";
         for (const byte of bytes) binary += String.fromCharCode(byte);
-        await writeProjectBinaryFile(path, btoa(binary));
-      } else await writeProjectFile(path, content);
+        await writeWorkspaceBinaryFile(pluginFilePath(path, "workspace"), btoa(binary));
+      } else await writeWorkspaceFile(pluginFilePath(path, "workspace"), content);
     };
-    api.projectFiles = {
+    api.workspaceFiles = {
       async current() {
-        const state = await listProjects();
-        return state.projects.find((project) => project.id === state.activeProjectId) ?? null;
+        const state = await getWorkspaceState();
+        const workspace = state.workspaces.find((item) => item.id === state.activeWorkspaceId);
+        return workspace ? { ...workspace, id: "workspace", name: "Workspace" } : null;
       },
-      inventory: listProjectFiles,
+      inventory: listWorkspaceFiles,
       async read(path) {
-        const result = await readProjectFile(path);
-        if (!result) throw new Error(`Project file not found: ${path}`);
+        const result = await readWorkspaceFile(pluginFilePath(path, "workspace"));
+        if (!result) throw new Error(`Workspace file not found: ${path}`);
         return result.content;
       },
-      create: writeProjectContent,
-      update: writeProjectContent,
-      createDirectory: createProjectDirectory,
-      rename: renameProjectFile,
-      delete: deleteProjectFile,
+      create: writeWorkspaceContent,
+      update: writeWorkspaceContent,
+      createDirectory(path) { return createWorkspaceDirectory(pluginFilePath(path, "workspace")); },
+      rename(oldPath, newPath) { return renameWorkspaceFile(pluginFilePath(oldPath, "workspace"), pluginFilePath(newPath, "workspace")); },
+      delete(path) { return deleteWorkspaceFile(pluginFilePath(path, "workspace")); },
     };
   }
   if (has("network")) api.network = { request: externalHTTPRequest };

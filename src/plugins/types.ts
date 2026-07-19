@@ -1,9 +1,24 @@
 import type React from "react";
 import type ReactDOM from "react-dom";
-import type { DirectoryFileEntry, ExternalHTTPRequest, ExternalHTTPResponse, FileSearchResult, FileTreeNode, Project } from "../lib/wailsBackend";
+import type {
+  DirectoryFileEntry,
+  ExternalHTTPRequest,
+  ExternalHTTPResponse,
+  FileSearchResult,
+  FileTreeNode,
+} from "../lib/wailsBackend";
 import type { PluginWidgetDefinition } from "../dashboard/widgetRegistry";
 
-export type PluginPermission = "files" | "storage" | "network" | "llm" | "drive" | "gemini" | "calendar" | "gmail" | "sheets";
+export type PluginPermission =
+  | "files"
+  | "storage"
+  | "network"
+  | "llm"
+  | "drive"
+  | "gemini"
+  | "calendar"
+  | "gmail"
+  | "sheets";
 
 export interface PluginAsset {
   name: string;
@@ -79,16 +94,29 @@ export interface PluginLLMChatOptions {
   systemPrompt?: string;
 }
 
+export interface PluginFileRoot {
+  id: string;
+  name: string;
+  path: string;
+  createdAt: number;
+}
+
 export interface PluginAPI {
   language: string;
-  registerView(view: Omit<PluginView, "id" | "pluginId"> & { id: string }): void;
-  registerSettingsTab(tab: { name?: string; component: PluginSettingsTab["component"] }): void;
+  registerView(
+    view: Omit<PluginView, "id" | "pluginId"> & { id: string },
+  ): void;
+  registerSettingsTab(
+    tab: { name?: string; component: PluginSettingsTab["component"] },
+  ): void;
   registerSlashCommand(command: Omit<PluginSlashCommand, "pluginId">): void;
   registerWidget(widget: PluginWidgetDefinition): void;
-  onActiveFileChanged(callback: (detail: { path: string | null; name: string | null }) => void): () => void;
+  onActiveFileChanged(
+    callback: (detail: { path: string | null; name: string | null }) => void,
+  ): () => void;
   selectFile(path: string): void;
   files?: {
-    current(): Promise<Project | null>;
+    current(): Promise<PluginFileRoot | null>;
     inventory(): Promise<DirectoryFileEntry[]>;
     read(path: string): Promise<string>;
     search(query: string, limit?: number): Promise<FileSearchResult[]>;
@@ -99,8 +127,8 @@ export interface PluginAPI {
     rename(oldPath: string, newPath: string): Promise<void>;
     delete(path: string): Promise<void>;
   };
-  projectFiles?: {
-    current(): Promise<Project | null>;
+  workspaceFiles?: {
+    current(): Promise<PluginFileRoot | null>;
     inventory(): Promise<DirectoryFileEntry[]>;
     read(path: string): Promise<string>;
     create(path: string, content: string | ArrayBuffer): Promise<void>;
@@ -109,12 +137,22 @@ export interface PluginAPI {
     rename(oldPath: string, newPath: string): Promise<void>;
     delete(path: string): Promise<void>;
   };
-  network?: { request(request: ExternalHTTPRequest): Promise<ExternalHTTPResponse> };
+  network?: {
+    request(request: ExternalHTTPRequest): Promise<ExternalHTTPResponse>;
+  };
   llm?: {
     listModels(): Promise<PluginLLMModel[]>;
-    chat(messages: Array<{ role: string; content: string }>, options?: PluginLLMChatOptions): Promise<string>;
+    chat(
+      messages: Array<{ role: string; content: string }>,
+      options?: PluginLLMChatOptions,
+    ): Promise<string>;
   };
-  gemini?: { chat(messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }): Promise<string> };
+  gemini?: {
+    chat(
+      messages: Array<{ role: string; content: string }>,
+      options?: { model?: string; systemPrompt?: string },
+    ): Promise<string>;
+  };
   storage?: {
     get(key: string): Promise<unknown>;
     set(key: string, value: unknown): Promise<void>;
@@ -129,5 +167,8 @@ export interface PluginInstance {
   id: string;
   manifest: PluginManifest;
   config: PluginConfig;
-  instance: { onload: (api: PluginAPI) => void | Promise<void>; onunload?: () => void | Promise<void> };
+  instance: {
+    onload: (api: PluginAPI) => void | Promise<void>;
+    onunload?: () => void | Promise<void>;
+  };
 }

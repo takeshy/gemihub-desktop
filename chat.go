@@ -48,6 +48,7 @@ type ChatRequest struct {
 	EnableWebSearch bool                 `json:"enableWebSearch,omitempty"`
 	CustomTools     []ChatToolDefinition `json:"customTools,omitempty"`
 	WorkflowSpec    WorkflowSpecContext  `json:"workflowSpecContext,omitempty"`
+	ctx             context.Context
 }
 
 type ChatToolDefinition struct {
@@ -257,6 +258,28 @@ func customToolRegistered(request ChatRequest, name string) bool {
 var vertexResourceSegmentPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 func (a *App) Chat(request ChatRequest) (*ChatResult, error) {
+	baseContext := a.ctx
+	if baseContext == nil {
+		baseContext = context.Background()
+	}
+	ctx, cancel := context.WithCancel(baseContext)
+	request.ctx = ctx
+	if request.StreamID != "" {
+		a.chatCancelMu.Lock()
+		if a.chatCancels == nil {
+			a.chatCancels = make(map[string]context.CancelFunc)
+		}
+		a.chatCancels[request.StreamID] = cancel
+		a.chatCancelMu.Unlock()
+	}
+	defer func() {
+		cancel()
+		if request.StreamID != "" {
+			a.chatCancelMu.Lock()
+			delete(a.chatCancels, request.StreamID)
+			a.chatCancelMu.Unlock()
+		}
+	}()
 	if strings.ToLower(request.Provider) != "cli" && strings.TrimSpace(request.Model) == "" {
 		return nil, fmt.Errorf("model is required")
 	}
@@ -285,6 +308,27 @@ func (a *App) Chat(request ChatRequest) (*ChatResult, error) {
 		}
 	}
 	return result, nil
+}
+
+func (a *App) CancelChat(streamID string) bool {
+	a.chatCancelMu.Lock()
+	cancel := a.chatCancels[streamID]
+	a.chatCancelMu.Unlock()
+	if cancel == nil {
+		return false
+	}
+	cancel()
+	return true
+}
+
+func (request ChatRequest) context(fallback context.Context) context.Context {
+	if request.ctx != nil {
+		return request.ctx
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return context.Background()
 }
 
 func httpJSON(ctx context.Context, method, url string, headers map[string]string, input any, output any) error {
@@ -397,7 +441,7 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 		assistant := openAIMessage{Role: "assistant"}
 		var content strings.Builder
 		var reasoning strings.Builder
-		if err := httpSSE(a.ctx, endpoint, headers, payload, func(data []byte) error {
+		if err := httpSSE(request.context(a.ctx), endpoint, headers, payload, func(data []byte) error {
 			var chunk struct {
 				Usage struct {
 					PromptTokens     int `json:"prompt_tokens"`
@@ -532,7 +576,7 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if err != nil {
 			return nil, nil, err
 		}
-		result, err := a.ReadProjectFile(path)
+		result, err := a.ReadWorkspaceFile(path)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -545,10 +589,10 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if number, ok := args["limit"].(float64); ok {
 			limit = int(number)
 		}
-		result, err := a.SearchProjectFiles(stringArg("query"), limit)
+		result, err := a.SearchWorkspaceFiles(stringArg("query"), limit)
 		return result, nil, err
 	case "list_files":
-		inventory, err := a.ListProjectFiles()
+		inventory, err := a.ListWorkspaceFiles()
 		if len(inventory) > 1000 {
 			inventory = inventory[:1000]
 		}
@@ -558,10 +602,10 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if err != nil {
 			return nil, nil, err
 		}
-		if _, err := a.projectPath(path, true); err != nil {
+		if _, err := a.workspacePath(path, true); err != nil {
 			return nil, nil, err
 		}
-		return nil, &PendingFileAction{Kind: "write", Path: "project://" + filepath.ToSlash(path), Content: stringArg("content"), Mode: stringArg("mode")}, nil
+		return nil, &PendingFileAction{Kind: "write", Path: "workspace://" + filepath.ToSlash(path), Content: stringArg("content"), Mode: stringArg("mode")}, nil
 	case "create_note":
 		name := strings.TrimSpace(strings.ReplaceAll(stringArg("name"), "\\", "/"))
 		folder := strings.Trim(strings.TrimSpace(strings.ReplaceAll(stringArg("folder"), "\\", "/")), "/")
@@ -572,10 +616,10 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if folder != "" {
 			path = folder + "/" + name
 		}
-		if _, err := a.projectPath(path, true); err != nil {
+		if _, err := a.workspacePath(path, true); err != nil {
 			return nil, nil, err
 		}
-		return nil, &PendingFileAction{Kind: "write", Path: "project://" + path, Content: stringArg("content"), Mode: "replace"}, nil
+		return nil, &PendingFileAction{Kind: "write", Path: "workspace://" + path, Content: stringArg("content"), Mode: "replace"}, nil
 	case "propose_file_rename":
 		path, err := aiWorkspacePath(stringArg("path"))
 		if err != nil {
@@ -585,13 +629,13 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if err != nil {
 			return nil, nil, err
 		}
-		if _, err := a.projectPath(path, false); err != nil {
+		if _, err := a.workspacePath(path, false); err != nil {
 			return nil, nil, err
 		}
-		if _, err := a.projectPath(newPath, true); err != nil {
+		if _, err := a.workspacePath(newPath, true); err != nil {
 			return nil, nil, err
 		}
-		return nil, &PendingFileAction{Kind: "rename", Path: "project://" + filepath.ToSlash(path), NewPath: "project://" + filepath.ToSlash(newPath)}, nil
+		return nil, &PendingFileAction{Kind: "rename", Path: "workspace://" + filepath.ToSlash(path), NewPath: "workspace://" + filepath.ToSlash(newPath)}, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown file tool: %s", name)
 	}
@@ -599,11 +643,11 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 
 func aiWorkspacePath(path string) (string, error) {
 	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
-	if strings.HasPrefix(strings.ToLower(path), "workspace://") {
+	if strings.HasPrefix(strings.ToLower(path), "files://") {
 		return "", fmt.Errorf("AI file tools cannot access Files outside the active Workspace")
 	}
-	if strings.HasPrefix(strings.ToLower(path), "project://") {
-		path = path[len("project://"):]
+	if strings.HasPrefix(strings.ToLower(path), "workspace://") {
+		path = path[len("workspace://"):]
 	}
 	if strings.HasPrefix(path, "/") {
 		return "", fmt.Errorf("AI file tools require a Workspace-relative path")
@@ -654,6 +698,8 @@ func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any,
 		return value.Result, nil, nil
 	case <-time.After(10 * time.Minute):
 		return nil, nil, fmt.Errorf("custom tool %s timed out", name)
+	case <-request.context(a.ctx).Done():
+		return nil, nil, request.context(a.ctx).Err()
 	}
 }
 
@@ -745,10 +791,14 @@ func (a *App) ApplyPendingFileAction(action PendingFileAction) error {
 			if err != nil {
 				return err
 			}
+			existingContent := ""
+			if existing != nil {
+				existingContent = existing.Content
+			}
 			if action.Mode == "append" {
-				content = joinFileContent(existing.Content, content)
+				content = joinFileContent(existingContent, content)
 			} else {
-				content = joinFileContent(content, existing.Content)
+				content = joinFileContent(content, existingContent)
 			}
 		}
 		return a.WriteFile(action.Path, content)
@@ -763,10 +813,11 @@ func (a *App) chatGemini(request ChatRequest) (*ChatResult, error) {
 		endpoint = "https://generativelanguage.googleapis.com/v1beta"
 	}
 	url := fmt.Sprintf("%s/models/%s:generateContent", endpoint, request.Model)
+	headers := map[string]string{}
 	if request.APIKey != "" {
-		url += "?key=" + request.APIKey
+		headers["x-goog-api-key"] = request.APIKey
 	}
-	return a.chatGeminiCompatible(request, url, nil, "Gemini")
+	return a.chatGeminiCompatible(request, url, headers, "Gemini")
 }
 
 func requestFileToolMode(request ChatRequest) string {
@@ -897,7 +948,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 		}
 		parts := []map[string]any{}
 		var roundUsage *ChatUsage
-		if err := httpSSE(a.ctx, streamEndpoint, headers, payload, func(data []byte) error {
+		if err := httpSSE(request.context(a.ctx), streamEndpoint, headers, payload, func(data []byte) error {
 			var chunk struct {
 				Usage struct {
 					PromptTokenCount        int `json:"promptTokenCount"`
@@ -1105,7 +1156,7 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 		calls := map[int]*toolUse{}
 		thoughtBlocks := map[int]*thoughtBlock{}
 		var text, thinking strings.Builder
-		if err := httpSSE(a.ctx, endpoint, headers, payload, func(data []byte) error {
+		if err := httpSSE(request.context(a.ctx), endpoint, headers, payload, func(data []byte) error {
 			var event struct {
 				Type         string `json:"type"`
 				Index        int    `json:"index"`

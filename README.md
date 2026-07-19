@@ -58,7 +58,7 @@ Your workspace directory is the source of truth. GemiHub includes version histor
 
 ### Open and extensible
 
-Use OpenAI-compatible APIs, Gemini, Vertex AI, Anthropic, or local CLIs. Extend the workspace through Agent Skills, HTTP/stdio MCP, MCP Apps, declarative workflows, and permission-aware plugins.
+Use OpenAI-compatible APIs, Gemini, Vertex AI, Anthropic, or local CLIs. Extend the workspace through Agent Skills, HTTP/stdio MCP, MCP Apps, declarative workflows, and plugins. Official and locally developed plugins are recommended, while other third-party plugins are marked not recommended.
 
 ## What is already built
 

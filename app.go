@@ -17,27 +17,29 @@ import (
 )
 
 type App struct {
-	ctx              context.Context
-	directoryMu      sync.RWMutex
-	directoryBase    string
-	projectMu        sync.Mutex
-	projectConfigDir string
-	projectState     ProjectState
-	cliMu            sync.Mutex
-	cliCmd           *exec.Cmd
-	ragMu            sync.Mutex
-	ragCancelMu      sync.Mutex
-	ragCancelled     map[string]bool
-	discordMu        sync.Mutex
-	discord          *discordBot
-	chatToolMu       sync.Mutex
-	chatToolCalls    map[string]chan chatToolResponse
-	chatLimitMu      sync.Mutex
-	chatLimitCalls   map[string]chan int
-	mcpStdioMu       sync.Mutex
-	mcpStdio         map[string]*mcpStdioSession
-	mcpOAuthMu       sync.Mutex
-	pluginMu         sync.Mutex
+	ctx                context.Context
+	directoryMu        sync.RWMutex
+	directoryBase      string
+	workspaceMu        sync.Mutex
+	workspaceConfigDir string
+	workspaceState     WorkspaceState
+	cliMu              sync.Mutex
+	cliCmd             *exec.Cmd
+	ragMu              sync.Mutex
+	ragCancelMu        sync.Mutex
+	ragCancelled       map[string]bool
+	discordMu          sync.Mutex
+	discord            *discordBot
+	chatToolMu         sync.Mutex
+	chatToolCalls      map[string]chan chatToolResponse
+	chatLimitMu        sync.Mutex
+	chatLimitCalls     map[string]chan int
+	chatCancelMu       sync.Mutex
+	chatCancels        map[string]context.CancelFunc
+	mcpStdioMu         sync.Mutex
+	mcpStdio           map[string]*mcpStdioSession
+	mcpOAuthMu         sync.Mutex
+	pluginMu           sync.Mutex
 }
 
 type LocalFileResult struct {
@@ -53,7 +55,7 @@ type LocalPathInfo struct {
 }
 
 func NewApp() *App {
-	return &App{chatToolCalls: make(map[string]chan chatToolResponse), chatLimitCalls: make(map[string]chan int), mcpStdio: make(map[string]*mcpStdioSession), ragCancelled: make(map[string]bool)}
+	return &App{chatToolCalls: make(map[string]chan chatToolResponse), chatLimitCalls: make(map[string]chan int), chatCancels: make(map[string]context.CancelFunc), mcpStdio: make(map[string]*mcpStdioSession), ragCancelled: make(map[string]bool)}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -64,8 +66,8 @@ func (a *App) startup(ctx context.Context) {
 			fmt.Println("Could not set startup directory:", err)
 		}
 	}
-	if err := a.initializeProjects(); err != nil {
-		fmt.Println("Could not initialize projects:", err)
+	if err := a.initializeWorkspaces(); err != nil {
+		fmt.Println("Could not initialize Workspace:", err)
 	}
 }
 
@@ -333,7 +335,7 @@ func (a *App) OpenLocalFileDefault(path string) error {
 	var source string
 	var err error
 	if filepath.IsAbs(strings.TrimSpace(path)) {
-		source = filepath.Clean(path)
+		source = strings.TrimSpace(path)
 	} else {
 		source, err = a.directoryPath(path, false)
 		if err != nil {

@@ -103,14 +103,15 @@ type discordBot struct {
 	ready    chan struct{}
 	readyOne sync.Once
 
-	mu        sync.RWMutex
-	conn      *websocket.Conn
-	connected bool
-	username  string
-	botUserID string
-	lastError string
-	lastEvent string
-	sequence  *int
+	mu                  sync.RWMutex
+	conn                *websocket.Conn
+	connected           bool
+	username            string
+	botUserID           string
+	lastError           string
+	lastEvent           string
+	sequence            *int
+	connectedGeneration uint64
 
 	writeMu       sync.Mutex
 	conversationM sync.Mutex
@@ -225,22 +226,34 @@ func verifyDiscordToken(token string) (string, string, error) {
 }
 
 func (bot *discordBot) run() {
-	for attempt := 0; attempt < 6; attempt++ {
+	attempt := 0
+	for {
 		select {
 		case <-bot.done:
 			return
 		default:
 		}
+		bot.mu.RLock()
+		generation := bot.connectedGeneration
+		bot.mu.RUnlock()
 		if err := bot.connect(); err != nil {
 			bot.mu.Lock()
 			bot.lastError = err.Error()
 			bot.connected = false
 			bot.mu.Unlock()
 		}
+		bot.mu.RLock()
+		connectedSuccessfully := bot.connectedGeneration > generation
+		bot.mu.RUnlock()
+		if connectedSuccessfully {
+			attempt = 0
+		} else {
+			attempt++
+		}
 		select {
 		case <-bot.done:
 			return
-		case <-time.After(time.Duration(min(30, 1<<attempt)) * time.Second):
+		case <-time.After(time.Duration(min(30, 1<<min(attempt, 5))) * time.Second):
 		}
 	}
 }
@@ -284,7 +297,9 @@ func (bot *discordBot) connect() error {
 			continue
 		}
 		if payload.S != nil {
+			bot.mu.Lock()
 			bot.sequence = payload.S
+			bot.mu.Unlock()
 		}
 		switch payload.Op {
 		case 10:
@@ -298,7 +313,10 @@ func (bot *discordBot) connect() error {
 				return err
 			}
 		case 1:
-			_ = bot.writeGateway(map[string]any{"op": 1, "d": bot.sequence})
+			bot.mu.RLock()
+			sequence := bot.sequence
+			bot.mu.RUnlock()
+			_ = bot.writeGateway(map[string]any{"op": 1, "d": sequence})
 		case 7:
 			return fmt.Errorf("Discord requested reconnect")
 		case 9:
@@ -318,6 +336,7 @@ func (bot *discordBot) connect() error {
 				bot.username = ready.User.Username
 				bot.lastError = ""
 				bot.lastEvent = "Gateway connected; waiting for a mention or direct message."
+				bot.connectedGeneration++
 				bot.mu.Unlock()
 				bot.readyOne.Do(func() { close(bot.ready) })
 			} else if payload.T == "MESSAGE_CREATE" {
@@ -351,7 +370,10 @@ func (bot *discordBot) heartbeat(interval time.Duration, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			_ = bot.writeGateway(map[string]any{"op": 1, "d": bot.sequence})
+			bot.mu.RLock()
+			sequence := bot.sequence
+			bot.mu.RUnlock()
+			_ = bot.writeGateway(map[string]any{"op": 1, "d": sequence})
 		}
 	}
 }

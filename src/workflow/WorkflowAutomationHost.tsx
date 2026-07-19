@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listProjectFiles, readProjectFile as readFile, type DirectoryFileEntry } from "../lib/wailsBackend";
+import { listWorkspaceFiles, readWorkspaceFile as readFile, type DirectoryFileEntry } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
 import { executeWorkflow } from "./executor";
 import { appendWorkflowHistory } from "./history";
@@ -71,7 +71,7 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
     if (!directoryBase || automation.triggers.length === 0) { snapshotRef.current = null; return; }
     let cancelled = false;
     const scan = async () => {
-      const files = await listProjectFiles();
+      const files = await listWorkspaceFiles();
       if (cancelled) return;
       const next = new Map(files.map((file) => [file.path, file]));
       const previous = snapshotRef.current;

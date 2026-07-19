@@ -538,7 +538,7 @@ func (a *App) RenameRAGIndex(oldName, newName string) error {
 }
 
 func (a *App) ragFiles(setting RAGSetting) ([]ragFile, error) {
-	base := a.GetActiveProjectPath()
+	base := a.GetWorkspacePath()
 	if base == "" {
 		return []ragFile{}, nil
 	}
@@ -632,8 +632,8 @@ func extractRAGPDFText(path string) (string, error) {
 	return strings.Join(texts, "\n\n"), nil
 }
 
-func (a *App) ExtractProjectPDFText(path, pageLabel string) (string, error) {
-	target, err := a.projectPath(path, false)
+func (a *App) ExtractWorkspacePDFText(path, pageLabel string) (string, error) {
+	target, err := a.workspacePath(path, false)
 	if err != nil {
 		return "", err
 	}
@@ -656,8 +656,8 @@ func (a *App) ExtractProjectPDFText(path, pageLabel string) (string, error) {
 	return strings.Join(texts, "\n\n"), nil
 }
 
-func (a *App) ReadProjectPDFPages(path, pageLabel string) (*LocalFileResult, error) {
-	target, err := a.projectPath(path, false)
+func (a *App) ReadWorkspacePDFPages(path, pageLabel string) (*LocalFileResult, error) {
+	target, err := a.workspacePath(path, false)
 	if err != nil {
 		return nil, err
 	}

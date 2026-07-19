@@ -47,10 +47,10 @@ func (a *App) SaveHTMLExport(sourcePath, htmlContent string) (string, error) {
 	baseURL := html.EscapeString(localDirectoryURL(filepath.Dir(source)))
 	htmlContent = strings.ReplaceAll(htmlContent, htmlExportBaseMarker, baseURL)
 	output := exportHTMLName(sourcePath)
-	if err := a.WriteFile("workspace://"+output, htmlContent); err != nil {
+	if err := a.WriteFile("files://"+output, htmlContent); err != nil {
 		return "", err
 	}
-	return "workspace://" + output, nil
+	return "files://" + output, nil
 }
 
 // OpenHTMLInBrowser opens a local HTML document in the user's default browser.

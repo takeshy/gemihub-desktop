@@ -3,20 +3,25 @@ import {
   chat,
   type ChatRequest,
   type ChatToolDefinition,
+  duplicateFile,
   executeWorkflowShell,
   type FileTreeNode,
-  listProjectTree,
-  listProjectFiles,
+  listWorkspaceFiles,
+  listWorkspaceTree,
   onChatStream,
   onChatToolRequest,
-  readProjectFile,
+  readWorkspaceFile,
+  renameFile,
   resolveChatTool,
+  saveHTMLExport,
   searchRAG,
   trashFile,
   workflowHTTPRequest,
-  writeProjectBinaryFile,
-  writeProjectFile,
+  writeWorkspaceBinaryFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
+import { encryptWorkspaceFile } from "../lib/fileEncryption";
+import { renderMarkdownToPrintableHTML } from "../lib/printableHtml";
 import yaml from "js-yaml";
 import {
   type ChatProvider,
@@ -759,10 +764,10 @@ async function executeNode(
       let path = property(node, "path", variables);
       if (!path) throw new Error("note-read node is missing path.");
       if (!path.endsWith(".md") && !path.endsWith(".encrypted")) path += ".md";
-      let result = await readProjectFile(path);
+      let result = await readWorkspaceFile(path);
       if (!result && path.endsWith(".md")) {
         path += ".encrypted";
-        result = await readProjectFile(path);
+        result = await readWorkspaceFile(path);
       }
       if (!result) throw new Error(`File not found: ${path}`);
       save(variables, node.properties.saveTo, result.content);
@@ -775,7 +780,7 @@ async function executeNode(
       path = sanitizeWorkflowNotePath(path);
       const content = property(node, "content", variables);
       const mode = node.properties.mode ?? "overwrite";
-      const existing = await readProjectFile(path).catch(() => null);
+      const existing = await readWorkspaceFile(path).catch(() => null);
       if (mode === "create" && existing) {
         return { output: { path, skipped: true } };
       }
@@ -816,7 +821,7 @@ async function executeNode(
         }
         if (!result?.confirmed) throw new Error("File write cancelled.");
       }
-      await writeProjectFile(path, finalContent);
+      await writeWorkspaceFile(path, finalContent);
       return { output: { path, mode } };
     }
     case "note-search": {
@@ -824,7 +829,7 @@ async function executeNode(
       const query = property(node, "query", variables);
       if (!query) throw new Error("note-search node is missing query.");
       const limit = Number(node.properties.limit) || 10;
-      const candidates = (await listProjectFiles()).filter((item) =>
+      const candidates = (await listWorkspaceFiles()).filter((item) =>
         /\.md$/i.test(item.path)
       );
       const result: Array<
@@ -833,7 +838,7 @@ async function executeNode(
       for (const item of candidates) {
         if (result.length >= limit) break;
         if (boolProperty(node, "searchContent", false)) {
-          const content = (await readProjectFile(item.path))?.content || "",
+          const content = (await readWorkspaceFile(item.path))?.content || "",
             index = content.toLowerCase().indexOf(query.toLowerCase());
           if (index >= 0) {
             const start = Math.max(0, index - 50),
@@ -877,7 +882,7 @@ async function executeNode(
       ) => tag.trim()).filter(Boolean).map((tag) =>
         tag.startsWith("#") ? tag : `#${tag}`
       );
-      const candidates = (await listProjectFiles()).filter((item) => {
+      const candidates = (await listWorkspaceFiles()).filter((item) => {
         if (!item.path.toLowerCase().endsWith(".md")) return false;
         if (
           createdWithin !== null &&
@@ -894,7 +899,7 @@ async function executeNode(
         candidates.map(async (item) => ({
           item,
           tags: tagsRequired.length
-            ? markdownTags((await readProjectFile(item.path))?.content || "")
+            ? markdownTags((await readWorkspaceFile(item.path))?.content || "")
             : [],
         })),
       );
@@ -936,7 +941,9 @@ async function executeNode(
       const parent = property(node, "folder", variables) ||
         property(node, "path", variables);
       const normalizedParent = parent.replace(/^\/+|\/+$/g, "");
-      const sorted = collectFolderPaths(await listProjectTree()).filter((folder) =>
+      const sorted = collectFolderPaths(await listWorkspaceTree()).filter((
+        folder,
+      ) =>
         !normalizedParent || folder === normalizedParent ||
         folder.startsWith(`${normalizedParent}/`)
       ).sort();
@@ -1061,6 +1068,96 @@ async function executeNode(
       }
       return { output: response };
     }
+    case "gemihub-command": {
+      const command = property(node, "command", variables).toLowerCase();
+      const path = property(node, "path", variables).replace(
+        /^workspace:\/\//i,
+        "",
+      );
+      if (!command) throw new Error("gemihub-command node is missing command.");
+      if (!path) throw new Error("gemihub-command node is missing path.");
+      const scopedPath = `workspace://${path}`;
+      let output: unknown;
+      if (command === "duplicate") {
+        output = await duplicateFile(scopedPath);
+        const customName = property(node, "text", variables).trim();
+        if (customName) {
+          const duplicatedPath = String(output);
+          await renameFile(
+            /^(?:workspace|files):\/\//i.test(duplicatedPath)
+              ? duplicatedPath
+              : `workspace://${duplicatedPath}`,
+            `workspace://${customName}`,
+          );
+          output = customName;
+        }
+      } else if (command === "rename") {
+        const text = property(node, "text", variables).trim();
+        if (!text) throw new Error("rename requires text.");
+        const target = text;
+        await renameFile(scopedPath, `workspace://${target}`);
+        output = target;
+      } else if (command === "encrypt") {
+        if (services.interactionMode === "headless") {
+          throw new Error("encrypt requires an interactive password prompt.");
+        }
+        const result = await requestWorkflowPrompt({
+          kind: "value",
+          title: "Encrypt file",
+          message: "Enter the encryption password",
+        });
+        const password = typeof result === "string" ? result : "";
+        if (!password) throw new Error("Encryption was cancelled.");
+        let metadata: Record<string, string> = {};
+        const rawMetadata = property(node, "metadata", variables).trim();
+        if (rawMetadata) {
+          const parsed = JSON.parse(rawMetadata) as unknown;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("metadata must be a JSON object.");
+          }
+          for (const [key, value] of Object.entries(parsed)) {
+            const normalizedKey = key.trim();
+            if (typeof value !== "string") {
+              throw new Error("metadata values must be strings.");
+            }
+            if (
+              normalizedKey &&
+              !["description", "__proto__", "prototype", "constructor"]
+                .includes(normalizedKey)
+            ) metadata[normalizedKey] = value;
+          }
+        }
+        const description = property(node, "text", variables).trim();
+        output = await encryptWorkspaceFile(
+          scopedPath,
+          password,
+          metadata,
+          description,
+        );
+      } else if (command === "convert-to-html") {
+        const source = await readWorkspaceFile(path);
+        if (!source) throw new Error(`File not found: ${path}`);
+        output = await saveHTMLExport(
+          scopedPath,
+          renderMarkdownToPrintableHTML(
+            source.content,
+            source.fileName || path,
+          ),
+        );
+      } else if (command === "convert-to-pdf") {
+        throw new Error(
+          "PDF conversion is not available in GeminiHub Desktop.",
+        );
+      } else if (command === "publish" || command === "unpublish") {
+        throw new Error(
+          `${command} is unavailable for local Desktop workspaces.`,
+        );
+      } else {
+        throw new Error(`Unsupported gemihub-command: ${command}`);
+      }
+      save(variables, node.properties.saveTo, output);
+      return { output };
+    }
     case "command": {
       const requestedModel = node.properties.model ||
         services.chatSettings.model;
@@ -1116,7 +1213,7 @@ async function executeNode(
             content = String(variable);
           }
         } else {
-          const file = await readProjectFile(name);
+          const file = await readWorkspaceFile(name);
           const dataUrl = file?.content.match(
             /^data:([^;,]+);base64,([\s\S]+)$/,
           );
@@ -1137,6 +1234,7 @@ async function executeNode(
       const ragName = node.properties.ragSetting === undefined
         ? settings.selectedRagSetting ?? undefined
         : node.properties.ragSetting;
+      const webSearchEnabled = ragName === "__websearch__";
       if (ragName && ragName !== "__none__" && ragName !== "__websearch__") {
         const rag = settings.ragSettings[ragName];
         if (!rag) throw new Error(`RAG setting not found: ${ragName}`);
@@ -1152,7 +1250,7 @@ async function executeNode(
         }`;
       }
       services.runtime ??= { cliSessionIds: {} };
-      const mcpNames = imageGenerationModel
+      const mcpNames = imageGenerationModel || webSearchEnabled
         ? []
         : property(node, "mcpServers", variables).split(",").map((value) =>
           value.trim()
@@ -1197,16 +1295,21 @@ async function executeNode(
         mcpBindings.map((binding) => [binding.name, binding]),
       );
       const javascriptTool: ChatToolDefinition | null =
-        imageGenerationModel || settings.provider === "cli" ? null : {
-          name: "execute_javascript",
-          description:
-            "Execute JavaScript in an isolated sandbox with no DOM, network, or storage access. Use return to provide a value; optional input is available as the input variable.",
-          parameters: {
-            type: "object",
-            properties: { code: { type: "string" }, input: { type: "string" } },
-            required: ["code"],
-          },
-        };
+        imageGenerationModel || webSearchEnabled || settings.provider === "cli"
+          ? null
+          : {
+            name: "execute_javascript",
+            description:
+              "Execute JavaScript in an isolated sandbox with no DOM, network, or storage access. Use return to provide a value; optional input is available as the input variable.",
+            parameters: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                input: { type: "string" },
+              },
+              required: ["code"],
+            },
+          };
       const customTools = [
         ...mcpBindings.map(({ name, description, parameters }) => ({
           name,
@@ -1298,21 +1401,26 @@ async function executeNode(
             : requestedModel || settings.model,
           vertexProjectId: settings.vertexProjectId,
           vertexLocation: settings.vertexLocation,
-          systemPrompt: settings.systemPrompt,
+          systemPrompt: property(
+            node,
+            "systemPrompt",
+            variables,
+            settings.systemPrompt,
+          ),
           messages: [{
             role: "user",
             content: commandPrompt,
             attachments: chatAttachments.length ? chatAttachments : undefined,
           }],
-          enableFileTools: fileMode !== "none",
-          fileToolMode: fileMode,
+          enableFileTools: webSearchEnabled ? false : fileMode !== "none",
+          fileToolMode: webSearchEnabled ? "none" : fileMode,
           cliType: settings.cliType,
           cliPath: settings.cliPaths[settings.cliType],
           cliSessionId: services.runtime.cliSessionIds[settings.cliType] || "",
           streamId,
           customTools,
           enableThinking: boolProperty(node, "enableThinking", true),
-          enableWebSearch: ragName === "__websearch__",
+          enableWebSearch: webSearchEnabled,
         };
         result = await runWorkflowChatWithAutoApply(
           chatRequest,
@@ -1529,7 +1637,7 @@ async function executeNode(
               "confirmed" in confirmed && confirmed.confirmed))
         ) throw new Error("File deletion cancelled.");
       }
-      await trashFile(`project://${path}`);
+      await trashFile(`workspace://${path}`);
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
       return { output: { path, trashed: true } };
     }
@@ -1567,7 +1675,7 @@ async function executeNode(
           extensions: ["md", "encrypted"],
         }) as string | null;
       if (!path) throw new Error("File selection cancelled.");
-      const file = await readProjectFile(path);
+      const file = await readWorkspaceFile(path);
       if (!file) throw new Error(`File not found: ${path}`);
       save(variables, node.properties.saveTo, file.content);
       if (node.properties.saveFileTo) {
@@ -1682,7 +1790,7 @@ async function executeNode(
         save(variables, node.properties.savePathTo, path);
         return { output: value };
       }
-      const file = await readProjectFile(path);
+      const file = await readWorkspaceFile(path);
       if (!file) throw new Error(`File not found: ${path}`);
       const dataMatch = file.content.match(/^data:([^;,]+)?;base64,(.*)$/s);
       const value = {
@@ -1741,8 +1849,8 @@ async function executeNode(
         ) throw new Error("File save cancelled.");
       }
       if (value.contentType === "binary") {
-        await writeProjectBinaryFile(path, value.data || "");
-      } else await writeProjectFile(path, value.data || "");
+        await writeWorkspaceBinaryFile(path, value.data || "");
+      } else await writeWorkspaceFile(path, value.data || "");
       save(variables, node.properties.savePathTo, path);
       return { output: path };
     }

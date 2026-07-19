@@ -45,10 +45,22 @@ export interface DirectoryFileEntry {
   md5: string;
   binary: boolean;
 }
-export interface FileHistoryEntry { id: string; path: string; timestamp: number; size: number; binary: boolean }
-export interface TrashEntry { id: string; originalPath: string; name: string; deletedAt: number; scope: "workspace" | "project" }
+export interface FileHistoryEntry {
+  id: string;
+  path: string;
+  timestamp: number;
+  size: number;
+  binary: boolean;
+}
+export interface TrashEntry {
+  id: string;
+  originalPath: string;
+  name: string;
+  deletedAt: number;
+  scope: "workspace" | "files";
+}
 
-export interface Project {
+export interface Workspace {
   id: string;
   name: string;
   path: string;
@@ -56,9 +68,9 @@ export interface Project {
   session?: boolean;
 }
 
-export interface ProjectState {
-  activeProjectId: string;
-  projects: Project[];
+export interface WorkspaceState {
+  activeWorkspaceId: string;
+  workspaces: Workspace[];
 }
 
 export interface WorkspaceDirectoryMoveResult {
@@ -380,9 +392,9 @@ export interface MCPStdioStartRequest {
 }
 
 interface WailsAppApi {
-  ListProjects: () => Promise<ProjectState>;
-  SetProjectDirectory: (path: string) => Promise<ProjectState>;
-  SelectProjectDirectory: () => Promise<string>;
+  GetWorkspaceState: () => Promise<WorkspaceState>;
+  SetWorkspaceDirectory: (path: string) => Promise<WorkspaceState>;
+  SelectWorkspaceDirectory: () => Promise<string>;
   OpenDeveloperTools: () => Promise<boolean>;
   SelectLocalFile: () => Promise<LocalFileResult | null>;
   SelectLocalFilePath: () => Promise<string>;
@@ -391,7 +403,7 @@ interface WailsAppApi {
   SetDirectoryBase: (path: string) => Promise<string>;
   GetDirectoryBase: () => Promise<string>;
   ListFileTree: () => Promise<FileTreeNode[]>;
-  ListProjectTree: () => Promise<FileTreeNode[]>;
+  ListWorkspaceTree: () => Promise<FileTreeNode[]>;
   OpenContainingFolder: (path: string) => Promise<void>;
   MoveDirectoryIntoWorkspace: (
     path: string,
@@ -404,18 +416,21 @@ interface WailsAppApi {
     destinationName: string,
     leaveLink: boolean,
   ) => Promise<WorkspaceDirectoryMoveResult>;
-  ListProjectFiles: () => Promise<DirectoryFileEntry[]>;
-  ReadProjectFile: (path: string) => Promise<LocalFileResult>;
-  WriteProjectFile: (path: string, content: string) => Promise<void>;
-  WriteProjectBinaryFile: (path: string, contentBase64: string) => Promise<void>;
-  CreateProjectDirectory: (path: string) => Promise<void>;
-  RenameProjectFile: (oldPath: string, newPath: string) => Promise<void>;
-  DeleteProjectFile: (path: string) => Promise<void>;
+  ListWorkspaceFiles: () => Promise<DirectoryFileEntry[]>;
+  ReadWorkspaceFile: (path: string) => Promise<LocalFileResult>;
+  WriteWorkspaceFile: (path: string, content: string) => Promise<void>;
+  WriteWorkspaceBinaryFile: (
+    path: string,
+    contentBase64: string,
+  ) => Promise<void>;
+  CreateWorkspaceDirectory: (path: string) => Promise<void>;
+  RenameWorkspaceFile: (oldPath: string, newPath: string) => Promise<void>;
+  DeleteWorkspaceFile: (path: string) => Promise<void>;
   ReadFile: (path: string) => Promise<LocalFileResult>;
   OpenLocalFileDefault: (path: string) => Promise<void>;
   WriteFile: (path: string, content: string) => Promise<void>;
-  ReadProjectStateFile: (name: string) => Promise<string>;
-  WriteProjectStateFile: (name: string, content: string) => Promise<void>;
+  ReadWorkspaceStateFile: (name: string) => Promise<string>;
+  WriteWorkspaceStateFile: (name: string, content: string) => Promise<void>;
   SaveHTMLExport: (sourcePath: string, htmlContent: string) => Promise<string>;
   OpenHTMLInBrowser: (path: string) => Promise<void>;
   CreateDirectory: (path: string) => Promise<void>;
@@ -428,7 +443,7 @@ interface WailsAppApi {
   ListFileHistory: (path: string) => Promise<FileHistoryEntry[]>;
   RestoreFileHistory: (path: string, id: string) => Promise<void>;
   SearchFiles: (query: string, limit: number) => Promise<FileSearchResult[]>;
-  SearchProjectFiles: (
+  SearchWorkspaceFiles: (
     query: string,
     limit: number,
   ) => Promise<FileSearchResult[]>;
@@ -441,8 +456,11 @@ interface WailsAppApi {
   ) => Promise<RAGSyncResult>;
   CancelRAGSync: (name: string) => Promise<boolean>;
   GetRAGIndexedFiles: (name: string) => Promise<RAGIndexedFile[]>;
-  ExtractProjectPDFText: (path: string, pageLabel: string) => Promise<string>;
-  ReadProjectPDFPages: (path: string, pageLabel: string) => Promise<LocalFileResult>;
+  ExtractWorkspacePDFText: (path: string, pageLabel: string) => Promise<string>;
+  ReadWorkspacePDFPages: (
+    path: string,
+    pageLabel: string,
+  ) => Promise<LocalFileResult>;
   SearchRAG: (
     request: { name: string; query: string; setting: RAGSetting },
   ) => Promise<RAGSearchResult[]>;
@@ -466,11 +484,15 @@ interface WailsAppApi {
   GetVertexOAuthStatus: () => Promise<VertexOAuthStatus>;
   DisconnectVertexOAuth: () => Promise<void>;
   ConnectMCPOAuth: (request: MCPOAuthConnectRequest) => Promise<MCPOAuthStatus>;
-  GetMCPOAuthStatus: (serverID: string, serverURL: string) => Promise<MCPOAuthStatus>;
+  GetMCPOAuthStatus: (
+    serverID: string,
+    serverURL: string,
+  ) => Promise<MCPOAuthStatus>;
   MCPOAuthAccessToken: (serverID: string, serverURL: string) => Promise<string>;
   DisconnectMCPOAuth: (serverID: string) => Promise<void>;
   WriteBinaryFile: (path: string, contentBase64: string) => Promise<void>;
   Chat: (request: ChatRequest) => Promise<ChatResult>;
+  CancelChat: (streamID: string) => Promise<boolean>;
   SelectCLIPath: () => Promise<string>;
   VerifyCLI: (kind: string, customPath: string) => Promise<CLIVerifyResult>;
   StopCLI: () => Promise<boolean>;
@@ -480,13 +502,20 @@ interface WailsAppApi {
     resultJSON: string,
     errorMessage: string,
   ) => Promise<boolean>;
-  ResolveChatFunctionLimit: (requestID: string, extension: number) => Promise<boolean>;
+  ResolveChatFunctionLimit: (
+    requestID: string,
+    extension: number,
+  ) => Promise<boolean>;
   VerifyDiscordToken: (token: string) => Promise<DiscordStatus>;
   StartDiscordBot: (request: DiscordBotRequest) => Promise<DiscordStatus>;
   StopDiscordBot: () => Promise<boolean>;
   GetDiscordStatus: () => Promise<DiscordStatus>;
   ListPluginIDs: () => Promise<string[]>;
-  InstallPluginFiles: (pluginID: string, files: Record<string, string>, installJSON: string) => Promise<void>;
+  InstallPluginFiles: (
+    pluginID: string,
+    files: Record<string, string>,
+    installJSON: string,
+  ) => Promise<void>;
   UninstallPlugin: (pluginID: string) => Promise<void>;
   FetchPluginAsset: (pluginID: string, name: string) => Promise<string>;
   ExternalHTTPRequest: (
@@ -575,8 +604,12 @@ export async function resolveChatTool(
   );
 }
 
-export async function resolveChatFunctionLimit(requestId: string, extension: number): Promise<boolean> {
-  return await appApi()?.ResolveChatFunctionLimit(requestId, extension) ?? false;
+export async function resolveChatFunctionLimit(
+  requestId: string,
+  extension: number,
+): Promise<boolean> {
+  return await appApi()?.ResolveChatFunctionLimit(requestId, extension) ??
+    false;
 }
 
 declare global {
@@ -598,19 +631,21 @@ export function hasWailsBackend(): boolean {
   return appApi() !== null;
 }
 
-export async function listProjects(): Promise<ProjectState> {
-  return await appApi()?.ListProjects() ??
-    { activeProjectId: "", projects: [] };
+export async function getWorkspaceState(): Promise<WorkspaceState> {
+  return await appApi()?.GetWorkspaceState() ??
+    { activeWorkspaceId: "", workspaces: [] };
 }
 
-export async function setProjectDirectory(path: string): Promise<ProjectState> {
+export async function setWorkspaceDirectory(
+  path: string,
+): Promise<WorkspaceState> {
   const api = appApi();
   if (!api) throw new Error("Workspace directory requires the desktop app.");
-  return await api.SetProjectDirectory(path);
+  return await api.SetWorkspaceDirectory(path);
 }
 
-export async function selectProjectDirectory(): Promise<string> {
-  return await appApi()?.SelectProjectDirectory() ?? "";
+export async function selectWorkspaceDirectory(): Promise<string> {
+  return await appApi()?.SelectWorkspaceDirectory() ?? "";
 }
 
 export async function openDeveloperTools(): Promise<boolean> {
@@ -645,59 +680,78 @@ export async function listFileTree(): Promise<FileTreeNode[]> {
   return await appApi()?.ListFileTree() ?? [];
 }
 
-export async function listProjectTree(): Promise<FileTreeNode[]> {
-  return await appApi()?.ListProjectTree() ?? [];
+export async function listWorkspaceTree(): Promise<FileTreeNode[]> {
+  return await appApi()?.ListWorkspaceTree() ?? [];
 }
 
 export async function openContainingFolder(path: string): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Opening a containing folder requires the desktop app.");
+  if (!api) {
+    throw new Error("Opening a containing folder requires the desktop app.");
+  }
   await api.OpenContainingFolder(path);
 }
 
-export async function listProjectFiles(): Promise<DirectoryFileEntry[]> {
-  return await appApi()?.ListProjectFiles() ?? [];
+export async function listWorkspaceFiles(): Promise<DirectoryFileEntry[]> {
+  return await appApi()?.ListWorkspaceFiles() ?? [];
 }
 
-export async function readProjectFile(path: string): Promise<LocalFileResult | null> {
+export async function readWorkspaceFile(
+  path: string,
+): Promise<LocalFileResult | null> {
   if (!path) return null;
-  return await appApi()?.ReadProjectFile(path) ?? null;
+  return await appApi()?.ReadWorkspaceFile(path) ?? null;
 }
 
 export async function openLocalFileDefault(path: string): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Opening a file externally requires the desktop app.");
+  if (!api) {
+    throw new Error("Opening a file externally requires the desktop app.");
+  }
   await api.OpenLocalFileDefault(path);
 }
 
-export async function writeProjectFile(path: string, content: string): Promise<void> {
+export async function writeWorkspaceFile(
+  path: string,
+  content: string,
+): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Project file writes require the desktop app.");
-  await api.WriteProjectFile(path, content);
+  if (!api) throw new Error("Workspace file writes require the desktop app.");
+  await api.WriteWorkspaceFile(path, content);
 }
 
-export async function writeProjectBinaryFile(path: string, contentBase64: string): Promise<void> {
+export async function writeWorkspaceBinaryFile(
+  path: string,
+  contentBase64: string,
+): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Project binary writes require the desktop app.");
-  await api.WriteProjectBinaryFile(path, contentBase64);
+  if (!api) throw new Error("Workspace binary writes require the desktop app.");
+  await api.WriteWorkspaceBinaryFile(path, contentBase64);
 }
 
-export async function createProjectDirectory(path: string): Promise<void> {
+export async function createWorkspaceDirectory(path: string): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Project directory creation requires the desktop app.");
-  await api.CreateProjectDirectory(path);
+  if (!api) {
+    throw new Error("Workspace directory creation requires the desktop app.");
+  }
+  await api.CreateWorkspaceDirectory(path);
 }
 
-export async function renameProjectFile(oldPath: string, newPath: string): Promise<void> {
+export async function renameWorkspaceFile(
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Project file rename requires the desktop app.");
-  await api.RenameProjectFile(oldPath, newPath);
+  if (!api) throw new Error("Workspace file rename requires the desktop app.");
+  await api.RenameWorkspaceFile(oldPath, newPath);
 }
 
-export async function deleteProjectFile(path: string): Promise<void> {
+export async function deleteWorkspaceFile(path: string): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Project file deletion requires the desktop app.");
-  await api.DeleteProjectFile(path);
+  if (!api) {
+    throw new Error("Workspace file deletion requires the desktop app.");
+  }
+  await api.DeleteWorkspaceFile(path);
 }
 
 export async function readFile(path: string): Promise<LocalFileResult | null> {
@@ -705,17 +759,19 @@ export async function readFile(path: string): Promise<LocalFileResult | null> {
   try {
     return await appApi()?.ReadFile(path) ?? null;
   } catch (error) {
-    notifyProjectRequired(error);
+    notifyWorkspaceRequired(error);
     throw error;
   }
 }
 
-function notifyProjectRequired(error: unknown): void {
+function notifyWorkspaceRequired(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
-  if (/project is required/i.test(message)) {
-    window.dispatchEvent(new CustomEvent("llm-hub:project-required", {
-      detail: { message },
-    }));
+  if (/Workspace is required/i.test(message)) {
+    window.dispatchEvent(
+      new CustomEvent("llm-hub:workspace-required", {
+        detail: { message },
+      }),
+    );
   }
 }
 
@@ -725,24 +781,30 @@ export async function writeFile(path: string, content: string): Promise<void> {
   try {
     await api.WriteFile(path, content);
   } catch (error) {
-    notifyProjectRequired(error);
+    notifyWorkspaceRequired(error);
     throw error;
   }
 }
 
-export async function readProjectStateFile(name: string): Promise<string> {
+export async function readWorkspaceStateFile(name: string): Promise<string> {
   const api = appApi();
   if (!api) return "";
-  return await api.ReadProjectStateFile(name);
+  return await api.ReadWorkspaceStateFile(name);
 }
 
-export async function writeProjectStateFile(name: string, content: string): Promise<void> {
+export async function writeWorkspaceStateFile(
+  name: string,
+  content: string,
+): Promise<void> {
   const api = appApi();
-  if (!api) throw new Error("Project state writes require the desktop app.");
-  await api.WriteProjectStateFile(name, content);
+  if (!api) throw new Error("Workspace state writes require the desktop app.");
+  await api.WriteWorkspaceStateFile(name, content);
 }
 
-export async function saveHTMLExport(sourcePath: string, htmlContent: string): Promise<string> {
+export async function saveHTMLExport(
+  sourcePath: string,
+  htmlContent: string,
+): Promise<string> {
   const api = appApi();
   if (!api) throw new Error("HTML export requires the desktop app.");
   return await api.SaveHTMLExport(sourcePath, htmlContent);
@@ -760,7 +822,7 @@ export async function createDirectory(path: string): Promise<void> {
   try {
     await api.CreateDirectory(path);
   } catch (error) {
-    notifyProjectRequired(error);
+    notifyWorkspaceRequired(error);
     throw error;
   }
 }
@@ -771,7 +833,9 @@ export async function moveDirectoryIntoWorkspace(
   leaveLink: boolean,
 ): Promise<WorkspaceDirectoryMoveResult> {
   const api = appApi();
-  if (!api) throw new Error("Moving into the Workspace requires the desktop app.");
+  if (!api) {
+    throw new Error("Moving into the Workspace requires the desktop app.");
+  }
   return await api.MoveDirectoryIntoWorkspace(path, destinationName, leaveLink);
 }
 
@@ -782,8 +846,15 @@ export async function movePathIntoWorkspace(
   leaveLink: boolean,
 ): Promise<WorkspaceDirectoryMoveResult> {
   const api = appApi();
-  if (!api) throw new Error("Moving into the Workspace requires the desktop app.");
-  return await api.MovePathIntoWorkspace(path, destinationDirectory, destinationName, leaveLink);
+  if (!api) {
+    throw new Error("Moving into the Workspace requires the desktop app.");
+  }
+  return await api.MovePathIntoWorkspace(
+    path,
+    destinationDirectory,
+    destinationName,
+    leaveLink,
+  );
 }
 
 export async function renameFile(
@@ -795,7 +866,7 @@ export async function renameFile(
   try {
     await api.RenameFile(oldPath, newPath);
   } catch (error) {
-    notifyProjectRequired(error);
+    notifyWorkspaceRequired(error);
     throw error;
   }
 }
@@ -806,16 +877,41 @@ export async function deleteFile(path: string): Promise<void> {
   try {
     await api.DeleteFile(path);
   } catch (error) {
-    notifyProjectRequired(error);
+    notifyWorkspaceRequired(error);
     throw error;
   }
 }
-export async function duplicateFile(path: string): Promise<string> { const api=appApi(); if(!api) throw new Error("File duplication requires the desktop app."); return api.DuplicateFile(path); }
-export async function trashFile(path: string): Promise<void> { const api=appApi(); if(!api) throw new Error("Trash requires the desktop app."); await api.TrashFile(path); }
-export async function listTrash(): Promise<TrashEntry[]> { return await appApi()?.ListTrash() ?? []; }
-export async function restoreTrash(id: string): Promise<void> { const api=appApi(); if(!api) throw new Error("Trash restore requires the desktop app."); await api.RestoreTrash(id); }
-export async function listFileHistory(path: string): Promise<FileHistoryEntry[]> { return await appApi()?.ListFileHistory(path) ?? []; }
-export async function restoreFileHistory(path: string,id:string): Promise<void> { const api=appApi();if(!api)throw new Error("History restore requires the desktop app.");await api.RestoreFileHistory(path,id); }
+export async function duplicateFile(path: string): Promise<string> {
+  const api = appApi();
+  if (!api) throw new Error("File duplication requires the desktop app.");
+  return api.DuplicateFile(path);
+}
+export async function trashFile(path: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Trash requires the desktop app.");
+  await api.TrashFile(path);
+}
+export async function listTrash(): Promise<TrashEntry[]> {
+  return await appApi()?.ListTrash() ?? [];
+}
+export async function restoreTrash(id: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Trash restore requires the desktop app.");
+  await api.RestoreTrash(id);
+}
+export async function listFileHistory(
+  path: string,
+): Promise<FileHistoryEntry[]> {
+  return await appApi()?.ListFileHistory(path) ?? [];
+}
+export async function restoreFileHistory(
+  path: string,
+  id: string,
+): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("History restore requires the desktop app.");
+  await api.RestoreFileHistory(path, id);
+}
 
 export async function searchFiles(
   query: string,
@@ -825,12 +921,12 @@ export async function searchFiles(
   return await appApi()?.SearchFiles(query, limit) ?? [];
 }
 
-export async function searchProjectFiles(
+export async function searchWorkspaceFiles(
   query: string,
   limit = 50,
 ): Promise<FileSearchResult[]> {
   if (!query.trim()) return [];
-  return await appApi()?.SearchProjectFiles(query, limit) ?? [];
+  return await appApi()?.SearchWorkspaceFiles(query, limit) ?? [];
 }
 
 export async function fileInventory(): Promise<DirectoryFileEntry[]> {
@@ -856,16 +952,24 @@ export async function cancelRAGSync(name: string): Promise<boolean> {
   return await appApi()?.CancelRAGSync(name) ?? false;
 }
 
-export async function getRAGIndexedFiles(name: string): Promise<RAGIndexedFile[]> {
+export async function getRAGIndexedFiles(
+  name: string,
+): Promise<RAGIndexedFile[]> {
   return await appApi()?.GetRAGIndexedFiles(name) ?? [];
 }
 
-export async function extractProjectPDFText(path: string, pageLabel = ""): Promise<string> {
-  return await appApi()?.ExtractProjectPDFText(path, pageLabel) ?? "";
+export async function extractWorkspacePDFText(
+  path: string,
+  pageLabel = "",
+): Promise<string> {
+  return await appApi()?.ExtractWorkspacePDFText(path, pageLabel) ?? "";
 }
 
-export async function readProjectPDFPages(path: string, pageLabel: string): Promise<LocalFileResult | null> {
-  return await appApi()?.ReadProjectPDFPages(path, pageLabel) ?? null;
+export async function readWorkspacePDFPages(
+  path: string,
+  pageLabel: string,
+): Promise<LocalFileResult | null> {
+  return await appApi()?.ReadWorkspacePDFPages(path, pageLabel) ?? null;
 }
 
 export async function searchRAG(
@@ -903,7 +1007,10 @@ export async function deleteRAGIndex(name: string): Promise<void> {
   await appApi()?.DeleteRAGIndex(name);
 }
 
-export async function renameRAGIndex(oldName: string, newName: string): Promise<void> {
+export async function renameRAGIndex(
+  oldName: string,
+  newName: string,
+): Promise<void> {
   await appApi()?.RenameRAGIndex(oldName, newName);
 }
 
@@ -930,17 +1037,26 @@ export async function disconnectVertexOAuth(): Promise<void> {
   await appApi()?.DisconnectVertexOAuth();
 }
 
-export async function connectMCPOAuth(request: MCPOAuthConnectRequest): Promise<MCPOAuthStatus> {
+export async function connectMCPOAuth(
+  request: MCPOAuthConnectRequest,
+): Promise<MCPOAuthStatus> {
   const api = appApi();
   if (!api) throw new Error("MCP OAuth requires the desktop app.");
   return await api.ConnectMCPOAuth(request);
 }
 
-export async function getMCPOAuthStatus(serverID: string, serverURL: string): Promise<MCPOAuthStatus> {
-  return await appApi()?.GetMCPOAuthStatus(serverID, serverURL) ?? { connected: false };
+export async function getMCPOAuthStatus(
+  serverID: string,
+  serverURL: string,
+): Promise<MCPOAuthStatus> {
+  return await appApi()?.GetMCPOAuthStatus(serverID, serverURL) ??
+    { connected: false };
 }
 
-export async function mcpOAuthAccessToken(serverID: string, serverURL: string): Promise<string> {
+export async function mcpOAuthAccessToken(
+  serverID: string,
+  serverURL: string,
+): Promise<string> {
   const api = appApi();
   if (!api) throw new Error("MCP OAuth requires the desktop app.");
   return await api.MCPOAuthAccessToken(serverID, serverURL);
@@ -963,6 +1079,10 @@ export async function chat(request: ChatRequest): Promise<ChatResult> {
   const api = appApi();
   if (!api) throw new Error("Chat requires the desktop app.");
   return await api.Chat(request);
+}
+
+export async function cancelChat(streamID: string): Promise<boolean> {
+  return await appApi()?.CancelChat(streamID) ?? false;
 }
 
 export async function selectCLIPath(): Promise<string> {
@@ -1024,7 +1144,11 @@ export async function listPluginIDs(): Promise<string[]> {
   return await appApi()?.ListPluginIDs() ?? [];
 }
 
-export async function installPluginFiles(pluginID: string, files: Record<string, string>, installJSON: string): Promise<void> {
+export async function installPluginFiles(
+  pluginID: string,
+  files: Record<string, string>,
+  installJSON: string,
+): Promise<void> {
   const api = appApi();
   if (!api) throw new Error("Plugin installation requires the desktop app.");
   await api.InstallPluginFiles(pluginID, files, installJSON);
@@ -1036,13 +1160,18 @@ export async function uninstallManagedPlugin(pluginID: string): Promise<void> {
   await api.UninstallPlugin(pluginID);
 }
 
-export async function fetchManagedPluginAsset(pluginID: string, name: string): Promise<ArrayBuffer> {
+export async function fetchManagedPluginAsset(
+  pluginID: string,
+  name: string,
+): Promise<ArrayBuffer> {
   const api = appApi();
   if (!api) throw new Error("Plugin assets require the desktop app.");
   const encoded = await api.FetchPluginAsset(pluginID, name);
   const binary = atob(encoded);
   const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
   return bytes.buffer;
 }
 
@@ -1137,7 +1266,9 @@ export async function readLocalFile(
   return await appApi()?.ReadLocalFile(path) ?? null;
 }
 
-export async function inspectLocalPath(path: string): Promise<LocalPathInfo | null> {
+export async function inspectLocalPath(
+  path: string,
+): Promise<LocalPathInfo | null> {
   return await appApi()?.InspectLocalPath(path) ?? null;
 }
 

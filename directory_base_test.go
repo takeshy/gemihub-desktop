@@ -2,9 +2,11 @@ package main
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -18,32 +20,48 @@ func testDirectoryApp(t *testing.T) (*App, string) {
 	return app, dir
 }
 
-func TestProjectFileAPIUsesEntireActiveProject(t *testing.T) {
+func TestWorkspaceFileAPIUsesEntireWorkspace(t *testing.T) {
 	workspace := t.TempDir()
-	project := t.TempDir()
+	files := t.TempDir()
 	app := NewApp()
-	if _, err := app.SetDirectoryBase(workspace); err != nil {
+	if _, err := app.SetDirectoryBase(files); err != nil {
 		t.Fatal(err)
 	}
-	app.projectState = ProjectState{ActiveProjectID: "one", Projects: []Project{{ID: "one", Name: "One", Path: project}}}
-	if err := app.WriteProjectFile("notes/readme.md", "project data"); err != nil {
+	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	if err := app.WriteWorkspaceFile("notes/readme.md", "Workspace data"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(project, "notes", "readme.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(workspace, "notes", "readme.md")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(workspace, "notes", "readme.md")); !os.IsNotExist(err) {
-		t.Fatalf("project file leaked into workspace: %v", err)
+	if _, err := os.Stat(filepath.Join(files, "notes", "readme.md")); !os.IsNotExist(err) {
+		t.Fatalf("Workspace file leaked into Files: %v", err)
 	}
-	files, err := app.ListProjectFiles()
+	entries, err := app.ListWorkspaceFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 1 || files[0].Path != "notes/readme.md" {
-		t.Fatalf("unexpected project inventory: %#v", files)
+	if len(entries) != 1 || entries[0].Path != "notes/readme.md" {
+		t.Fatalf("unexpected Workspace inventory: %#v", entries)
 	}
-	if _, err := app.ReadProjectFile("../outside.md"); err == nil {
-		t.Fatal("project path traversal was accepted")
+	if _, err := app.ReadWorkspaceFile("../outside.md"); err == nil {
+		t.Fatal("Workspace path traversal was accepted")
+	}
+	midi := []byte("MThd\x00\x00\x00\x06")
+	if err := app.WriteWorkspaceBinaryFile("music/score.mid", base64.StdEncoding.EncodeToString(midi)); err != nil {
+		t.Fatal(err)
+	}
+	read, err := app.ReadWorkspaceFile("workspace://music/score.mid")
+	if err != nil {
+		t.Fatalf("scoped plugin path was not readable: %v", err)
+	}
+	comma := strings.IndexByte(read.Content, ',')
+	if comma < 0 {
+		t.Fatalf("MIDI was not returned as a data URL: %q", read.Content)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(read.Content[comma+1:])
+	if err != nil || string(decoded) != string(midi) {
+		t.Fatalf("unexpected MIDI payload %q: %v", decoded, err)
 	}
 }
 
@@ -199,6 +217,10 @@ func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
 	copyPath, err := app.DuplicateFile("notes/item.md")
 	if err != nil || copyPath != "notes/item copy.md" {
 		t.Fatalf("duplicate: %q %v", copyPath, err)
+	}
+	scopedCopyPath, err := app.DuplicateFile("files://notes/item.md")
+	if err != nil || scopedCopyPath != "files://notes/item copy 2.md" {
+		t.Fatalf("scoped duplicate: %q %v", scopedCopyPath, err)
 	}
 	if err := app.TrashFile(copyPath); err != nil {
 		t.Fatal(err)

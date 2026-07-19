@@ -1172,7 +1172,7 @@ export function WidgetSettingsPanel({
                 rows={9}
                 value={baseAIInstruction}
                 onChange={(event) => setBaseAIInstruction(event.target.value)}
-                placeholder="Show project notes as cards grouped by status…"
+                placeholder="Show Workspace notes as cards grouped by status…"
               />
             </label>
             {actionError && (

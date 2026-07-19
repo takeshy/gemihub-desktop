@@ -1,5 +1,11 @@
 import { fileInventory, readFile, writeFile } from "../lib/wailsBackend";
-import { appendEntryBlock, buildEntryBlock, deleteEntry, parseMemoFile, uniqueEntryId } from "../lib/memoTimeline";
+import {
+  appendEntryBlock,
+  buildEntryBlock,
+  deleteEntry,
+  parseMemoFile,
+  uniqueEntryId,
+} from "../lib/memoTimeline";
 
 export const TIMELINE_ROOT = "Dashboards/Timeline";
 export const DEFAULT_TIMELINE_NAME = "Timeline";
@@ -16,29 +22,52 @@ export interface TimelineCalendarPost {
 }
 
 export function sanitizeTimelineName(value: string): string {
-  return value.trim().replace(/\.md$/i, "").replace(/[\\/:*?"<>|#[\]\n\r\t]+/g, "-")
-    .replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || DEFAULT_TIMELINE_NAME;
+  return value.trim().replace(/\.md$/i, "").replace(
+    /[\\/:*?"<>|#[\]\n\r\t]+/g,
+    "-",
+  )
+    .replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(
+      0,
+      80,
+    ) || DEFAULT_TIMELINE_NAME;
 }
 
 export function localDayKey(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${
+    pad(date.getDate())
+  }`;
 }
 
 export function timelineFolder(name: string): string {
   return `${TIMELINE_ROOT}/${sanitizeTimelineName(name)}`;
 }
 
-export function memoTimelineBody(filePath: string, fileName: string, quote: string, body: string): string {
-  const linkTarget = filePath.replace(/^workspace:\/\//i, "");
-  const quoted = quote.trim() ? `\n> ${quote.trim().split(/\r?\n/).join("\n> ")}` : "";
-  return `> [!quote] Memo · ${fileName}\n> [[${linkTarget}|${fileName}]]${quoted}${body.trim() ? `\n\n${body.trim()}` : ""}`;
+export function memoTimelineBody(
+  filePath: string,
+  fileName: string,
+  quote: string,
+  body: string,
+): string {
+  const linkTarget = filePath.replace(/^files:\/\//i, "");
+  const quoted = quote.trim()
+    ? `\n> ${quote.trim().split(/\r?\n/).join("\n> ")}`
+    : "";
+  return `> [!quote] Memo · ${fileName}\n> [[${linkTarget}|${fileName}]]${quoted}${
+    body.trim() ? `\n\n${body.trim()}` : ""
+  }`;
 }
 
-export function parseTimelineCalendarPosts(path: string, content: string): TimelineCalendarPost[] {
+export function parseTimelineCalendarPosts(
+  path: string,
+  content: string,
+): TimelineCalendarPost[] {
   // Obsidian Timeline files may prefix blocks with a legacy timeline-post
   // marker. Desktop entries do not need it, but both formats stay readable.
-  const normalized = content.replace(/^<!--\s*timeline-post:\s*[^>]+?\s*-->\s*\r?\n/gm, "");
+  const normalized = content.replace(
+    /^<!--\s*timeline-post:\s*[^>]+?\s*-->\s*\r?\n/gm,
+    "",
+  );
   return parseMemoFile(normalized).entries.map((entry) => {
     const body = entry.body || entry.quote;
     const event = body.match(EVENT_MARKER_RE);
@@ -54,44 +83,82 @@ export function parseTimelineCalendarPosts(path: string, content: string): Timel
   });
 }
 
-export async function loadTimelineCalendarPosts(name: string): Promise<TimelineCalendarPost[]> {
+export async function loadTimelineCalendarPosts(
+  name: string,
+): Promise<TimelineCalendarPost[]> {
   const folder = timelineFolder(name);
   const paths = (await fileInventory()).filter((entry) =>
-    entry.path.startsWith(`${folder}/`) && /^\d{4}-\d{2}-\d{2}\.md$/i.test(entry.path.slice(folder.length + 1))
+    entry.path.startsWith(`${folder}/`) &&
+    /^\d{4}-\d{2}-\d{2}\.md$/i.test(entry.path.slice(folder.length + 1))
   ).map((entry) => entry.path).sort();
-  const loaded = await Promise.all(paths.map(async (path) => ({ path, file: await readFile(path) })));
-  return loaded.flatMap(({ path, file }) => file ? parseTimelineCalendarPosts(path, file.content) : []);
+  const loaded = await Promise.all(
+    paths.map(async (path) => ({ path, file: await readFile(path) })),
+  );
+  return loaded.flatMap(({ path, file }) =>
+    file ? parseTimelineCalendarPosts(path, file.content) : []
+  );
 }
 
-export async function appendTimelineEntry(name: string, body: string, date = new Date()): Promise<string> {
+export async function appendTimelineEntry(
+  name: string,
+  body: string,
+  date = new Date(),
+): Promise<string> {
   const folder = timelineFolder(name);
   const path = `${folder}/${localDayKey(date)}.md`;
   const current = (await readFile(path))?.content || "";
   const now = new Date();
   const id = uniqueEntryId(current, now);
-  await writeFile(path, appendEntryBlock(current, `timeline:${sanitizeTimelineName(name)}`, buildEntryBlock({
-    createdAt: now.toISOString(),
-    id,
-    body: body.trim(),
-  })));
-  window.dispatchEvent(new CustomEvent("llm-hub:dashboard-data-changed", { detail: { path } }));
+  await writeFile(
+    path,
+    appendEntryBlock(
+      current,
+      `timeline:${sanitizeTimelineName(name)}`,
+      buildEntryBlock({
+        createdAt: now.toISOString(),
+        id,
+        body: body.trim(),
+      }),
+    ),
+  );
+  window.dispatchEvent(
+    new CustomEvent("llm-hub:dashboard-data-changed", { detail: { path } }),
+  );
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   return id;
 }
 
-export async function appendCalendarEvent(name: string, date: string, time: string, content: string): Promise<string> {
+export async function appendCalendarEvent(
+  name: string,
+  date: string,
+  time: string,
+  content: string,
+): Promise<string> {
   const title = `Calendar event · ${date}${time ? ` ${time}` : ""}`;
-  const callout = content.trim().split(/\r?\n/).map((line) => `> ${line}`).join("\n");
-  return appendTimelineEntry(name, `<!-- calendar-event: ${date} -->\n> [!calendar] ${title}\n${callout}`, new Date(`${date}T12:00:00`));
+  const callout = content.trim().split(/\r?\n/).map((line) => `> ${line}`).join(
+    "\n",
+  );
+  return appendTimelineEntry(
+    name,
+    `<!-- calendar-event: ${date} -->\n> [!calendar] ${title}\n${callout}`,
+    new Date(`${date}T12:00:00`),
+  );
 }
 
-export async function moveCalendarEvent(name: string, postId: string, nextDate: string): Promise<boolean> {
+export async function moveCalendarEvent(
+  name: string,
+  postId: string,
+  nextDate: string,
+): Promise<boolean> {
   const posts = await loadTimelineCalendarPosts(name);
   const post = posts.find((item) => item.id === postId && item.isEvent);
   if (!post) return false;
   const source = await readFile(post.path);
   if (!source) return false;
-  const normalized = source.content.replace(/^<!--\s*timeline-post:\s*[^>]+?\s*-->\s*\r?\n/gm, "");
+  const normalized = source.content.replace(
+    /^<!--\s*timeline-post:\s*[^>]+?\s*-->\s*\r?\n/gm,
+    "",
+  );
   const parsed = parseMemoFile(normalized);
   const entry = parsed.entries.find((item) => item.id === postId);
   if (!entry?.parsed) return false;
@@ -103,8 +170,15 @@ export async function moveCalendarEvent(name: string, postId: string, nextDate: 
   await writeFile(post.path, remaining);
   const targetPath = `${timelineFolder(name)}/${nextDate}.md`;
   const target = (await readFile(targetPath))?.content || "";
-  await writeFile(targetPath, appendEntryBlock(target, `timeline:${sanitizeTimelineName(name)}`, moved));
-  window.dispatchEvent(new CustomEvent("llm-hub:dashboard-data-changed", { detail: { path: targetPath } }));
+  await writeFile(
+    targetPath,
+    appendEntryBlock(target, `timeline:${sanitizeTimelineName(name)}`, moved),
+  );
+  window.dispatchEvent(
+    new CustomEvent("llm-hub:dashboard-data-changed", {
+      detail: { path: targetPath },
+    }),
+  );
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   return true;
 }

@@ -267,7 +267,7 @@ func (a *App) FetchPluginAsset(pluginID string, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := &http.Client{Timeout: 5 * time.Minute, CheckRedirect: func(next *http.Request, via []*http.Request) error {
+	client := &http.Client{Timeout: 5 * time.Minute, Transport: publicNetworkTransport(), CheckRedirect: func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
 			return fmt.Errorf("too many redirects")
 		}

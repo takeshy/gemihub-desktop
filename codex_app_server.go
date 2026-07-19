@@ -295,7 +295,7 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	workingDirectory := a.GetActiveProjectPath()
+	workingDirectory := a.GetWorkspacePath()
 	if workingDirectory == "" {
 		return nil, fmt.Errorf("active Workspace is not configured")
 	}

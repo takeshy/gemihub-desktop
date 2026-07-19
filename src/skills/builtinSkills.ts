@@ -1042,7 +1042,7 @@ structured rows encoded by the workflow runner.
   type: workflow
   layout: { lg: { x: 0, y: 6, w: 6, h: 5 } }
   config:
-    workflow: workflows/daily-digest.workflow.yaml  # Project workflow path
+    workflow: workflows/daily-digest.workflow.yaml  # Workspace workflow path
     output: markdown                     # markdown | html | table | card
     outputVariable: result               # variable holding the output string
     refreshInterval: 60                  # minutes; 0/omit = manual refresh only; re-runs periodically while the dashboard is open

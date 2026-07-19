@@ -26,11 +26,17 @@ export async function generateKeyPair(): Promise<{
       hash: "SHA-256",
     },
     true,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 
-  const publicKeyBuffer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-  const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+  const publicKeyBuffer = await crypto.subtle.exportKey(
+    "spki",
+    keyPair.publicKey,
+  );
+  const privateKeyBuffer = await crypto.subtle.exportKey(
+    "pkcs8",
+    keyPair.privateKey,
+  );
 
   return {
     publicKey: arrayBufferToBase64(publicKeyBuffer),
@@ -39,37 +45,41 @@ export async function generateKeyPair(): Promise<{
 }
 
 // Derive key from password using PBKDF2
-async function deriveKeyFromPassword(password: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKeyFromPassword(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const passwordKey = await crypto.subtle.importKey(
     "raw",
     encoder.encode(password),
     "PBKDF2",
     false,
-    ["deriveBits", "deriveKey"]
+    ["deriveBits", "deriveKey"],
   );
 
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
       salt: salt.buffer as ArrayBuffer,
-      iterations: 100000,
+      iterations,
       hash: "SHA-256",
     },
     passwordKey,
     { name: "AES-GCM", length: 256 },
     false,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 }
 
 // Encrypt private key with password
 export async function encryptPrivateKey(
   privateKey: string,
-  password: string
+  password: string,
 ): Promise<{ encryptedPrivateKey: string; salt: string }> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const derivedKey = await deriveKeyFromPassword(password, salt);
+  const derivedKey = await deriveKeyFromPassword(password, salt, 600000);
 
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
@@ -77,7 +87,7 @@ export async function encryptPrivateKey(
   const encryptedBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     derivedKey,
-    encoder.encode(privateKey)
+    encoder.encode(privateKey),
   );
 
   // Combine IV + encrypted data
@@ -87,7 +97,7 @@ export async function encryptPrivateKey(
 
   return {
     encryptedPrivateKey: arrayBufferToBase64(combined.buffer),
-    salt: arrayBufferToBase64(salt.buffer),
+    salt: `v2:${arrayBufferToBase64(salt.buffer)}`,
   };
 }
 
@@ -95,10 +105,15 @@ export async function encryptPrivateKey(
 export async function decryptPrivateKey(
   encryptedPrivateKey: string,
   salt: string,
-  password: string
+  password: string,
 ): Promise<string> {
-  const saltBuffer = base64ToArrayBuffer(salt);
-  const derivedKey = await deriveKeyFromPassword(password, new Uint8Array(saltBuffer));
+  const current = salt.startsWith("v2:");
+  const saltBuffer = base64ToArrayBuffer(current ? salt.slice(3) : salt);
+  const derivedKey = await deriveKeyFromPassword(
+    password,
+    new Uint8Array(saltBuffer),
+    current ? 600000 : 100000,
+  );
 
   const combined = new Uint8Array(base64ToArrayBuffer(encryptedPrivateKey));
   const iv = combined.slice(0, 12);
@@ -107,7 +122,7 @@ export async function decryptPrivateKey(
   const decryptedBuffer = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv },
     derivedKey,
-    encryptedData
+    encryptedData,
   );
 
   const decoder = new TextDecoder();
@@ -117,13 +132,13 @@ export async function decryptPrivateKey(
 // Encrypt data with public key (hybrid encryption)
 export async function encryptData(
   data: string,
-  publicKeyBase64: string
+  publicKeyBase64: string,
 ): Promise<string> {
   // Generate random AES key
   const aesKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 
   // Encrypt data with AES
@@ -132,7 +147,7 @@ export async function encryptData(
   const encryptedDataBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     aesKey,
-    encoder.encode(data)
+    encoder.encode(data),
   );
 
   // Export AES key
@@ -145,21 +160,23 @@ export async function encryptData(
     publicKeyBuffer,
     { name: "RSA-OAEP", hash: "SHA-256" },
     false,
-    ["encrypt"]
+    ["encrypt"],
   );
 
   // Encrypt AES key with RSA
   const encryptedAesKeyBuffer = await crypto.subtle.encrypt(
     { name: "RSA-OAEP" },
     publicKey,
-    aesKeyBuffer
+    aesKeyBuffer,
   );
 
   // Package: encryptedAesKey length (2 bytes) + encryptedAesKey + IV + encryptedData
   const encryptedAesKey = new Uint8Array(encryptedAesKeyBuffer);
   const encryptedData = new Uint8Array(encryptedDataBuffer);
 
-  const result = new Uint8Array(2 + encryptedAesKey.length + iv.length + encryptedData.length);
+  const result = new Uint8Array(
+    2 + encryptedAesKey.length + iv.length + encryptedData.length,
+  );
   const keyLength = encryptedAesKey.length;
   result[0] = (keyLength >> 8) & 0xff;
   result[1] = keyLength & 0xff;
@@ -173,7 +190,7 @@ export async function encryptData(
 // Decrypt data with private key (hybrid decryption)
 export async function decryptData(
   encryptedDataBase64: string,
-  privateKeyBase64: string
+  privateKeyBase64: string,
 ): Promise<string> {
   const combined = new Uint8Array(base64ToArrayBuffer(encryptedDataBase64));
 
@@ -190,14 +207,14 @@ export async function decryptData(
     privateKeyBuffer,
     { name: "RSA-OAEP", hash: "SHA-256" },
     false,
-    ["decrypt"]
+    ["decrypt"],
   );
 
   // Decrypt AES key
   const aesKeyBuffer = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     privateKey,
-    encryptedAesKey
+    encryptedAesKey,
   );
 
   // Import AES key
@@ -206,14 +223,14 @@ export async function decryptData(
     aesKeyBuffer,
     { name: "AES-GCM", length: 256 },
     false,
-    ["decrypt"]
+    ["decrypt"],
   );
 
   // Decrypt data
   const decryptedBuffer = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv },
     aesKey,
-    encryptedData
+    encryptedData,
   );
 
   const decoder = new TextDecoder();
@@ -224,7 +241,7 @@ export async function decryptData(
 export async function verifyPassword(
   encryptedPrivateKey: string,
   salt: string,
-  password: string
+  password: string,
 ): Promise<boolean> {
   try {
     await decryptPrivateKey(encryptedPrivateKey, salt, password);
@@ -240,22 +257,52 @@ export function isEncryptedFile(content: string): boolean {
 }
 
 // Wrap encrypted data with YAML frontmatter format
-export interface EncryptedFileMetadata { description?: string; publicMetadata?: Record<string, string> }
+export interface EncryptedFileMetadata {
+  description?: string;
+  publicMetadata?: Record<string, string>;
+}
 
 function normalizedPublicMetadata(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value).filter(([key, entry]) => key.trim() && typeof entry === "string" && !["description", "__proto__", "prototype", "constructor"].includes(key.trim())));
+  return Object.fromEntries(
+    Object.entries(value).filter(([key, entry]) =>
+      key.trim() && typeof entry === "string" &&
+      !["description", "__proto__", "prototype", "constructor"].includes(
+        key.trim(),
+      )
+    ),
+  );
 }
 
-export function wrapEncryptedFile(data: string, key: string, salt: string, metadata: EncryptedFileMetadata = {}): string {
+export function wrapEncryptedFile(
+  data: string,
+  key: string,
+  salt: string,
+  metadata: EncryptedFileMetadata = {},
+): string {
   const description = metadata.description?.trim();
   const publicMetadata = normalizedPublicMetadata(metadata.publicMetadata);
-  const metadataLines = [description ? `description: ${JSON.stringify(description)}` : "", Object.keys(publicMetadata).length ? `publicMetadata: ${JSON.stringify(publicMetadata)}` : ""].filter(Boolean).join("\n");
-  return `---\nencrypted: true\n${metadataLines ? `${metadataLines}\n` : ""}key: ${key}\nsalt: ${salt}\n---\n${data}`;
+  const metadataLines = [
+    description ? `description: ${JSON.stringify(description)}` : "",
+    Object.keys(publicMetadata).length
+      ? `publicMetadata: ${JSON.stringify(publicMetadata)}`
+      : "",
+  ].filter(Boolean).join("\n");
+  return `---\nencrypted: true\n${
+    metadataLines ? `${metadataLines}\n` : ""
+  }key: ${key}\nsalt: ${salt}\n---\n${data}`;
 }
 
 // Extract encryption info from YAML frontmatter format
-export function unwrapEncryptedFile(content: string): { data: string; key: string; salt: string; description: string; publicMetadata: Record<string, string> } | null {
+export function unwrapEncryptedFile(
+  content: string,
+): {
+  data: string;
+  key: string;
+  salt: string;
+  description: string;
+  publicMetadata: Record<string, string>;
+} | null {
   // Normalize line endings to \n for reliable parsing
   const normalized = content.replace(/\r\n/g, "\n");
   const frontmatter = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
@@ -265,10 +312,26 @@ export function unwrapEncryptedFile(content: string): { data: string; key: strin
   const saltMatch = frontmatter[1].match(/salt:\s*(.+)/);
   if (!keyMatch || !saltMatch) return null;
 
-  const descriptionMatch = frontmatter[1].match(/^description:\s*(.*)$/m), publicMetadataMatch = frontmatter[1].match(/^publicMetadata:\s*(.*)$/m);
+  const descriptionMatch = frontmatter[1].match(/^description:\s*(.*)$/m),
+    publicMetadataMatch = frontmatter[1].match(/^publicMetadata:\s*(.*)$/m);
   let description = "", publicMetadata: Record<string, string> = {};
-  if (descriptionMatch) { try { const parsed = JSON.parse(descriptionMatch[1].trim()); description = typeof parsed === "string" ? parsed : ""; } catch { description = descriptionMatch[1].trim(); } }
-  if (publicMetadataMatch) { try { publicMetadata = normalizedPublicMetadata(JSON.parse(publicMetadataMatch[1].trim())); } catch { publicMetadata = {}; } }
+  if (descriptionMatch) {
+    try {
+      const parsed = JSON.parse(descriptionMatch[1].trim());
+      description = typeof parsed === "string" ? parsed : "";
+    } catch {
+      description = descriptionMatch[1].trim();
+    }
+  }
+  if (publicMetadataMatch) {
+    try {
+      publicMetadata = normalizedPublicMetadata(
+        JSON.parse(publicMetadataMatch[1].trim()),
+      );
+    } catch {
+      publicMetadata = {};
+    }
+  }
   return {
     key: keyMatch[1].trim(),
     salt: saltMatch[1].trim(),
@@ -278,15 +341,30 @@ export function unwrapEncryptedFile(content: string): { data: string; key: strin
   };
 }
 
-export function getEncryptedFileMetadata(content: string): EncryptedFileMetadata {
+export function getEncryptedFileMetadata(
+  content: string,
+): EncryptedFileMetadata {
   const encrypted = unwrapEncryptedFile(content);
-  return encrypted ? { description: encrypted.description, publicMetadata: encrypted.publicMetadata } : {};
+  return encrypted
+    ? {
+      description: encrypted.description,
+      publicMetadata: encrypted.publicMetadata,
+    }
+    : {};
 }
 
-export function setEncryptedFileMetadata(content: string, metadata: EncryptedFileMetadata): string {
+export function setEncryptedFileMetadata(
+  content: string,
+  metadata: EncryptedFileMetadata,
+): string {
   const encrypted = unwrapEncryptedFile(content);
   if (!encrypted) throw new Error("Invalid encrypted file format");
-  return wrapEncryptedFile(encrypted.data, encrypted.key, encrypted.salt, metadata);
+  return wrapEncryptedFile(
+    encrypted.data,
+    encrypted.key,
+    encrypted.salt,
+    metadata,
+  );
 }
 
 // Encrypt file content and wrap with YAML frontmatter
@@ -298,7 +376,7 @@ export async function encryptFileContent(
   metadata: EncryptedFileMetadata = {},
 ): Promise<string> {
   // Prevent double-encryption
-  if (isEncryptedFile(content)) {
+  if (unwrapEncryptedFile(content)) {
     return content;
   }
   const encryptedData = await encryptData(content, publicKey);
@@ -308,27 +386,69 @@ export async function encryptFileContent(
 // Decrypt file content from YAML frontmatter format
 export async function decryptFileContent(
   fileContent: string,
-  password: string
+  password: string,
 ): Promise<string> {
   const encrypted = unwrapEncryptedFile(fileContent);
   if (!encrypted) {
     throw new Error("Invalid encrypted file format");
   }
 
-  const privateKey = await decryptPrivateKey(encrypted.key, encrypted.salt, password);
+  const privateKey = await decryptPrivateKey(
+    encrypted.key,
+    encrypted.salt,
+    password,
+  );
   return decryptData(encrypted.data, privateKey);
 }
 
 /** Re-encrypt an existing compatible file while retaining its password-protected private key. */
-export async function reencryptFileContent(fileContent: string, nextContent: string, password: string): Promise<string> {
+export async function reencryptFileContent(
+  fileContent: string,
+  nextContent: string,
+  password: string,
+): Promise<string> {
   const encrypted = unwrapEncryptedFile(fileContent);
   if (!encrypted) throw new Error("Invalid encrypted file format");
-  const privateKeyBase64 = await decryptPrivateKey(encrypted.key, encrypted.salt, password);
-  const privateKey = await crypto.subtle.importKey("pkcs8", base64ToArrayBuffer(privateKeyBase64), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"]);
+  const privateKeyBase64 = await decryptPrivateKey(
+    encrypted.key,
+    encrypted.salt,
+    password,
+  );
+  const privateKey = await crypto.subtle.importKey(
+    "pkcs8",
+    base64ToArrayBuffer(privateKeyBase64),
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    true,
+    ["decrypt"],
+  );
   const privateJwk = await crypto.subtle.exportKey("jwk", privateKey);
-  const publicKey = await crypto.subtle.importKey("jwk", { kty: privateJwk.kty, n: privateJwk.n, e: privateJwk.e, alg: "RSA-OAEP-256", ext: true, key_ops: ["encrypt"] }, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
-  const publicKeyBase64 = arrayBufferToBase64(await crypto.subtle.exportKey("spki", publicKey));
-  return await encryptFileContent(nextContent, publicKeyBase64, encrypted.key, encrypted.salt, { description: encrypted.description, publicMetadata: encrypted.publicMetadata });
+  const publicKey = await crypto.subtle.importKey(
+    "jwk",
+    {
+      kty: privateJwk.kty,
+      n: privateJwk.n,
+      e: privateJwk.e,
+      alg: "RSA-OAEP-256",
+      ext: true,
+      key_ops: ["encrypt"],
+    },
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    true,
+    ["encrypt"],
+  );
+  const publicKeyBase64 = arrayBufferToBase64(
+    await crypto.subtle.exportKey("spki", publicKey),
+  );
+  return await encryptFileContent(
+    nextContent,
+    publicKeyBase64,
+    encrypted.key,
+    encrypted.salt,
+    {
+      description: encrypted.description,
+      publicMetadata: encrypted.publicMetadata,
+    },
+  );
 }
 
 // Utility functions

@@ -2,7 +2,7 @@
 type: Product Feature
 title: WorkspaceとFilesタブ
 description: 単一Workspaceの資産領域と、関連付けで開いたファイルのフォルダを一時表示するFilesタブ。
-tags: [workspace, project, directory, settings]
+tags: [workspace, files, directory, settings]
 timestamp: 2026-07-18T00:00:00+09:00
 ---
 

@@ -20,11 +20,11 @@ func TestSaveHTMLExportUsesSourceDirectoryAsBase(t *testing.T) {
 	if _, err := app.SetDirectoryBase(root); err != nil {
 		t.Fatal(err)
 	}
-	output, err := app.SaveHTMLExport("workspace://notes/report.md", `<base href="__LLM_HUB_SOURCE_BASE__"><img src="chart.png">`)
+	output, err := app.SaveHTMLExport("files://notes/report.md", `<base href="__LLM_HUB_SOURCE_BASE__"><img src="chart.png">`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if output != "workspace://temporaries/report.html" {
+	if output != "files://temporaries/report.html" {
 		t.Fatalf("unexpected output: %s", output)
 	}
 	content, err := os.ReadFile(filepath.Join(root, "temporaries", "report.html"))
@@ -45,7 +45,7 @@ func TestOpenHTMLInBrowserRejectsOtherExtensions(t *testing.T) {
 	if _, err := app.SetDirectoryBase(root); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.OpenHTMLInBrowser("workspace://note.md"); err == nil {
+	if err := app.OpenHTMLInBrowser("files://note.md"); err == nil {
 		t.Fatal("expected non-HTML file to be rejected")
 	}
 }

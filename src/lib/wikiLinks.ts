@@ -4,11 +4,19 @@ export const IMAGE_EXT_RE = /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i;
 
 export function transformWikiLinks(body: string): string {
   return body
-    .replace(/!\[\[([^\]\n]+)\]\]/g, (_match, target: string) => `![${target}](#wikiembed:${encodeURIComponent(target)})`)
-    .replace(/(^|[^!])\[\[([^\]\n]+)\]\]/g, (_match, lead: string, target: string) => {
-      const label = target.split("|")[1]?.trim() || target.split("|")[0].trim();
-      return `${lead}[${label}](#wiki:${encodeURIComponent(target)})`;
-    });
+    .replace(
+      /!\[\[([^\]\n]+)\]\]/g,
+      (_match, target: string) =>
+        `![${target}](#wikiembed:${encodeURIComponent(target)})`,
+    )
+    .replace(
+      /(^|[^!])\[\[([^\]\n]+)\]\]/g,
+      (_match, lead: string, target: string) => {
+        const label = target.split("|")[1]?.trim() ||
+          target.split("|")[0].trim();
+        return `${lead}[${label}](#wiki:${encodeURIComponent(target)})`;
+      },
+    );
 }
 
 export function wikiTargetToPath(baseDirPath: string, target: string): string {
@@ -19,26 +27,35 @@ export function wikiTargetToPath(baseDirPath: string, target: string): string {
 export function localTargetToPath(baseDirPath: string, target: string): string {
   const clean = target.split("#")[0].trim();
   if (!clean) return "";
-  if (/^(?:workspace|project):\/\//i.test(clean)) {
+  if (/^(?:workspace|files):\/\//i.test(clean)) {
     return /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
   }
   const windows = isWindowsPath(baseDirPath) || isWindowsPath(clean);
-  if (clean.startsWith("/") || isWindowsPath(clean) || clean.startsWith("\\\\")) {
+  if (
+    clean.startsWith("/") || isWindowsPath(clean) || clean.startsWith("\\\\")
+  ) {
     return /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
   }
   const withExt = /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
   const separator = windows ? "\\" : "/";
   if (!baseDirPath) return withExt;
   if (baseDirPath.endsWith("://")) return `${baseDirPath}${withExt}`;
-  const trimmed = baseDirPath.endsWith("/") || baseDirPath.endsWith("\\") ? baseDirPath.slice(0, -1) : baseDirPath;
+  const trimmed = baseDirPath.endsWith("/") || baseDirPath.endsWith("\\")
+    ? baseDirPath.slice(0, -1)
+    : baseDirPath;
   return `${trimmed}${separator}${withExt}`;
 }
 
-export function localHrefToPathCandidates(baseDirPath: string, href: string): string[] {
+export function localHrefToPathCandidates(
+  baseDirPath: string,
+  href: string,
+): string[] {
   const target = hrefToLocalTarget(href);
   const clean = target.split("#")[0].trim();
   if (!clean) return [];
-  if (clean.startsWith("/") && !isWindowsPath(clean) && !clean.startsWith("\\\\")) {
+  if (
+    clean.startsWith("/") && !isWindowsPath(clean) && !clean.startsWith("\\\\")
+  ) {
     const rootTarget = clean.replace(/^\/+/, "");
     const ancestorTargets: string[] = [];
     if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(baseDirPath)) {
@@ -50,7 +67,11 @@ export function localHrefToPathCandidates(baseDirPath: string, href: string): st
         ancestor = parent;
       }
     }
-    return [localTargetToPath("", rootTarget), localTargetToPath(baseDirPath, rootTarget), ...ancestorTargets]
+    return [
+      localTargetToPath("", rootTarget),
+      localTargetToPath(baseDirPath, rootTarget),
+      ...ancestorTargets,
+    ]
       .filter((path, index, paths) => path && paths.indexOf(path) === index);
   }
   return [localTargetToPath(baseDirPath, clean)];
@@ -59,7 +80,7 @@ export function localHrefToPathCandidates(baseDirPath: string, href: string): st
 export function isLocalDocumentHref(href: string): boolean {
   if (!href) return false;
   const decoded = safeDecodeURIComponent(href);
-  if (/^(?:workspace|project):\/\//i.test(decoded)) return true;
+  if (/^(?:workspace|files):\/\//i.test(decoded)) return true;
   if (isWindowsPath(decoded) || /^file:\/\//i.test(decoded)) return true;
   if (href.startsWith("#wiki:") || href.startsWith("#wikiembed:")) return true;
   if (href.startsWith("#")) return false;
@@ -96,13 +117,21 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 export function pathDirName(path: string): string {
-  const scope = /^(workspace|project):\/\//i.exec(path)?.[1]?.toLowerCase();
+  const scope = /^(workspace|files):\/\//i.exec(path)?.[1]?.toLowerCase();
   if (scope) {
     const prefix = `${scope}://`;
     const relative = path.slice(prefix.length);
-    const separatorIndex = Math.max(relative.lastIndexOf("/"), relative.lastIndexOf("\\"));
-    return separatorIndex === -1 ? prefix : `${prefix}${relative.slice(0, separatorIndex)}`;
+    const separatorIndex = Math.max(
+      relative.lastIndexOf("/"),
+      relative.lastIndexOf("\\"),
+    );
+    return separatorIndex === -1
+      ? prefix
+      : `${prefix}${relative.slice(0, separatorIndex)}`;
   }
-  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const separatorIndex = Math.max(
+    path.lastIndexOf("/"),
+    path.lastIndexOf("\\"),
+  );
   return separatorIndex === -1 ? "" : path.slice(0, separatorIndex);
 }

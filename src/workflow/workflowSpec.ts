@@ -1,5 +1,5 @@
 import type { ChatToolDefinition } from "../lib/wailsBackend";
-import { workflowNodeTypes, type WorkflowNodeType } from "./types";
+import { type WorkflowNodeType, workflowNodeTypes } from "./types";
 
 export const workflowGenerationSpec = `
 Return exactly one Markdown fenced code block named hub-workflow. Do not add prose outside it.
@@ -33,6 +33,7 @@ Supported nodes:
 - set: required name and value (supports simple arithmetic; _clipboard copies the result)
 - if / while: condition using ==, !=, <, >, <=, >=, contains; required trueNext and optional falseNext
 - command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/none), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo
+- gemihub-command: command (encrypt, duplicate, convert-to-html, rename), path, optional text, metadata JSON, saveTo. PDF conversion is unavailable; publish/unpublish require Web.
 - http: url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers JSON; body; saveTo; saveStatus; throwOnError. Binary input/output uses FileExplorerData.
 - json: source (bare variable name), saveTo
 - note: path, content, mode (overwrite/append/create), confirm (true by default), history
@@ -62,61 +63,123 @@ Prefer Workspace file nodes (note, note-read, note-search, note-list) and never 
 
 export const getWorkflowSpecTool: ChatToolDefinition = {
   name: "get_workflow_spec",
-  description: "Return the Workspace workflow specification. Pass nodeTypes to retrieve only the requested node documentation. Use this before explaining, debugging, or writing workflow YAML.",
+  description:
+    "Return the Workspace workflow specification. Pass nodeTypes to retrieve only the requested node documentation. Use this before explaining, debugging, or writing workflow YAML.",
   parameters: {
     type: "object",
     properties: {
-      nodeTypes: { type: "array", description: "Optional workflow node type names, such as command, http, or note-list.", items: { type: "string" } },
+      nodeTypes: {
+        type: "array",
+        description:
+          "Optional workflow node type names, such as command, http, or note-list.",
+        items: { type: "string" },
+      },
     },
   },
 };
 
 const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
-  variable: "- variable: required name; optional value. Omit value for a caller-supplied input.",
-  set: "- set: required name and value; supports one arithmetic operation. Setting _clipboard copies the result.",
-  if: "- if: required condition and trueNext; optional falseNext. Conditions support ==, !=, <, >, <=, >=, contains.",
-  while: "- while: required condition and trueNext; optional falseNext is the exit. Only while nodes may be loop targets.",
-  command: "- command: prompt; optional model, ragSetting (__websearch__/__none__/configured name), vaultTools (all/noSearch/none), mcpServers, enableThinking, attachments, saveTo, saveImageTo.",
-  http: "- http: url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers, body, saveTo, saveStatus, throwOnError.",
-  json: "- json: source is the bare variable name containing JSON; saveTo is required.",
-  note: "- note: path and content; optional mode overwrite/append/create, confirm (true by default), history.",
+  variable:
+    "- variable: required name; optional value. Omit value for a caller-supplied input.",
+  set:
+    "- set: required name and value; supports one arithmetic operation. Setting _clipboard copies the result.",
+  if:
+    "- if: required condition and trueNext; optional falseNext. Conditions support ==, !=, <, >, <=, >=, contains.",
+  while:
+    "- while: required condition and trueNext; optional falseNext is the exit. Only while nodes may be loop targets.",
+  command:
+    "- command: prompt; optional model, ragSetting (__websearch__/__none__/configured name), vaultTools (all/noSearch/none), mcpServers, enableThinking, attachments, saveTo, saveImageTo.",
+  "gemihub-command":
+    "- gemihub-command: command encrypt/duplicate/convert-to-html/rename and path; optional text, metadata JSON, saveTo. convert-to-pdf is unavailable; publish/unpublish require the Web service.",
+  http:
+    "- http: url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers, body, saveTo, saveStatus, throwOnError.",
+  json:
+    "- json: source is the bare variable name containing JSON; saveTo is required.",
+  note:
+    "- note: path and content; optional mode overwrite/append/create, confirm (true by default), history.",
   "note-read": "- note-read: path and saveTo are required.",
-  "note-search": "- note-search: query and saveTo; optional searchContent and limit.",
-  "note-list": "- note-list: saveTo; optional folder, recursive, tags, tagMatch, createdWithin, modifiedWithin, sortBy, sortOrder, limit.",
-  "folder-list": "- folder-list: saveTo; optional folder. Returns folders and count.",
-  "note-delete": "- note-delete: path; optional confirm (true by default). Moves the file to the application Trash.",
+  "note-search":
+    "- note-search: query and saveTo; optional searchContent and limit.",
+  "note-list":
+    "- note-list: saveTo; optional folder, recursive, tags, tagMatch, createdWithin, modifiedWithin, sortBy, sortOrder, limit.",
+  "folder-list":
+    "- folder-list: saveTo; optional folder. Returns folders and count.",
+  "note-delete":
+    "- note-delete: path; optional confirm (true by default). Moves the file to the application Trash.",
   "drive-delete": "- drive-delete: compatibility alias for note-delete.",
-  open: "- open: path is required and opens the file in the current workspace widget.",
-  dialog: "- dialog: title, message, markdown, options, multiSelect, inputTitle, multiline, defaults JSON, button1, button2, saveTo.",
-  "prompt-value": "- prompt-value: saveTo; optional title, message, default and multiline. Headless runs require default.",
-  "prompt-file": "- prompt-file: saveTo; optional title, default, forcePrompt, saveFileTo. Hotkey/event runs automatically use their active file.",
-  "prompt-selection": "- prompt-selection: saveTo; optional saveSelectionTo. Hotkey/event runs automatically use selection or full file content.",
-  workflow: "- workflow: path; optional input/output mappings, prefix and saveTo. Without output, all child variables are copied.",
-  "rag-sync": "- rag-sync: retained for compatibility; server RAG sync is unsupported and the result directs users to local RAG.",
-  "file-explorer": "- file-explorer: mode select/create, path or default, title, extensions, saveTo (FileExplorerData), savePathTo.",
-  "file-save": "- file-save: source FileExplorerData and path; optional confirm and savePathTo. Adds the source extension when needed.",
-  mcp: "- mcp: HTTP url and tool; optional args JSON, headers JSON, saveTo, saveUiTo. MCP App UI can be reopened from history.",
+  open:
+    "- open: path is required and opens the file in the current workspace widget.",
+  dialog:
+    "- dialog: title, message, markdown, options, multiSelect, inputTitle, multiline, defaults JSON, button1, button2, saveTo.",
+  "prompt-value":
+    "- prompt-value: saveTo; optional title, message, default and multiline. Headless runs require default.",
+  "prompt-file":
+    "- prompt-file: saveTo; optional title, default, forcePrompt, saveFileTo. Hotkey/event runs automatically use their active file.",
+  "prompt-selection":
+    "- prompt-selection: saveTo; optional saveSelectionTo. Hotkey/event runs automatically use selection or full file content.",
+  workflow:
+    "- workflow: path; optional input/output mappings, prefix and saveTo. Without output, all child variables are copied.",
+  "rag-sync":
+    "- rag-sync: retained for compatibility; server RAG sync is unsupported and the result directs users to local RAG.",
+  "file-explorer":
+    "- file-explorer: mode select/create, path or default, title, extensions, saveTo (FileExplorerData), savePathTo.",
+  "file-save":
+    "- file-save: source FileExplorerData and path; optional confirm and savePathTo. Adds the source extension when needed.",
+  mcp:
+    "- mcp: HTTP url and tool; optional args JSON, headers JSON, saveTo, saveUiTo. MCP App UI can be reopened from history.",
   sleep: "- sleep: duration in milliseconds.",
-  script: "- script: code; optional timeout and saveTo. Runs without DOM, network or storage.",
-  shell: "- shell: command; optional args JSON array, cwd, env JSON object, timeout, throwOnError, saveTo, saveStderrTo, saveExitCodeTo.",
+  script:
+    "- script: code; optional timeout and saveTo. Runs without DOM, network or storage.",
+  shell:
+    "- shell: command; optional args JSON array, cwd, env JSON object, timeout, throwOnError, saveTo, saveStderrTo, saveExitCodeTo.",
 };
 
 function requestedNodeTypes(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean);
+  if (Array.isArray(raw)) {
+    return raw.filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim()).filter(Boolean);
+  }
   if (typeof raw !== "string" || !raw.trim()) return [];
-  try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) return parsed.filter((value): value is string => typeof value === "string"); } catch { /* accept loose model output */ }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((value): value is string =>
+        typeof value === "string"
+      );
+    }
+  } catch { /* accept loose model output */ }
   return raw.trim().split(/[,\s]+/).filter(Boolean);
 }
 
-export function getWorkflowNodeSpec(rawNodeTypes?: unknown, context?: { models?: string[]; ragSettings?: string[]; mcpServers?: string[] }): string {
+export function getWorkflowNodeSpec(
+  rawNodeTypes?: unknown,
+  context?: {
+    models?: string[];
+    ragSettings?: string[];
+    mcpServers?: string[];
+  },
+): string {
   const requested = requestedNodeTypes(rawNodeTypes);
   const contextLines = [
-    context?.models?.length ? `Configured models: ${context.models.join(", ")}` : "",
-    context?.ragSettings?.length ? `Configured RAG settings: ${context.ragSettings.join(", ")}` : "",
-    context?.mcpServers?.length ? `Configured MCP servers: ${context.mcpServers.join(", ")}` : "",
+    context?.models?.length
+      ? `Configured models: ${context.models.join(", ")}`
+      : "",
+    context?.ragSettings?.length
+      ? `Configured RAG settings: ${context.ragSettings.join(", ")}`
+      : "",
+    context?.mcpServers?.length
+      ? `Configured MCP servers: ${context.mcpServers.join(", ")}`
+      : "",
   ].filter(Boolean).join("\n");
-  if (!requested.length) return `${workflowGenerationSpec}${contextLines ? `\n\n${contextLines}` : ""}`;
-  const sections = requested.map((name) => workflowNodeDocumentation[name as WorkflowNodeType] ?? `- ${name}: unknown node type; verify the name against the full workflow specification.`);
+  if (!requested.length) {
+    return `${workflowGenerationSpec}${
+      contextLines ? `\n\n${contextLines}` : ""
+    }`;
+  }
+  const sections = requested.map((name) =>
+    workflowNodeDocumentation[name as WorkflowNodeType] ??
+      `- ${name}: unknown node type; verify the name against the full workflow specification.`
+  );
   return [
     "Workspace workflow nodes use unique id/type fields. Normal nodes use next; if/while use trueNext and falseNext. Variables use {{name}} and nested paths such as {{items[index].path}}.",
     ...sections,
@@ -124,4 +187,6 @@ export function getWorkflowNodeSpec(rawNodeTypes?: unknown, context?: { models?:
   ].filter(Boolean).join("\n\n");
 }
 
-export function documentedWorkflowNodeTypes(): string[] { return workflowNodeTypes.filter((type) => !!workflowNodeDocumentation[type]); }
+export function documentedWorkflowNodeTypes(): string[] {
+  return workflowNodeTypes.filter((type) => !!workflowNodeDocumentation[type]);
+}

@@ -29,7 +29,7 @@ func (a *App) CheckWebEmbeddable(rawURL string) EmbedCheckResult {
 		return EmbedCheckResult{Embeddable: true}
 	}
 	request.Header.Set("User-Agent", "LLM-Hub-Workspace/1.0")
-	response, err := (&http.Client{Timeout: 8 * time.Second, CheckRedirect: func(next *http.Request, via []*http.Request) error {
+	response, err := (&http.Client{Timeout: 8 * time.Second, Transport: publicNetworkTransport(), CheckRedirect: func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
 			return http.ErrUseLastResponse
 		}

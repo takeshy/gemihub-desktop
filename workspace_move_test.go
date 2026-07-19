@@ -61,14 +61,14 @@ func workspaceMoveTestApp(t *testing.T) (*App, string, string) {
 	config := t.TempDir()
 	files := t.TempDir()
 	app := NewApp()
-	app.projectConfigDir = config
-	if err := app.initializeProjects(); err != nil {
+	app.workspaceConfigDir = config
+	if err := app.initializeWorkspaces(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := app.SetDirectoryBase(files); err != nil {
 		t.Fatal(err)
 	}
-	return app, files, app.GetActiveProjectPath()
+	return app, files, app.GetWorkspacePath()
 }
 
 func TestMoveDirectoryIntoWorkspace(t *testing.T) {
@@ -80,7 +80,7 @@ func TestMoveDirectoryIntoWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "paper.md"), []byte("paper"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := app.MoveDirectoryIntoWorkspace("workspace://Research", "Research", false)
+	result, err := app.MoveDirectoryIntoWorkspace("files://Research", "Research", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestMoveDirectoryIntoWorkspaceLeavesLink(t *testing.T) {
 	if err := os.MkdirAll(source, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	result, err := app.MoveDirectoryIntoWorkspace("workspace://Notes", "Notes", true)
+	result, err := app.MoveDirectoryIntoWorkspace("files://Notes", "Notes", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestMoveFileIntoWorkspaceDirectory(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(workspace, "Imported"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	result, err := app.MovePathIntoWorkspace("workspace://outside.md", "Imported", "renamed.md", false)
+	result, err := app.MovePathIntoWorkspace("files://outside.md", "Imported", "renamed.md", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,10 +145,10 @@ func TestMovePathIntoWorkspaceRejectsTraversalAndFileLink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(files, "outside.md"), []byte("external"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.MovePathIntoWorkspace("workspace://outside.md", "../outside", "outside.md", false); err == nil {
+	if _, err := app.MovePathIntoWorkspace("files://outside.md", "../outside", "outside.md", false); err == nil {
 		t.Fatal("Workspace destination traversal was accepted")
 	}
-	if _, err := app.MovePathIntoWorkspace("workspace://outside.md", "", "outside.md", true); err == nil {
+	if _, err := app.MovePathIntoWorkspace("files://outside.md", "", "outside.md", true); err == nil {
 		t.Fatal("leaving a link for a regular file was accepted")
 	}
 }
@@ -158,7 +158,7 @@ func TestMoveDirectoryIntoWorkspaceRejectsReservedName(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(files, "Source"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.MoveDirectoryIntoWorkspace("workspace://Source", "Dashboards", false); err == nil {
+	if _, err := app.MoveDirectoryIntoWorkspace("files://Source", "Dashboards", false); err == nil {
 		t.Fatal("reserved Workspace directory was accepted")
 	}
 }

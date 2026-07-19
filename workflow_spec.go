@@ -10,7 +10,8 @@ var workflowNodeDocumentation = map[string]string{
 	"variable": "variable: name is required; value is optional. Omit value to preserve caller input.", "set": "set: name and value are required. Supports one arithmetic operation; _clipboard copies the result.",
 	"if": "if: condition and trueNext are required; falseNext is optional.", "while": "while: condition and trueNext are required; falseNext is the loop exit. Only while nodes may be back-reference targets.",
 	"command": "command: prompt; optional model, ragSetting, vaultTools, mcpServers, enableThinking, attachments, saveTo, saveImageTo.", "http": "http: url; optional method, contentType, responseType, headers, body, saveTo, saveStatus, throwOnError. Supports FileExplorerData binary/form-data.",
-	"json": "json: source is the bare variable name containing JSON; saveTo is required.", "note": "note: path, content; optional mode overwrite/append/create, confirm, history.", "note-read": "note-read: path and saveTo are required.",
+	"gemihub-command": "gemihub-command: command encrypt/duplicate/convert-to-html/rename and path; optional text, metadata JSON, saveTo. PDF conversion is unavailable; publish/unpublish require Web.",
+	"json":            "json: source is the bare variable name containing JSON; saveTo is required.", "note": "note: path, content; optional mode overwrite/append/create, confirm, history.", "note-read": "note-read: path and saveTo are required.",
 	"note-search": "note-search: query and saveTo; optional searchContent and limit.", "note-list": "note-list: saveTo; optional folder, recursive, tags, tagMatch, createdWithin, modifiedWithin, sortBy, sortOrder, limit.",
 	"folder-list": "folder-list: saveTo; optional folder. Returns {folders,count}.", "open": "open: path is required.", "dialog": "dialog: optional title, message, markdown, options, multiSelect, inputTitle, multiline, defaults, button1, button2, saveTo.",
 	"prompt-file": "prompt-file: saveTo; optional title, default, forcePrompt, saveFileTo.", "prompt-selection": "prompt-selection: saveTo; optional saveSelectionTo.", "workflow": "workflow: path; optional input/output JSON mappings, prefix, saveTo.",
@@ -53,7 +54,7 @@ func workflowSpecToolResult(arguments map[string]any, contexts ...WorkflowSpecCo
 		}
 		sort.Strings(names)
 	}
-	lines := []string{"Project workflow format: one standalone pure-YAML file named *.workflow.yaml. Do not include Markdown or code fences. Nodes require unique id/type. Normal nodes use next; if/while use trueNext and falseNext. Variables use {{name}}, {{object.path}}, {{items[index].path}}, and optional :json escaping."}
+	lines := []string{"Workspace workflow format: one standalone pure-YAML file named *.workflow.yaml. Do not include Markdown or code fences. Nodes require unique id/type. Normal nodes use next; if/while use trueNext and falseNext. Variables use {{name}}, {{object.path}}, {{items[index].path}}, and optional :json escaping."}
 	for _, name := range names {
 		if documentation, ok := workflowNodeDocumentation[name]; ok {
 			lines = append(lines, "- "+documentation)

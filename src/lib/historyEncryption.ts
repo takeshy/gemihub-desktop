@@ -5,7 +5,7 @@ import {
   generateKeyPair,
   verifyPassword,
 } from "./hybridEncryption";
-import { readProjectStateFile, writeProjectStateFile } from "./wailsBackend";
+import { readWorkspaceStateFile, writeWorkspaceStateFile } from "./wailsBackend";
 
 const PROFILE_KEY = "gemihub-desktop:history-encryption-profile";
 const PREFS_KEY = "gemihub-desktop:history-encryption-preferences";
@@ -65,11 +65,11 @@ export async function decryptHistoryPayload(content: string, password = sessionP
 export function historySessionPassword(): string { return sessionPassword; }
 
 export async function migrateWorkflowHistoryStorage(encrypt: boolean): Promise<void> {
-  const value = await readProjectStateFile("workflow-history");
+  const value = await readWorkspaceStateFile("workflow-history");
   if (value) {
     const encrypted = value.startsWith("---\nencrypted: true");
-    if (encrypt && !encrypted) await writeProjectStateFile("workflow-history", await encryptHistoryPayload(value, "workflow-log"));
-    if (!encrypt && encrypted) await writeProjectStateFile("workflow-history", await decryptHistoryPayload(value));
+    if (encrypt && !encrypted) await writeWorkspaceStateFile("workflow-history", await encryptHistoryPayload(value, "workflow-log"));
+    if (!encrypt && encrypted) await writeWorkspaceStateFile("workflow-history", await decryptHistoryPayload(value));
   }
   window.dispatchEvent(new CustomEvent("llm-hub:workflow-history-changed", { detail: { reload: true } }));
 }

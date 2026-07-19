@@ -16,8 +16,33 @@ export class ParseError extends Error {
 }
 
 export function parseExpression(input: string): AstNode {
+  if (input.length > 65536) {
+    throw new ParseError("PAR005", "Expression is too large", {
+      startOffset: 0,
+      endOffset: input.length,
+      startLine: 1,
+      startColumn: 1,
+      endLine: 1,
+      endColumn: input.length + 1,
+    });
+  }
   const lexer = new Lexer(input);
   const tokens = lexer.tokenize();
+  let nesting = 0;
+  for (const token of tokens) {
+    if (token.type === "LPAREN" || token.type === "LBRACKET") {
+      nesting++;
+      if (nesting > 128) {
+        throw new ParseError(
+          "PAR005",
+          "Expression nesting exceeds 128 levels",
+          token.span,
+        );
+      }
+    } else if (token.type === "RPAREN" || token.type === "RBRACKET") {
+      nesting = Math.max(0, nesting - 1);
+    }
+  }
   const parser = new Parser(tokens);
   const ast = parser.parseExpression();
   parser.expectEOF();

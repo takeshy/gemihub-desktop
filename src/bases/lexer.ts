@@ -11,6 +11,42 @@ const KEYWORDS = new Map<string, TokenType>([
 
 const REGEXP_FLAGS = new Set(["g", "i", "m", "s", "u", "y"]);
 
+function isUnsafeRegExp(pattern: string): boolean {
+  if (
+    pattern.length > 256 || /\\[1-9]|\\k<|\(\?/.test(pattern) ||
+    /\)\s*(?:[?*+]|\{)/.test(pattern)
+  ) return true;
+  let escaped = false;
+  let inClass = false;
+  let quantifiers = 0;
+  for (let index = 0; index < pattern.length; index++) {
+    const char = pattern[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "[") inClass = true;
+    else if (char === "]") inClass = false;
+    else if (!inClass && (char === "*" || char === "+")) return true;
+    else if (!inClass && char === "?") quantifiers++;
+    else if (!inClass && char === "{") {
+      const match = pattern.slice(index).match(/^\{(\d+)(?:,(\d+))?\}/);
+      if (!match) return true;
+      const lower = Number(match[1]);
+      const upper = match[2] === undefined ? lower : Number(match[2]);
+      if (lower > upper || upper > 100) return true;
+      quantifiers++;
+      index += match[0].length - 1;
+    }
+    if (quantifiers > 16) return true;
+  }
+  return false;
+}
+
 export class LexError extends Error {
   code: string;
   span: SourceSpan;
@@ -574,6 +610,13 @@ export class Lexer {
           throw new LexError(
             "LEX020",
             `Unknown regexp flag: ${this.peek()}`,
+            this.currentSpan(startPos, startLine, startCol),
+          );
+        }
+        if (isUnsafeRegExp(pattern)) {
+          throw new LexError(
+            "LEX020",
+            "Unsafe or excessively complex regexp",
             this.currentSpan(startPos, startLine, startCol),
           );
         }

@@ -37,16 +37,20 @@ func pathInside(base, target string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 func (a *App) lifecycleBase(target string) (string, string) {
-	if project := a.GetActiveProjectPath(); project != "" && pathInside(project, target) {
-		return project, "project"
+	if workspace := a.GetWorkspacePath(); workspace != "" && pathInside(workspace, target) {
+		return workspace, "workspace"
 	}
-	return a.GetDirectoryBase(), "workspace"
+	return a.GetDirectoryBase(), "files"
 }
 func historyPathKey(path string) string {
 	sum := sha256.Sum256([]byte(filepath.ToSlash(path)))
 	return hex.EncodeToString(sum[:])
 }
 func (a *App) recordFileVersion(path, target string) error {
+	if info, statErr := os.Stat(target); statErr == nil && info.Size() > 64*1024*1024 {
+		// History is best-effort and must never load multi-gigabyte documents into memory.
+		return nil
+	}
 	data, err := os.ReadFile(target)
 	if os.IsNotExist(err) {
 		return nil
@@ -142,6 +146,13 @@ func copyRegularFile(source, destination string) error {
 	return os.WriteFile(destination, data, 0o644)
 }
 func (a *App) DuplicateFile(path string) (string, error) {
+	resultPath := path
+	resultPrefix := ""
+	if stripped, ok := stripPathScope(path, "workspace"); ok {
+		resultPath, resultPrefix = stripped, "workspace://"
+	} else if stripped, ok := stripPathScope(path, "files"); ok {
+		resultPath, resultPrefix = stripped, "files://"
+	}
 	source, err := a.directoryPath(path, false)
 	if err != nil {
 		return "", err
@@ -172,8 +183,8 @@ func (a *App) DuplicateFile(path string) (string, error) {
 	if err = copyRegularFile(source, destination); err != nil {
 		return "", err
 	}
-	rel := filepath.ToSlash(filepath.Join(filepath.ToSlash(filepath.Dir(path)), name))
-	return strings.TrimPrefix(rel, "./"), nil
+	rel := filepath.ToSlash(filepath.Join(filepath.ToSlash(filepath.Dir(resultPath)), name))
+	return resultPrefix + strings.TrimPrefix(rel, "./"), nil
 }
 func (a *App) TrashFile(path string) error {
 	target, err := a.directoryPath(path, false)
@@ -195,7 +206,7 @@ func (a *App) TrashFile(path string) error {
 }
 func (a *App) ListTrash() ([]TrashEntry, error) {
 	result := []TrashEntry{}
-	bases := []struct{ base, scope string }{{a.GetDirectoryBase(), "workspace"}, {a.GetActiveProjectPath(), "project"}}
+	bases := []struct{ base, scope string }{{a.GetDirectoryBase(), "files"}, {a.GetWorkspacePath(), "workspace"}}
 	for _, item := range bases {
 		if item.base == "" {
 			continue
@@ -221,8 +232,8 @@ func (a *App) RestoreTrash(id string) error {
 		return fmt.Errorf("invalid trash id")
 	}
 	base := a.GetDirectoryBase()
-	if parts[0] == "project" {
-		base = a.GetActiveProjectPath()
+	if parts[0] == "workspace" {
+		base = a.GetWorkspacePath()
 	}
 	dir := filepath.Join(base, ".llm-hub", "trash", filepath.Base(parts[1]))
 	data, err := os.ReadFile(filepath.Join(dir, "meta.json"))

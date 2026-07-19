@@ -58,6 +58,12 @@ jobs:
       - name: Check frontend
         run: deno task check
 
+      - name: Test frontend
+        run: deno task test
+
+      - name: Test backend
+        run: go test ./...
+
       - name: Build binary
         run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build -devtools -clean -nopackage -platform ${{ matrix.platform }} -o ${{ matrix.artifact }}
 

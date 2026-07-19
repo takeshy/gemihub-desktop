@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
@@ -119,36 +120,42 @@ func (a *App) GetDirectoryBase() string {
 
 func (a *App) directoryPath(path string, allowMissing bool) (string, error) {
 	path = strings.TrimSpace(path)
+	forceFiles := strings.HasPrefix(strings.ToLower(path), "files://")
 	forceWorkspace := strings.HasPrefix(strings.ToLower(path), "workspace://")
-	forceProject := strings.HasPrefix(strings.ToLower(path), "project://")
-	if forceWorkspace {
+	if forceFiles {
+		path = path[len("files://"):]
+	} else if forceWorkspace {
 		path = path[len("workspace://"):]
-	} else if forceProject {
-		path = path[len("project://"):]
 	}
 	base := a.GetDirectoryBase()
-	if forceProject {
-		base = a.GetActiveProjectPath()
-	} else if !forceWorkspace && isProjectResourcePath(path) {
-		if projectBase := a.GetActiveProjectPath(); projectBase != "" {
-			base = projectBase
+	if forceWorkspace {
+		base = a.GetWorkspacePath()
+	} else if !forceFiles && isWorkspaceResourcePath(path) {
+		if workspaceBase := a.GetWorkspacePath(); workspaceBase != "" {
+			base = workspaceBase
 		}
 	}
 	if base == "" {
-		if forceProject {
-			return "", fmt.Errorf("active project is not configured")
+		if forceWorkspace {
+			return "", fmt.Errorf("active Workspace is not configured")
 		}
 		return "", fmt.Errorf("directory base is not configured")
 	}
 	return resolvePathInsideBase(base, path, allowMissing)
 }
 
-func (a *App) projectPath(path string, allowMissing bool) (string, error) {
-	base := a.GetActiveProjectPath()
+func (a *App) workspacePath(path string, allowMissing bool) (string, error) {
+	base := a.GetWorkspacePath()
 	if base == "" {
-		return "", fmt.Errorf("active project is not configured")
+		return "", fmt.Errorf("active Workspace is not configured")
 	}
-	return resolvePathInsideBase(base, strings.TrimSpace(path), allowMissing)
+	path = strings.TrimSpace(path)
+	if strings.HasPrefix(strings.ToLower(path), "workspace://") {
+		path = path[len("workspace://"):]
+	} else if strings.HasPrefix(strings.ToLower(path), "files://") {
+		return "", fmt.Errorf("Files path cannot be used with the Workspace file API")
+	}
+	return resolvePathInsideBase(base, path, allowMissing)
 }
 
 func resolvePathInsideBase(base, path string, allowMissing bool) (string, error) {
@@ -190,13 +197,13 @@ func resolvePathInsideBase(base, path string, allowMissing bool) (string, error)
 	return target, nil
 }
 
-func isProjectResourcePath(path string) bool {
+func isWorkspaceResourcePath(path string) bool {
 	normalized := strings.TrimLeft(filepath.ToSlash(strings.TrimSpace(path)), "/")
 	first := strings.SplitN(normalized, "/", 2)[0]
 	if strings.EqualFold(first, ".llm-hub") {
 		return true
 	}
-	for _, root := range projectResourceDirectories {
+	for _, root := range workspaceResourceDirectories {
 		if strings.EqualFold(first, root) {
 			return true
 		}
@@ -259,23 +266,23 @@ func (a *App) OpenContainingFolder(path string) error {
 	return command.Process.Release()
 }
 
-func (a *App) ListProjectTree() ([]FileTreeNode, error) {
-	base := a.GetActiveProjectPath()
+func (a *App) ListWorkspaceTree() ([]FileTreeNode, error) {
+	base := a.GetWorkspacePath()
 	if base == "" {
 		return []FileTreeNode{}, nil
 	}
 	return buildFileTree(base, base)
 }
 
-// ListProjectFiles returns every user file in the active project. It is kept
-// separate from FileInventory because workspace and project files have
+// ListWorkspaceFiles returns every user file in the active Workspace. It is kept
+// separate from FileInventory because Files and Workspace files have
 // different lifecycle and sync scopes.
-func (a *App) ListProjectFiles() ([]DirectoryFileEntry, error) {
-	return fileInventoryForBase(a.GetActiveProjectPath())
+func (a *App) ListWorkspaceFiles() ([]DirectoryFileEntry, error) {
+	return fileInventoryForBase(a.GetWorkspacePath())
 }
 
-func (a *App) ReadProjectFile(path string) (*LocalFileResult, error) {
-	target, err := a.projectPath(path, false)
+func (a *App) ReadWorkspaceFile(path string) (*LocalFileResult, error) {
+	target, err := a.workspacePath(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -287,8 +294,8 @@ func (a *App) ReadProjectFile(path string) (*LocalFileResult, error) {
 	return result, nil
 }
 
-func (a *App) WriteProjectFile(path, content string) error {
-	target, err := a.projectPath(path, true)
+func (a *App) WriteWorkspaceFile(path, content string) error {
+	target, err := a.workspacePath(path, true)
 	if err != nil {
 		return err
 	}
@@ -301,7 +308,7 @@ func (a *App) WriteProjectFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(target), ".gemihub-project-*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".gemihub-workspace-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -321,8 +328,8 @@ func (a *App) WriteProjectFile(path, content string) error {
 	return os.Rename(tmpPath, target)
 }
 
-func (a *App) WriteProjectBinaryFile(path, contentBase64 string) error {
-	target, err := a.projectPath(path, true)
+func (a *App) WriteWorkspaceBinaryFile(path, contentBase64 string) error {
+	target, err := a.workspacePath(path, true)
 	if err != nil {
 		return err
 	}
@@ -336,23 +343,23 @@ func (a *App) WriteProjectBinaryFile(path, contentBase64 string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(target, content, 0o644)
+	return writeUserFileAtomic(target, content)
 }
 
-func (a *App) CreateProjectDirectory(path string) error {
-	target, err := a.projectPath(path, true)
+func (a *App) CreateWorkspaceDirectory(path string) error {
+	target, err := a.workspacePath(path, true)
 	if err != nil {
 		return err
 	}
 	return os.MkdirAll(target, 0o755)
 }
 
-func (a *App) RenameProjectFile(oldPath, newPath string) error {
-	oldTarget, err := a.projectPath(oldPath, false)
+func (a *App) RenameWorkspaceFile(oldPath, newPath string) error {
+	oldTarget, err := a.workspacePath(oldPath, false)
 	if err != nil {
 		return err
 	}
-	newTarget, err := a.projectPath(newPath, true)
+	newTarget, err := a.workspacePath(newPath, true)
 	if err != nil {
 		return err
 	}
@@ -367,13 +374,13 @@ func (a *App) RenameProjectFile(oldPath, newPath string) error {
 	return os.Rename(oldTarget, newTarget)
 }
 
-func (a *App) DeleteProjectFile(path string) error {
-	target, err := a.projectPath(path, false)
+func (a *App) DeleteWorkspaceFile(path string) error {
+	target, err := a.workspacePath(path, false)
 	if err != nil {
 		return err
 	}
-	if target == a.GetActiveProjectPath() {
-		return fmt.Errorf("cannot delete the active project")
+	if target == a.GetWorkspacePath() {
+		return fmt.Errorf("cannot delete the active Workspace")
 	}
 	info, err := os.Lstat(target)
 	if err != nil {
@@ -507,11 +514,11 @@ func (a *App) CreateDirectory(path string) error {
 }
 
 func (a *App) RenameFile(oldPath, newPath string) error {
-	oldProjectPath, projectScoped := stripPathScope(oldPath, "project")
-	_, workspaceScoped := stripPathScope(oldPath, "workspace")
-	oldProjectPath = strings.Trim(filepath.ToSlash(oldProjectPath), "/")
-	if !workspaceScoped && (projectScoped || isProjectResourcePath(oldPath)) && isProjectResourcePath(oldProjectPath) && !strings.Contains(oldProjectPath, "/") {
-		return fmt.Errorf("cannot rename a project resource directory")
+	oldWorkspacePath, workspaceScoped := stripPathScope(oldPath, "workspace")
+	_, filesScoped := stripPathScope(oldPath, "files")
+	oldWorkspacePath = strings.Trim(filepath.ToSlash(oldWorkspacePath), "/")
+	if !filesScoped && (workspaceScoped || isWorkspaceResourcePath(oldPath)) && isWorkspaceResourcePath(oldWorkspacePath) && !strings.Contains(oldWorkspacePath, "/") {
+		return fmt.Errorf("cannot rename a Workspace resource directory")
 	}
 	oldTarget, err := a.directoryPath(oldPath, false)
 	if err != nil {
@@ -540,14 +547,14 @@ func (a *App) DeleteFile(path string) error {
 	if target == a.GetDirectoryBase() {
 		return fmt.Errorf("cannot delete the directory base")
 	}
-	if target == a.GetActiveProjectPath() {
-		return fmt.Errorf("cannot delete the active project")
+	if target == a.GetWorkspacePath() {
+		return fmt.Errorf("cannot delete the active Workspace")
 	}
-	projectPath, projectScoped := stripPathScope(path, "project")
-	_, workspaceScoped := stripPathScope(path, "workspace")
-	projectPath = strings.Trim(filepath.ToSlash(projectPath), "/")
-	if !workspaceScoped && (projectScoped || isProjectResourcePath(path)) && isProjectResourcePath(projectPath) && !strings.Contains(projectPath, "/") {
-		return fmt.Errorf("cannot delete a project resource directory")
+	workspacePath, workspaceScoped := stripPathScope(path, "workspace")
+	_, filesScoped := stripPathScope(path, "files")
+	workspacePath = strings.Trim(filepath.ToSlash(workspacePath), "/")
+	if !filesScoped && (workspaceScoped || isWorkspaceResourcePath(path)) && isWorkspaceResourcePath(workspacePath) && !strings.Contains(workspacePath, "/") {
+		return fmt.Errorf("cannot delete a Workspace resource directory")
 	}
 	info, err := os.Lstat(target)
 	if err != nil {
@@ -564,8 +571,8 @@ func (a *App) SearchFiles(query string, limit int) ([]FileSearchResult, error) {
 	return searchFilesInBase(base, query, limit)
 }
 
-func (a *App) SearchProjectFiles(query string, limit int) ([]FileSearchResult, error) {
-	return searchFilesInBase(a.GetActiveProjectPath(), query, limit)
+func (a *App) SearchWorkspaceFiles(query string, limit int) ([]FileSearchResult, error) {
+	return searchFilesInBase(a.GetWorkspacePath(), query, limit)
 }
 
 func searchFilesInBase(base, query string, limit int) ([]FileSearchResult, error) {
@@ -624,20 +631,20 @@ func (a *App) FileInventory() ([]DirectoryFileEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	projectBase := a.GetActiveProjectPath()
-	project, err := fileInventoryForBase(projectBase)
+	workspaceBase := a.GetWorkspacePath()
+	workspaceFiles, err := fileInventoryForBase(workspaceBase)
 	if err != nil {
 		return nil, err
 	}
-	byPath := make(map[string]DirectoryFileEntry, len(workspace)+len(project))
+	byPath := make(map[string]DirectoryFileEntry, len(workspace)+len(workspaceFiles))
 	for _, item := range workspace {
-		if isProjectResourcePath(item.Path) {
+		if isWorkspaceResourcePath(item.Path) {
 			continue
 		}
 		byPath[item.Path] = item
 	}
-	for _, item := range project {
-		if isProjectResourcePath(item.Path) {
+	for _, item := range workspaceFiles {
+		if isWorkspaceResourcePath(item.Path) {
 			byPath[item.Path] = item
 		}
 	}
@@ -674,7 +681,7 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 		rel, _ := filepath.Rel(base, path)
 		if isBinaryFileName(entry.Name()) {
 			checksum := ""
-			// Files transported through the project API need a content checksum
+			// Files transported through the Workspace API need a content checksum
 			// for Drive sync conflict resolution. Hash them as a stream and cache
 			// by size+mtime so repeated inventories do not reread large media.
 			if shouldReadAsDataURL(entry.Name()) {
@@ -685,15 +692,21 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 			})
 			return nil
 		}
-		bytes, err := os.ReadFile(path)
+		checksum, err := streamedFileMD5(path, info)
 		if err != nil {
 			return nil
 		}
-		sum := md5.Sum(bytes)
-		binary := strings.IndexByte(string(bytes), 0) >= 0
+		file, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		sample := make([]byte, 8192)
+		count, _ := file.Read(sample)
+		_ = file.Close()
+		binary := bytes.IndexByte(sample[:count], 0) >= 0
 		result = append(result, DirectoryFileEntry{
 			Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(path, info), ModTime: info.ModTime().UnixMilli(),
-			MD5: hex.EncodeToString(sum[:]), Binary: binary,
+			MD5: checksum, Binary: binary,
 		})
 		return nil
 	})
@@ -715,5 +728,26 @@ func (a *App) WriteBinaryFile(path, contentBase64 string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(target, bytes, 0o644)
+	return writeUserFileAtomic(target, bytes)
+}
+
+func writeUserFileAtomic(target string, content []byte) error {
+	temporary, err := os.CreateTemp(filepath.Dir(target), ".gemihub-binary-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o644); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(content); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return replaceRAGFile(temporaryPath, target)
 }

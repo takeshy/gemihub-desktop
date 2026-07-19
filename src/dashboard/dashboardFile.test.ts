@@ -28,7 +28,7 @@ Deno.test("dashboard parser accepts legacy flat layouts and derives mobile stack
 Deno.test("dashboard list discovers .dashboard files anywhere in the Workspace", async () => {
   const runtime = globalThis as unknown as { window?: unknown };
   const previous = runtime.window;
-  runtime.window = { go: { main: { App: { ListProjectFiles: () => Promise.resolve([
+  runtime.window = { go: { main: { App: { ListWorkspaceFiles: () => Promise.resolve([
     { path: "Dashboards/home.dashboard", size: 1, createdTime: 0, modTime: 2, md5: "", binary: false },
     { path: "Planning/team.dashboard", size: 1, createdTime: 0, modTime: 3, md5: "", binary: false },
     { path: "notes/readme.md", size: 1, createdTime: 0, modTime: 4, md5: "", binary: false },

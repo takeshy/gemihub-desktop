@@ -7,8 +7,8 @@ import {
   Database,
   FileCode2,
   FileText,
-  Library,
   LayoutDashboard,
+  Library,
   Paperclip,
   Plus,
   Search,
@@ -22,23 +22,24 @@ import {
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import {
   applyPendingFileAction,
+  cancelChat,
   chat,
   type ChatMessage,
   type ChatStreamEvent,
-  listProjectFiles,
+  listWorkspaceFiles,
   onChatFunctionLimitRequest,
   onChatStream,
   onChatToolRequest,
   type PendingFileAction,
   type RAGSearchResult,
   readFile,
-  readProjectFile,
-  readProjectStateFile,
-  resolveChatTool,
+  readWorkspaceFile,
+  readWorkspaceStateFile,
   resolveChatFunctionLimit,
+  resolveChatTool,
   searchRAG,
   stopCLI,
-  writeProjectStateFile,
+  writeWorkspaceStateFile,
 } from "../lib/wailsBackend";
 import {
   buildSkillSystemPrompt,
@@ -222,11 +223,12 @@ function normalizeSessions(value: unknown): ChatSession[] {
       : DEFAULT_BUILTIN_SKILL_IDS.map((id) =>
         `${builtinFolderPath(id)}/SKILL.md`
       ),
-    dismissedContextSkillPaths: Array.isArray(session.dismissedContextSkillPaths)
-      ? session.dismissedContextSkillPaths.filter((path): path is string =>
-        typeof path === "string"
-      )
-      : [],
+    dismissedContextSkillPaths:
+      Array.isArray(session.dismissedContextSkillPaths)
+        ? session.dismissedContextSkillPaths.filter((path): path is string =>
+          typeof path === "string"
+        )
+        : [],
     activeOkfBundleIds: Array.isArray(session.activeOkfBundleIds)
       ? session.activeOkfBundleIds.filter((id): id is string =>
         typeof id === "string"
@@ -241,7 +243,7 @@ function normalizeSessions(value: unknown): ChatSession[] {
 }
 
 async function loadStoredSessions(): Promise<StoredChatHistory> {
-  const raw = await readProjectStateFile(CHAT_HISTORY_STATE_FILE);
+  const raw = await readWorkspaceStateFile(CHAT_HISTORY_STATE_FILE);
   if (!raw) {
     const sessions = [newSession()];
     return { activeSessionId: sessions[0].id, sessions };
@@ -271,9 +273,9 @@ function titleFrom(text: string): string {
 }
 
 function contextMessage(text: string, files: AttachedFile[]): string {
-	const textFiles = files.filter((file) => !file.content.startsWith("data:"));
-	if (textFiles.length === 0) return text;
-	const context = textFiles.map((file) =>
+  const textFiles = files.filter((file) => !file.content.startsWith("data:"));
+  if (textFiles.length === 0) return text;
+  const context = textFiles.map((file) =>
     `\n--- BEGIN FILE: ${file.path} ---\n${file.content}\n--- END FILE: ${file.path} ---`
   ).join("\n");
   return `${text}\n\nThe following Workspace files are attached as context:${context}`;
@@ -282,7 +284,13 @@ function contextMessage(text: string, files: AttachedFile[]): string {
 function attachedChatAttachments(files: AttachedFile[]) {
   return files.flatMap((file) => {
     const match = file.content.match(/^data:([^;,]+);base64,([\s\S]+)$/);
-    return match ? [{ name: file.path.split("/").at(-1) || file.path, mimeType: match[1], data: match[2] }] : [];
+    return match
+      ? [{
+        name: file.path.split("/").at(-1) || file.path,
+        mimeType: match[1],
+        data: match[2],
+      }]
+      : [];
   });
 }
 
@@ -385,7 +393,7 @@ async function processSkillMarkers(
 export function ChatPanel({
   isDark,
   directoryBase,
-  projectBase,
+  workspaceBase,
   settings,
   onSettingsChange,
   activeFile,
@@ -399,7 +407,7 @@ export function ChatPanel({
 }: {
   isDark: boolean;
   directoryBase: string;
-  projectBase: string;
+  workspaceBase: string;
   settings: ChatSettings;
   onSettingsChange: (settings: ChatSettings) => void;
   activeFile: { path: string; content: string } | null;
@@ -438,6 +446,7 @@ export function ChatPanel({
   >(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef(false);
+  const activeRunControllerRef = useRef<AbortController | null>(null);
   const streamRef = useRef<
     { streamId: string; sessionId: string; messageId: string } | null
   >(null);
@@ -459,7 +468,8 @@ export function ChatPanel({
     sessions[0];
   const messages = activeSession?.messages ?? [];
   const activeSkillPaths = activeSession?.activeSkillPaths ?? [];
-  const dismissedContextSkillPaths = activeSession?.dismissedContextSkillPaths ?? [];
+  const dismissedContextSkillPaths =
+    activeSession?.dismissedContextSkillPaths ?? [];
   const activeOkfBundleIds = activeSession?.activeOkfBundleIds ?? [];
   const activeOkfBundleIdsRef = useRef(activeOkfBundleIds);
   activeOkfBundleIdsRef.current = activeOkfBundleIds;
@@ -515,7 +525,9 @@ export function ChatPanel({
     [activeSession?.id],
   );
   const setActiveMcpServerNames = useCallback(
-    (update: string[] | null | ((names: string[] | null) => string[] | null)) => {
+    (
+      update: string[] | null | ((names: string[] | null) => string[] | null),
+    ) => {
       if (!activeSession) return;
       setSessions((current) =>
         current.map((session) =>
@@ -549,20 +561,24 @@ export function ChatPanel({
   }, [setActiveOkfBundleIds]);
   const refreshOkfBundles = useCallback(async () => {
     const builtin = getBuiltinOkfBundle();
-    if (!projectBase) {
+    if (!workspaceBase) {
       setOkfBundles([builtin]);
       return;
     }
     try {
-      const discovered = await discoverOkfBundles(settings.okfRoot || "Knowledge");
+      const discovered = await discoverOkfBundles(
+        settings.okfRoot || "Knowledge",
+      );
       const otherBundles = discovered.filter((bundle) =>
-        !/^gemihub(?:\s+(?:desktop\s+)?(?:okf|help))?$/i.test(bundle.name.trim())
+        !/^gemihub(?:\s+(?:desktop\s+)?(?:okf|help))?$/i.test(
+          bundle.name.trim(),
+        )
       );
       setOkfBundles([builtin, ...otherBundles]);
     } catch {
       setOkfBundles([builtin]);
     }
-  }, [projectBase, settings.okfRoot]);
+  }, [workspaceBase, settings.okfRoot]);
   const configuredProviders = configuredChatProviders(settings);
   const thinkingModelKey = `${settings.provider}:${settings.model}`;
   const { available: thinkingAvailable, required: thinkingRequired } =
@@ -594,17 +610,30 @@ export function ChatPanel({
         !isBuiltinSkillPath(skill.folderPath)
       ),
     ];
-  }, [activeSkillPaths, contextBuiltinPath, dismissedContextSkillPaths, selectedSkills, skills]);
+  }, [
+    activeSkillPaths,
+    contextBuiltinPath,
+    dismissedContextSkillPaths,
+    selectedSkills,
+    skills,
+  ]);
   const activeMcpServers = useMemo(() => {
     const selectedNames = activeSession?.activeMcpServerNames;
-    if (settings.provider === "cli" || /(?:image|imagen)/i.test(settings.model)) {
+    if (
+      settings.provider === "cli" || /(?:image|imagen)/i.test(settings.model)
+    ) {
       return [];
     }
     return settings.mcpServers.filter((server) =>
       server.enabled && server.verified &&
       (selectedNames == null || selectedNames.includes(server.name))
     );
-  }, [activeSession?.activeMcpServerNames, settings.mcpServers, settings.model, settings.provider]);
+  }, [
+    activeSession?.activeMcpServerNames,
+    settings.mcpServers,
+    settings.model,
+    settings.provider,
+  ]);
   const skillWorkflows = useMemo(() => collectSkillWorkflows(activeSkills), [
     activeSkills,
   ]);
@@ -719,7 +748,7 @@ export function ChatPanel({
 
   useEffect(() => {
     let cancelled = false;
-    const scope = projectBase || "__session__";
+    const scope = workspaceBase || "__session__";
     setLoadedHistoryScope(null);
     void loadStoredSessions().then((stored) => {
       if (!cancelled) {
@@ -738,10 +767,10 @@ export function ChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectBase]);
+  }, [workspaceBase]);
 
   useEffect(() => {
-    const scope = projectBase || "__session__";
+    const scope = workspaceBase || "__session__";
     if (loadedHistoryScope !== scope || sessionsLocked) return;
     const serialized = JSON.stringify({
       activeSessionId: activeID,
@@ -756,13 +785,13 @@ export function ChatPanel({
         void encryptHistoryPayload(serialized, "chat-history").then(
           (encrypted) => {
             if (!cancelled) {
-              return writeProjectStateFile(CHAT_HISTORY_STATE_FILE, encrypted);
+              return writeWorkspaceStateFile(CHAT_HISTORY_STATE_FILE, encrypted);
             }
           },
         ).catch((caught) =>
           setError(caught instanceof Error ? caught.message : String(caught))
         );
-      } else {void writeProjectStateFile(CHAT_HISTORY_STATE_FILE, serialized)
+      } else {void writeWorkspaceStateFile(CHAT_HISTORY_STATE_FILE, serialized)
           .catch((caught) =>
             setError(caught instanceof Error ? caught.message : String(caught))
           );}
@@ -771,7 +800,7 @@ export function ChatPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeID, loadedHistoryScope, projectBase, sessions, sessionsLocked]);
+  }, [activeID, loadedHistoryScope, workspaceBase, sessions, sessionsLocked]);
 
   useEffect(() => {
     const changed = () => setSessions((current) => [...current]);
@@ -792,7 +821,7 @@ export function ChatPanel({
         unlocked,
       );
     };
-  }, [projectBase]);
+  }, [workspaceBase]);
 
   useEffect(() => {
     setPending(null);
@@ -840,7 +869,7 @@ export function ChatPanel({
       cancelled = true;
       window.removeEventListener("llm-hub:file-tree-refresh", refresh);
     };
-  }, [projectBase]);
+  }, [workspaceBase]);
 
   const runSkillWorkflow = useCallback(
     async (
@@ -885,13 +914,14 @@ export function ChatPanel({
           activeFile,
           openFile: onOpenFile,
           interactionMode: "panel",
+          signal: activeRunControllerRef.current?.signal,
           loadWorkflow: async (path) => {
             const nested = await readFile(path);
             if (!nested) throw new Error(`Workflow file not found: ${path}`);
             return parseWorkflowFile(nested.content, path);
           },
         }, initial);
-        await appendWorkflowHistory(run, projectBase);
+        await appendWorkflowHistory(run, workspaceBase);
         if (run.status !== "completed") {
           return {
             error: `Workflow execution failed: ${
@@ -924,7 +954,7 @@ export function ChatPanel({
         };
       }
     },
-    [activeFile, directoryBase, onOpenFile, projectBase, settings],
+    [activeFile, directoryBase, onOpenFile, workspaceBase, settings],
   );
 
   useEffect(() =>
@@ -1007,21 +1037,24 @@ export function ChatPanel({
       );
     }), [runSkillWorkflow, settings]);
 
-  useEffect(() => onChatFunctionLimitRequest((request) => {
-    if (!request.streamId || request.streamId !== streamRef.current?.streamId) {
-      void resolveChatFunctionLimit(request.requestId, 0);
-      return;
-    }
-    const input = window.prompt(
-      `Tool calls are running low (${request.used}/${request.currentLimit} used, ${request.remaining} remaining).\nAdd more tool calls for this response?`,
-      String(request.extensionAmount),
-    );
-    const extension = input === null ? 0 : Number.parseInt(input, 10);
-    void resolveChatFunctionLimit(
-      request.requestId,
-      Number.isFinite(extension) && extension > 0 ? extension : 0,
-    );
-  }), []);
+  useEffect(() =>
+    onChatFunctionLimitRequest((request) => {
+      if (
+        !request.streamId || request.streamId !== streamRef.current?.streamId
+      ) {
+        void resolveChatFunctionLimit(request.requestId, 0);
+        return;
+      }
+      const input = window.prompt(
+        `Tool calls are running low (${request.used}/${request.currentLimit} used, ${request.remaining} remaining).\nAdd more tool calls for this response?`,
+        String(request.extensionAmount),
+      );
+      const extension = input === null ? 0 : Number.parseInt(input, 10);
+      void resolveChatFunctionLimit(
+        request.requestId,
+        Number.isFinite(extension) && extension > 0 ? extension : 0,
+      );
+    }), []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1118,7 +1151,7 @@ export function ChatPanel({
     if (filePaths.length > 0 || fileLoading) return;
     setFileLoading(true);
     try {
-      const entries = await listProjectFiles();
+      const entries = await listWorkspaceFiles();
       setFilePaths(
         entries.filter((entry) => !entry.binary && entry.size <= 1024 * 1024)
           .map((entry) => entry.path),
@@ -1134,7 +1167,7 @@ export function ChatPanel({
       !/(?:^|\s)@(?:"[^"]*|[^\s]*)$/.test(input) || filePaths.length > 0 ||
       fileLoading
     ) return;
-    void listProjectFiles().then((entries) =>
+    void listWorkspaceFiles().then((entries) =>
       setFilePaths(
         entries.filter((entry) => !entry.binary && entry.size <= 1024 * 1024)
           .map((entry) => entry.path),
@@ -1148,7 +1181,7 @@ export function ChatPanel({
       return;
     }
     try {
-      const file = await readProjectFile(path);
+      const file = await readWorkspaceFile(path);
       if (file) {
         setAttachedFiles((
           current,
@@ -1244,7 +1277,7 @@ export function ChatPanel({
         item === name || item.endsWith(`/${name}`)
       );
       if (!path) continue;
-      const file = await readProjectFile(path);
+      const file = await readWorkspaceFile(path);
       if (file) {
         promptText +=
           `\n\n--- BEGIN REFERENCED FILE: ${path} ---\n${file.content}\n--- END REFERENCED FILE ---`;
@@ -1255,9 +1288,10 @@ export function ChatPanel({
     let ragContext = "";
     let ragSources: GroundingSource[] = [];
     const ragName = settings.selectedRagSetting;
+    const webSearchEnabled = ragName === "__websearch__";
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
     const hasExplicitRAGContext = attachedFiles.some((file) => file.rag);
-    if (ragName && ragSetting && projectBase && !hasExplicitRAGContext) {
+    if (ragName && ragSetting && workspaceBase && !hasExplicitRAGContext) {
       try {
         const results = await searchRAG(
           ragName,
@@ -1327,6 +1361,8 @@ export function ChatPanel({
     setAttachedFiles([]);
     setPending(null);
     abortRef.current = false;
+    const runController = new AbortController();
+    activeRunControllerRef.current = runController;
     let releaseMcp = async () => undefined;
     try {
       skillsAtSend = await loadActiveSkillContents(skillMetadataAtSend);
@@ -1369,7 +1405,8 @@ export function ChatPanel({
         setActiveMcpServerNames(slashMcpNames);
       }
       const enabledMcpServers =
-        settings.provider === "cli" || /(?:image|imagen)/i.test(settings.model)
+        webSearchEnabled || settings.provider === "cli" ||
+          /(?:image|imagen)/i.test(settings.model)
           ? []
           : effectiveMcpServers.filter((server) =>
             server.enabled && server.verified
@@ -1506,7 +1543,8 @@ export function ChatPanel({
         })),
       ];
       const mcpResourceContext = enabledMcpServers.map((server) => {
-        const projectId = server.headers["x-goog-user-project"] || server.headers["X-Goog-User-Project"];
+        const projectId = server.headers["x-goog-user-project"] ||
+          server.headers["X-Goog-User-Project"];
         return projectId
           ? `- ${server.name}: Google Cloud project ID is ${projectId}. Use projects/${projectId} whenever an MCP tool requires a project parent or resource name. Do not guess or search for another project ID.`
           : `- ${server.name}: no explicit Google Cloud project ID is configured.`;
@@ -1522,16 +1560,19 @@ export function ChatPanel({
           settings.systemPrompt,
           buildSkillSystemPrompt(skillsAtSend),
           okfPrompt,
-          mcpResourceContext ? `MCP resource context:\n${mcpResourceContext}` : "",
+          mcpResourceContext
+            ? `MCP resource context:\n${mcpResourceContext}`
+            : "",
         ].filter(Boolean).join("\n\n"),
-        enableFileTools: settings.enableFileTools,
-        fileToolMode: settings.fileToolMode,
+        enableFileTools: webSearchEnabled ? false : settings.enableFileTools,
+        fileToolMode: webSearchEnabled ? "none" : settings.fileToolMode,
+        enableWebSearch: webSearchEnabled,
         cliType: settings.cliType,
         cliPath: settings.cliPaths[settings.cliType],
         cliSessionId: nativeSessionID,
         streamId,
         enableThinking: thinkingEnabled,
-        customTools,
+        customTools: webSearchEnabled ? [] : customTools,
         workflowSpecContext: {
           models: configuredModelOptions(settings).map((option) =>
             option.label
@@ -1651,6 +1692,9 @@ export function ChatPanel({
           streamTimerRef.current = null;
         }
       }
+      if (activeRunControllerRef.current === runController) {
+        activeRunControllerRef.current = null;
+      }
       setLoading(false);
     }
   };
@@ -1732,25 +1776,40 @@ export function ChatPanel({
             <Bot size={28} />
             <strong>How can I help?</strong>
             <span>
-              {projectBase
+              {workspaceBase
                 ? "Attach files or ask me to inspect your workspace."
                 : "Select a Workspace to enable file tools."}
             </span>
             <div className="chat-welcome-guides">
               <article>
-                <div><BookOpen size={16} /><strong>GemiHub Desktop Help</strong></div>
-                <p>Use the built-in help knowledge to ask about features, settings, and everyday operations.</p>
+                <div>
+                  <BookOpen size={16} />
+                  <strong>GemiHub Desktop Help</strong>
+                </div>
+                <p>
+                  Use the built-in help knowledge to ask about features,
+                  settings, and everyday operations.
+                </p>
                 <button type="button" onClick={askDesktopHelp}>
                   <BookOpen size={13} />Ask GemiHub Desktop Help
                 </button>
               </article>
               <article>
-                <div><LayoutDashboard size={16} /><strong>Build Dashboards with AI</strong></div>
-                <p>Describe what you need in natural language. AI can create or update Dashboard widgets, files, and workflows for you.</p>
+                <div>
+                  <LayoutDashboard size={16} />
+                  <strong>Build Dashboards with AI</strong>
+                </div>
+                <p>
+                  Describe what you need in natural language. AI can create or
+                  update Dashboard widgets, files, and workflows for you.
+                </p>
                 <button
                   type="button"
-                  disabled={!projectBase}
-                  onClick={() => draftWithDashboardSkill("Create a Dashboard for my workspace. Ask me what information and widgets it should include.")}
+                  disabled={!workspaceBase}
+                  onClick={() =>
+                    draftWithDashboardSkill(
+                      "Create a Dashboard for my workspace. Ask me what information and widgets it should include.",
+                    )}
                 >
                   <LayoutDashboard size={13} />Draft a Dashboard request
                 </button>
@@ -1964,9 +2023,9 @@ export function ChatPanel({
                       paths.filter((path) => path !== skill.skillFilePath)
                     );
                     if (skill.folderPath === contextBuiltinPath) {
-                      setDismissedContextSkillPaths((paths) =>
-                        [...new Set([...paths, skill.skillFilePath])]
-                      );
+                      setDismissedContextSkillPaths((
+                        paths,
+                      ) => [...new Set([...paths, skill.skillFilePath])]);
                     }
                   }}
                 >
@@ -1989,7 +2048,9 @@ export function ChatPanel({
                   onClick={() =>
                     setActiveMcpServerNames((names) => {
                       const current = names ?? settings.mcpServers
-                        .filter((item) => item.enabled && item.verified)
+                        .filter((item) =>
+                          item.enabled && item.verified
+                        )
                         .map((item) => item.name);
                       return current.filter((name) => name !== server.name);
                     })}
@@ -2105,7 +2166,8 @@ export function ChatPanel({
                 <input
                   autoFocus
                   value={fileQuery}
-                  onChange={(event) => setFileQuery(event.target.value)}
+                  onChange={(event) =>
+                    setFileQuery(event.target.value)}
                   placeholder="Find a workspace file"
                 />
               </label>
@@ -2130,7 +2192,7 @@ export function ChatPanel({
             ref={filePickerButtonRef}
             type="button"
             className="chat-clear"
-            disabled={!projectBase}
+            disabled={!workspaceBase}
             onClick={() =>
               filePickerOpen ? setFilePickerOpen(false) : void openFilePicker()}
             title="Attach Workspace file"
@@ -2208,7 +2270,7 @@ export function ChatPanel({
                   : ""
               }`}
               disabled={loading || settings.provider === "cli" ||
-                (!projectBase && settings.mcpServers.length === 0)}
+                (!workspaceBase && settings.mcpServers.length === 0)}
               onClick={() => setToolMenuOpen((open) => !open)}
               title="Workspace and MCP tools"
             >
@@ -2306,6 +2368,9 @@ export function ChatPanel({
             onClick={() => {
               if (loading) {
                 abortRef.current = true;
+                activeRunControllerRef.current?.abort();
+                const activeStreamID = streamRef.current?.streamId;
+                if (activeStreamID) void cancelChat(activeStreamID);
                 if (settings.provider === "cli") void stopCLI();
                 setLoading(false);
               } else void send();
@@ -2339,7 +2404,7 @@ export function ChatPanel({
           </select>
           <select
             value={settings.selectedRagSetting ?? ""}
-            disabled={loading || !projectBase}
+            disabled={loading}
             onChange={(event) => onSettingsChange({
               ...settings,
               selectedRagSetting: event.target.value || null,
@@ -2347,6 +2412,7 @@ export function ChatPanel({
             title="RAG"
           >
             <option value="">Search: none</option>
+            <option value="__websearch__">Web Search</option>
             {Object.keys(settings.ragSettings).map((name) => (
               <option key={name} value={name}>RAG: {name}</option>
             ))}
