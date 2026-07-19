@@ -387,12 +387,13 @@ function withoutTimelineTags(body: string): string {
     .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 export function TimelineDashboardWidget(
-  { config, isDark, settings, onChange, onOpenPath }: {
+  { config, isDark, settings, onChange, onOpenPath, onExternalPathOpened }: {
     config: Record<string, unknown>;
     isDark: boolean;
     settings: ChatSettings;
     onChange: (config: Record<string, unknown>) => void;
     onOpenPath: (path: string) => void;
+    onExternalPathOpened: (path: string) => void;
   },
 ) {
   const name = configText(config, "name");
@@ -601,8 +602,11 @@ export function TimelineDashboardWidget(
     const path = href.startsWith("#wiki:")
       ? wikiTargetToPath("", decodeURIComponent(href.slice("#wiki:".length)))
       : localHrefToPathCandidates(folder, href)[0];
-    if (path) setPreviewPath(path);
-  }, [folder]);
+    if (path) {
+      if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) onExternalPathOpened(path);
+      setPreviewPath(path);
+    }
+  }, [folder, onExternalPathOpened]);
   if (!name) {
     return (
       <div className="dashboard-widget-empty centered">

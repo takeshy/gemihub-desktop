@@ -1,11 +1,60 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
+
+func TestMoveDirectoryDoesNotCopyWhenRenameFails(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "source")
+	destination := filepath.Join(root, "destination")
+	if err := os.Mkdir(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "important.md"), []byte("keep me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := moveDirectoryWith(source, destination,
+		func(string, string) error { return errors.New("directory is locked") },
+	)
+	if err == nil {
+		t.Fatal("expected source cleanup error")
+	}
+	if _, statErr := os.Stat(destination); !os.IsNotExist(statErr) {
+		t.Fatalf("destination was created after rename failure: %v", statErr)
+	}
+	content, readErr := os.ReadFile(filepath.Join(source, "important.md"))
+	if readErr != nil || string(content) != "keep me" {
+		t.Fatalf("source changed after rename failure: %q, %v", content, readErr)
+	}
+}
+
+func TestMoveDirectoryRetriesRenameWithoutCopying(t *testing.T) {
+	attempts := 0
+	waits := 0
+	err := moveDirectoryWithRetry("source", "destination", func(source, destination string) error {
+		attempts++
+		if attempts < 3 {
+			return errors.New("temporarily locked")
+		}
+		if source != "source" || destination != "destination" {
+			t.Fatalf("unexpected rename paths: %q -> %q", source, destination)
+		}
+		return nil
+	}, func(time.Duration) { waits++ })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 || waits != 2 {
+		t.Fatalf("attempts = %d, waits = %d", attempts, waits)
+	}
+}
 
 func workspaceMoveTestApp(t *testing.T) (*App, string, string) {
 	t.Helper()

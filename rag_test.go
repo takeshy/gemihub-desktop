@@ -112,6 +112,9 @@ func TestRAGSyncAndSemanticSearch(t *testing.T) {
 	if err := app.WriteProjectFile("notes/banana.md", "banana yellow fruit"); err != nil {
 		t.Fatal(err)
 	}
+	if err := app.WriteProjectFile("notes/readme.txt", "apple text document"); err != nil {
+		t.Fatal(err)
+	}
 	setting := RAGSetting{
 		EmbeddingBaseURL: "http://embedding.test", EmbeddingAPIKey: "test", EmbeddingModel: "test-embedding",
 		ChunkSize: 500, ChunkOverlap: 100, TopK: 5, ScoreThreshold: 0.3,
@@ -120,8 +123,15 @@ func TestRAGSyncAndSemanticSearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if syncResult.Embedded != 2 || syncResult.FileCount != 2 || syncResult.ChunkCount != 2 {
+	if syncResult.Embedded != 3 || syncResult.FileCount != 3 || syncResult.ChunkCount != 3 {
 		t.Fatalf("unexpected sync result: %#v", syncResult)
+	}
+	indexedFiles, err := app.GetRAGIndexedFiles("Default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(indexedFiles) != 3 || indexedFiles[0].Chunks != 1 {
+		t.Fatalf("unexpected indexed files: %#v", indexedFiles)
 	}
 	results, err := app.SearchRAG(RAGSearchRequest{Name: "Default", Query: "apple", Setting: setting})
 	if err != nil {
@@ -134,8 +144,46 @@ func TestRAGSyncAndSemanticSearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if secondSync.Embedded != 0 || secondSync.Skipped != 2 {
+	if secondSync.Embedded != 0 || secondSync.Skipped != 3 {
 		t.Fatalf("incremental sync did not skip unchanged files: %#v", secondSync)
+	}
+}
+
+func TestCancelRAGSync(t *testing.T) {
+	app := NewApp()
+	if !app.CancelRAGSync("Default") || !app.ragSyncCancelled("Default") {
+		t.Fatal("RAG sync cancellation was not recorded")
+	}
+}
+
+func TestGeminiBinaryEmbeddingUsesInlineData(t *testing.T) {
+	previousClient := ragHTTPClient
+	defer func() { ragHTTPClient = previousClient }()
+	ragHTTPClient = &http.Client{Transport: ragRoundTripper(func(request *http.Request) (*http.Response, error) {
+		var body struct {
+			Content struct {
+				Parts []struct {
+					InlineData struct {
+						MIMEType string `json:"mimeType"`
+						Data     string `json:"data"`
+					} `json:"inlineData"`
+				} `json:"parts"`
+			} `json:"content"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Content.Parts) != 1 || body.Content.Parts[0].InlineData.MIMEType != "image/png" || body.Content.Parts[0].InlineData.Data != "cG5n" {
+			t.Fatalf("unexpected inline data: %#v", body)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"embedding":{"values":[1,2,3]}}`))}, nil
+	})}
+	result, err := generateRAGBinaryEmbedding([]byte("png"), "image/png", RAGSetting{EmbeddingProvider: "gemini", EmbeddingAPIKey: "key", EmbeddingModel: "gemini-embedding-2-preview"}, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("unexpected embedding: %#v", result)
 	}
 }
 

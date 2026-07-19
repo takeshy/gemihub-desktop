@@ -5,7 +5,7 @@ import { MarkdownPreview } from "../components/MarkdownPreview";
 import { PdfViewer } from "../components/PdfViewer";
 import { WysiwygEditor } from "../components/WysiwygEditor";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
-import { readFile, writeFile } from "../lib/wailsBackend";
+import { readFile, readLocalFile, writeFile } from "../lib/wailsBackend";
 import { docKindFor } from "./documentKind";
 
 type CardMode = "preview" | "wysiwyg" | "raw";
@@ -65,7 +65,10 @@ export function KanbanCardModal({ path, isDark, onNavigate, onSaved, onClose }: 
     let cancelled = false;
     setLoading(true);
     setError("");
-    void readFile(path).then((file) => {
+    const read = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+      ? readLocalFile(path)
+      : readFile(path);
+    void read.then((file) => {
       if (cancelled) return;
       if (!file) { setError(`Cannot read ${path}`); setLoading(false); return; }
       setContent(file.content);

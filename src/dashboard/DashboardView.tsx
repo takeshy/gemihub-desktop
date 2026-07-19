@@ -50,13 +50,14 @@ import {
   openHTMLInBrowser,
   readFile,
   readLocalFile,
+  inspectLocalPath,
   selectLocalFilePath,
   saveHTMLExport,
   writeFile,
 } from "../lib/wailsBackend";
 import type { EqualizeLayoutDirection, MarkdownMode } from "../App";
 import type { DashboardData, DashboardWidget, LayoutPos } from "./types";
-import type { ChatSettings } from "../llm/settings";
+import { configuredChatProviders, type ChatSettings } from "../llm/settings";
 import type { ActiveSelection } from "../llm/selection";
 import { WorkflowWidget } from "./WorkflowWidget";
 import {
@@ -520,6 +521,7 @@ export function DashboardView({
   onExportDocument,
   onHistoryClick,
   isDark,
+  aiEnabled,
   addWidgetRequest,
   activeLayoutDirection,
   equalizeLayoutRequest,
@@ -534,6 +536,7 @@ export function DashboardView({
   onDeferredHistoryCheckpoint,
   onActiveFileChange,
   onActiveSelectionChange,
+  onAskAI,
   chatSettings,
   directoryBase,
   workspaceBase,
@@ -555,6 +558,7 @@ export function DashboardView({
   onExportDocument: () => void;
   onHistoryClick: () => void;
   isDark: boolean;
+  aiEnabled: boolean;
   addWidgetRequest: {
     id: number;
     direction: EqualizeLayoutDirection;
@@ -577,13 +581,14 @@ export function DashboardView({
   onDeferredHistoryCheckpoint: (reason: "reload") => void;
   onActiveFileChange: (file: { path: string; content: string } | null) => void;
   onActiveSelectionChange: (selection: ActiveSelection | null) => void;
+  onAskAI: (selection: ActiveSelection) => void;
   chatSettings: ChatSettings;
   directoryBase: string;
   workspaceBase: string;
   dashboardPath?: string;
   startupPaths: string[] | null;
   pluginWidgetRequest: { id: number; type: string; config: Record<string, unknown> };
-  onExternalPathOpened: (path: string) => void;
+  onExternalPathOpened: (path: string, isDirectory?: boolean) => void;
 }) {
   const { t: tr } = useI18n();
   const cols = Math.max(
@@ -1778,19 +1783,26 @@ export function DashboardView({
     const dispose = onWailsFileDrop((x, y, paths) => {
       const path = paths[0];
       if (!path) return;
-      onExternalPathOpened(path);
-      const target = document.elementFromPoint(x, y)?.closest<HTMLElement>(
-        "[data-widget-id]",
-      );
-      const widgetId = target?.dataset.widgetId;
-      if (widgetId) {
-        void openPathInWidget(widgetId, path);
-      } else {
-        void openPathAsWidget(path);
-      }
+      void inspectLocalPath(path).then((info) => {
+        if (!info) return;
+        if (info.isDirectory) {
+          onExternalPathOpened(info.path, true);
+          return;
+        }
+        onExternalPathOpened(info.path);
+        const target = document.elementFromPoint(x, y)?.closest<HTMLElement>(
+          "[data-widget-id]",
+        );
+        const widgetId = target?.dataset.widgetId;
+        if (widgetId) void openPathInWidget(widgetId, info.path);
+        else void openPathAsWidget(info.path);
+      }).catch((error) => {
+        console.error(error);
+        alert(tr("alert.openFileFailed"));
+      });
     });
     return () => dispose?.();
-  }, [onExternalPathOpened, openPathAsWidget, openPathInWidget]);
+  }, [onExternalPathOpened, openPathAsWidget, openPathInWidget, tr]);
 
   const addWidget = (
     type: DashboardWidget["type"],
@@ -2845,6 +2857,8 @@ export function DashboardView({
                           void navigateWidgetToPath(widget.id, path)}
                         onActivate={() => setActiveWidgetId(widget.id)}
                         onSelectionChange={onActiveSelectionChange}
+                        aiAvailable={aiEnabled && configuredChatProviders(chatSettings).length > 0}
+                        onAskAI={onAskAI}
                       />
                     )}
                     {widget.type === "workflow" && (
@@ -2875,6 +2889,7 @@ export function DashboardView({
                         isDark={isDark}
                         settings={chatSettings}
                         onOpenPath={(path) => void openPathAsWidget(path)}
+                        onExternalPathOpened={onExternalPathOpened}
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
                       />

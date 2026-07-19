@@ -125,6 +125,7 @@ interface AttachedFile {
   path: string;
   content: string;
   automatic?: boolean;
+  rag?: boolean;
 }
 
 const providerNames: Record<ChatProvider, string> = {
@@ -256,11 +257,19 @@ function titleFrom(text: string): string {
 }
 
 function contextMessage(text: string, files: AttachedFile[]): string {
-  if (files.length === 0) return text;
-  const context = files.map((file) =>
+	const textFiles = files.filter((file) => !file.content.startsWith("data:"));
+	if (textFiles.length === 0) return text;
+	const context = textFiles.map((file) =>
     `\n--- BEGIN FILE: ${file.path} ---\n${file.content}\n--- END FILE: ${file.path} ---`
   ).join("\n");
   return `${text}\n\nThe following Workspace files are attached as context:${context}`;
+}
+
+function attachedChatAttachments(files: AttachedFile[]) {
+  return files.flatMap((file) => {
+    const match = file.content.match(/^data:([^;,]+);base64,([\s\S]+)$/);
+    return match ? [{ name: file.path.split("/").at(-1) || file.path, mimeType: match[1], data: match[2] }] : [];
+  });
 }
 
 function semanticRAGContext(results: RAGSearchResult[]): string {
@@ -382,7 +391,7 @@ export function ChatPanel({
   activeSelection: ActiveSelection | null;
   externalAttachments?: {
     id: number;
-    files: Array<{ path: string; content: string }>;
+    files: Array<{ path: string; content: string; rag?: boolean }>;
   };
   pluginCommands?: PluginSlashCommand[];
   onOpenSettings: () => void;
@@ -471,14 +480,14 @@ export function ChatPanel({
     },
     [activeSession?.id],
   );
-  const draftWithDesktopHelp = useCallback((draft: string) => {
-    const helpBundleId = getBuiltinOkfBundle().id;
-    setActiveOkfBundleIds((ids) =>
-      ids.includes(helpBundleId) ? ids : [...ids, helpBundleId]
+  const draftWithDashboardSkill = useCallback((draft: string) => {
+    const skillPath = `${builtinFolderPath("dashboard")}/SKILL.md`;
+    setActiveSkillPaths((paths) =>
+      paths.includes(skillPath) ? paths : [...paths, skillPath]
     );
     setInput(draft);
     queueMicrotask(() => composerRef.current?.focus());
-  }, [setActiveOkfBundleIds]);
+  }, [setActiveSkillPaths]);
   const refreshOkfBundles = useCallback(async () => {
     const builtin = getBuiltinOkfBundle();
     if (!projectBase) {
@@ -486,10 +495,11 @@ export function ChatPanel({
       return;
     }
     try {
-      setOkfBundles([
-        builtin,
-        ...await discoverOkfBundles(settings.okfRoot || "Knowledge"),
-      ]);
+      const discovered = await discoverOkfBundles(settings.okfRoot || "Knowledge");
+      const otherBundles = discovered.filter((bundle) =>
+        !/^gemihub(?:\s+(?:desktop\s+)?(?:okf|help))?$/i.test(bundle.name.trim())
+      );
+      setOkfBundles([builtin, ...otherBundles]);
     } catch {
       setOkfBundles([builtin]);
     }
@@ -691,9 +701,12 @@ export function ChatPanel({
   useEffect(() => {
     if (!externalAttachments?.id || !externalAttachments.files.length) return;
     setAttachedFiles((current) => {
-      const paths = new Set(current.map((file) => file.path));
+      const retained = externalAttachments.files.some((file) => file.rag)
+        ? current.filter((file) => !file.rag)
+        : current;
+      const paths = new Set(retained.map((file) => file.path));
       return [
-        ...current,
+        ...retained,
         ...externalAttachments.files.filter((file) => !paths.has(file.path)),
       ];
     });
@@ -1141,7 +1154,8 @@ export function ChatPanel({
     let ragSources: GroundingSource[] = [];
     const ragName = settings.selectedRagSetting;
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
-    if (ragName && ragSetting && projectBase) {
+    const hasExplicitRAGContext = attachedFiles.some((file) => file.rag);
+    if (ragName && ragSetting && projectBase && !hasExplicitRAGContext) {
       try {
         const results = await searchRAG(
           ragName,
@@ -1163,9 +1177,11 @@ export function ChatPanel({
       content: text,
     } satisfies ChatMessage;
     const next = [...messages, displayMessage];
+    const binaryAttachments = attachedChatAttachments(attachedFiles);
     const requestMessages = [...messages, {
       ...displayMessage,
       content: contextMessage(promptText + ragContext, attachedFiles),
+      attachments: binaryAttachments.length ? binaryAttachments : undefined,
     }];
     const sessionIDAtSend = activeSession.id;
     const nativeSessionID = activeSession.cliSessionIds[settings.cliType] ?? "";
@@ -1586,22 +1602,12 @@ export function ChatPanel({
             </span>
             <div className="chat-welcome-guides">
               <article>
-                <div><BookOpen size={16} /><strong>GemiHub Help</strong></div>
-                <p>Use the built-in help knowledge to ask about features, settings, workflows, and files.</p>
-                <button
-                  type="button"
-                  onClick={() => draftWithDesktopHelp("How do I use GemiHub Desktop?")}
-                >
-                  <BookOpen size={13} />Ask about GemiHub
-                </button>
-              </article>
-              <article>
                 <div><LayoutDashboard size={16} /><strong>Build Dashboards with AI</strong></div>
                 <p>Describe what you need in natural language. AI can create or update Dashboard widgets, files, and workflows for you.</p>
                 <button
                   type="button"
                   disabled={!projectBase}
-                  onClick={() => draftWithDesktopHelp("Create a Dashboard for my workspace. Ask me what information and widgets it should include.")}
+                  onClick={() => draftWithDashboardSkill("Create a Dashboard for my workspace. Ask me what information and widgets it should include.")}
                 >
                   <LayoutDashboard size={13} />Draft a Dashboard request
                 </button>

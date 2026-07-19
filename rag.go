@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -14,8 +15,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	pdfsplit "github.com/takeshy/minipdfsplit"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -101,6 +106,19 @@ type RAGSyncResult struct {
 	Errors        []string `json:"errors"`
 }
 
+type RAGSyncProgress struct {
+	Name      string `json:"name"`
+	Processed int    `json:"processed"`
+	Total     int    `json:"total"`
+	FilePath  string `json:"filePath,omitempty"`
+}
+
+func (a *App) emitRAGSyncProgress(progress RAGSyncProgress) {
+	if a.ctx != nil {
+		wailsruntime.EventsEmit(a.ctx, "rag:sync-progress", progress)
+	}
+}
+
 type RAGSearchResult struct {
 	FilePath    string  `json:"filePath"`
 	Text        string  `json:"text"`
@@ -117,11 +135,21 @@ type RAGStatus struct {
 	EmbeddingModel string `json:"embeddingModel"`
 }
 
+type RAGIndexedFile struct {
+	FilePath string `json:"filePath"`
+	Chunks   int    `json:"chunks"`
+}
+
 type ragFile struct {
-	path     string
-	absolute string
-	content  string
-	checksum string
+	path        string
+	absolute    string
+	content     string
+	data        []byte
+	pdfPages    [][]byte
+	mimeType    string
+	contentType string
+	extractErr  error
+	checksum    string
 }
 
 func normalizeRAGSetting(setting RAGSetting) RAGSetting {
@@ -137,6 +165,9 @@ func normalizeRAGSetting(setting RAGSetting) RAGSetting {
 	}
 	if setting.ChunkOverlap < 0 {
 		setting.ChunkOverlap = 100
+	}
+	if setting.PDFChunkPages < 1 || setting.PDFChunkPages > 6 {
+		setting.PDFChunkPages = 6
 	}
 	if setting.TopK <= 0 || setting.TopK > 20 {
 		setting.TopK = 5
@@ -160,6 +191,9 @@ func normalizeRAGSetting(setting RAGSetting) RAGSetting {
 func (a *App) SyncRAG(request RAGSyncRequest) (*RAGSyncResult, error) {
 	a.ragMu.Lock()
 	defer a.ragMu.Unlock()
+	a.ragCancelMu.Lock()
+	a.ragCancelled[request.Name] = false
+	a.ragCancelMu.Unlock()
 	setting := normalizeRAGSetting(request.Setting)
 	if setting.EmbeddingProvider == "vertex" {
 		token, err := a.vertexOAuthAccessToken()
@@ -175,7 +209,7 @@ func (a *App) SyncRAG(request RAGSyncRequest) (*RAGSyncResult, error) {
 		return nil, err
 	}
 	index, vectors, _ := a.loadRAG(request.Name)
-	if index == nil || index.EmbeddingModel != setting.EmbeddingModel || index.EmbeddingProvider != setting.EmbeddingProvider || index.EmbeddingBaseURL != setting.EmbeddingBaseURL || index.VertexProjectID != setting.VertexProjectID || index.VertexLocation != setting.VertexLocation || index.ChunkSize != setting.ChunkSize || index.ChunkOverlap != setting.ChunkOverlap || index.IndexMultimodal != setting.IndexMultimodal {
+	if index == nil || index.EmbeddingModel != setting.EmbeddingModel || index.EmbeddingProvider != setting.EmbeddingProvider || index.EmbeddingBaseURL != setting.EmbeddingBaseURL || index.VertexProjectID != setting.VertexProjectID || index.VertexLocation != setting.VertexLocation || index.ChunkSize != setting.ChunkSize || index.ChunkOverlap != setting.ChunkOverlap || index.PDFChunkPages != setting.PDFChunkPages || index.IndexMultimodal != setting.IndexMultimodal {
 		index = &RAGIndex{Meta: []RAGChunkMeta{}, FileChecksums: map[string]string{}}
 		vectors = nil
 	}
@@ -233,7 +267,71 @@ func (a *App) SyncRAG(request RAGSyncRequest) (*RAGSyncResult, error) {
 	}
 	result := &RAGSyncResult{Skipped: len(kept), Removed: removed, DeferredFiles: deferred, Errors: []string{}}
 	dimension := index.Dimension
-	for _, file := range changed {
+	a.emitRAGSyncProgress(RAGSyncProgress{Name: request.Name, Total: len(changed)})
+	for fileIndex, file := range changed {
+		if a.ragSyncCancelled(request.Name) {
+			return nil, fmt.Errorf("RAG sync cancelled")
+		}
+		a.emitRAGSyncProgress(RAGSyncProgress{Name: request.Name, Processed: fileIndex + 1, Total: len(changed), FilePath: file.path})
+		if file.extractErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", file.path, file.extractErr))
+			newChecksums[file.path] = file.checksum
+			continue
+		}
+		if file.contentType == "pdf" && len(file.pdfPages) > 0 {
+			embeddedPages := 0
+			for pageIndex, pagePDF := range file.pdfPages {
+				if a.ragSyncCancelled(request.Name) {
+					return nil, fmt.Errorf("RAG sync cancelled")
+				}
+				embedding, embedErr := generateRAGBinaryEmbedding(pagePDF, "application/pdf", setting, dimension)
+				if embedErr != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("%s page %d: %v", file.path, pageIndex+1, embedErr))
+					continue
+				}
+				if len(embedding) == 0 || dimension != 0 && len(embedding) != dimension {
+					result.Errors = append(result.Errors, fmt.Sprintf("%s page %d: embedding dimension changed", file.path, pageIndex+1))
+					continue
+				}
+				if dimension == 0 {
+					dimension = len(embedding)
+				}
+				pageLabel := fmt.Sprintf("page %d of %d", pageIndex+1, len(file.pdfPages))
+				label := fmt.Sprintf("[Pdf: %s (%s)]", filepath.Base(file.path), pageLabel)
+				newMeta = append(newMeta, RAGChunkMeta{FilePath: file.path, ChunkIndex: pageIndex, Text: label, ContentType: "pdf", PageLabel: pageLabel})
+				for _, value := range embedding {
+					newVectors = append(newVectors, float32(value))
+				}
+				embeddedPages++
+			}
+			if embeddedPages > 0 {
+				newChecksums[file.path] = file.checksum
+				result.Embedded++
+			}
+			continue
+		}
+		if file.mimeType != "" {
+			embedding, embedErr := generateRAGBinaryEmbedding(file.data, file.mimeType, setting, dimension)
+			if embedErr != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", file.path, embedErr))
+				continue
+			}
+			if len(embedding) == 0 || dimension != 0 && len(embedding) != dimension {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: embedding dimension changed", file.path))
+				continue
+			}
+			if dimension == 0 {
+				dimension = len(embedding)
+			}
+			label := fmt.Sprintf("[%s: %s]", strings.ToUpper(file.contentType[:1])+file.contentType[1:], filepath.Base(file.path))
+			newMeta = append(newMeta, RAGChunkMeta{FilePath: file.path, ChunkIndex: 0, Text: label, ContentType: file.contentType})
+			for _, value := range embedding {
+				newVectors = append(newVectors, float32(value))
+			}
+			newChecksums[file.path] = file.checksum
+			result.Embedded++
+			continue
+		}
 		chunks := chunkRAGText(file.content, setting.ChunkSize, setting.ChunkOverlap)
 		if len(chunks) == 0 {
 			continue
@@ -262,7 +360,11 @@ func (a *App) SyncRAG(request RAGSyncRequest) (*RAGSyncResult, error) {
 			continue
 		}
 		for i, chunk := range chunks {
-			newMeta = append(newMeta, RAGChunkMeta{FilePath: file.path, ChunkIndex: i, Text: chunk, ContentType: "text"})
+			contentType := file.contentType
+			if contentType == "" {
+				contentType = "text"
+			}
+			newMeta = append(newMeta, RAGChunkMeta{FilePath: file.path, ChunkIndex: i, Text: chunk, ContentType: contentType})
 			for _, value := range embeddings[i] {
 				newVectors = append(newVectors, float32(value))
 			}
@@ -285,6 +387,39 @@ func (a *App) SyncRAG(request RAGSyncRequest) (*RAGSyncResult, error) {
 	result.ChunkCount = len(index.Meta)
 	result.FileCount = len(index.FileChecksums)
 	return result, nil
+}
+
+func (a *App) ragSyncCancelled(name string) bool {
+	a.ragCancelMu.Lock()
+	defer a.ragCancelMu.Unlock()
+	return a.ragCancelled[name]
+}
+
+func (a *App) CancelRAGSync(name string) bool {
+	a.ragCancelMu.Lock()
+	a.ragCancelled[name] = true
+	a.ragCancelMu.Unlock()
+	return true
+}
+
+func (a *App) GetRAGIndexedFiles(name string) ([]RAGIndexedFile, error) {
+	index, _, err := a.loadRAG(name)
+	if err != nil || index == nil {
+		return []RAGIndexedFile{}, err
+	}
+	counts := make(map[string]int, len(index.FileChecksums))
+	for path := range index.FileChecksums {
+		counts[path] = 0
+	}
+	for _, meta := range index.Meta {
+		counts[meta.FilePath]++
+	}
+	files := make([]RAGIndexedFile, 0, len(counts))
+	for path, chunks := range counts {
+		files = append(files, RAGIndexedFile{FilePath: path, Chunks: chunks})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].FilePath < files[j].FilePath })
+	return files, nil
 }
 
 func (a *App) SearchRAG(request RAGSearchRequest) ([]RAGSearchResult, error) {
@@ -424,7 +559,13 @@ func (a *App) ragFiles(setting RAGSetting) ([]ragFile, error) {
 			}
 			return nil
 		}
-		if entry.Type()&os.ModeSymlink != 0 || strings.ToLower(filepath.Ext(entry.Name())) != ".md" {
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		extension := strings.ToLower(strings.TrimPrefix(filepath.Ext(entry.Name()), "."))
+		geminiMultimodal := (setting.EmbeddingProvider == "gemini" || setting.EmbeddingProvider == "vertex") && strings.Contains(strings.ToLower(setting.EmbeddingModel), "gemini-embedding-2")
+		mimeTypes := map[string]string{"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "pdf": "application/pdf", "mp3": "audio/mpeg", "wav": "audio/wav", "mp4": "video/mp4", "mpeg": "video/mpeg"}
+		if extension != "md" && extension != "txt" && extension != "pdf" && !(geminiMultimodal && mimeTypes[extension] != "") {
 			return nil
 		}
 		relative, _ := filepath.Rel(base, path)
@@ -437,10 +578,115 @@ func (a *App) ragFiles(setting RAGSetting) ([]ragFile, error) {
 			return nil
 		}
 		sum := sha256.Sum256(data)
-		files = append(files, ragFile{path: relative, absolute: path, content: string(data), checksum: hex.EncodeToString(sum[:])})
+		file := ragFile{path: relative, absolute: path, checksum: hex.EncodeToString(sum[:]), contentType: "text"}
+		if geminiMultimodal && extension == "pdf" {
+			file.data = data
+			file.mimeType = mimeTypes[extension]
+			file.contentType = "pdf"
+			file.pdfPages, file.extractErr = pdfsplit.SplitBytes(data)
+		} else if geminiMultimodal && mimeTypes[extension] != "" {
+			file.data = data
+			file.mimeType = mimeTypes[extension]
+			file.contentType = ragContentType(extension)
+		} else if extension == "pdf" {
+			file.contentType = "pdf"
+			file.content, file.extractErr = extractRAGPDFText(path)
+		} else {
+			file.content = string(data)
+		}
+		files = append(files, file)
 		return nil
 	})
 	return files, err
+}
+
+func ragContentType(extension string) string {
+	switch extension {
+	case "png", "jpg", "jpeg":
+		return "image"
+	case "mp3", "wav":
+		return "audio"
+	case "mp4", "mpeg":
+		return "video"
+	case "pdf":
+		return "pdf"
+	default:
+		return "text"
+	}
+}
+
+func extractRAGPDFText(path string) (string, error) {
+	pages, err := pdfsplit.ExtractTextFile(path)
+	if err != nil {
+		return "", fmt.Errorf("extract PDF text: %w", err)
+	}
+	texts := make([]string, 0, len(pages))
+	for _, page := range pages {
+		if value := strings.TrimSpace(page.Text); value != "" {
+			texts = append(texts, value)
+		}
+	}
+	if len(texts) == 0 {
+		return "", fmt.Errorf("PDF contains no extractable text")
+	}
+	return strings.Join(texts, "\n\n"), nil
+}
+
+func (a *App) ExtractProjectPDFText(path, pageLabel string) (string, error) {
+	target, err := a.projectPath(path, false)
+	if err != nil {
+		return "", err
+	}
+	if strings.ToLower(filepath.Ext(target)) != ".pdf" {
+		return "", fmt.Errorf("file is not a PDF")
+	}
+	pages, err := pdfsplit.ExtractTextFile(target)
+	if err != nil {
+		return "", fmt.Errorf("extract PDF text: %w", err)
+	}
+	if pageNumber := ragPDFPageNumber(pageLabel); pageNumber > 0 && pageNumber <= len(pages) {
+		return pages[pageNumber-1].Text, nil
+	}
+	texts := make([]string, 0, len(pages))
+	for _, page := range pages {
+		if text := strings.TrimSpace(page.Text); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	return strings.Join(texts, "\n\n"), nil
+}
+
+func (a *App) ReadProjectPDFPages(path, pageLabel string) (*LocalFileResult, error) {
+	target, err := a.projectPath(path, false)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return nil, err
+	}
+	pageNumber := ragPDFPageNumber(pageLabel)
+	if pageNumber <= 0 {
+		return readLocalFile(target)
+	}
+	pages, err := pdfsplit.SplitBytes(data)
+	if err != nil {
+		return nil, fmt.Errorf("split PDF pages: %w", err)
+	}
+	if pageNumber > len(pages) {
+		return nil, fmt.Errorf("PDF page %d is out of range", pageNumber)
+	}
+	fileName := fmt.Sprintf("%s-page-%d.pdf", strings.TrimSuffix(filepath.Base(target), filepath.Ext(target)), pageNumber)
+	return &LocalFileResult{Path: target, FileName: fileName, Content: "data:application/pdf;base64," + base64.StdEncoding.EncodeToString(pages[pageNumber-1])}, nil
+}
+
+func ragPDFPageNumber(pageLabel string) int {
+	match := regexp.MustCompile(`(?i)^page(?:s)?\s+(\d+)`).FindStringSubmatch(strings.TrimSpace(pageLabel))
+	if len(match) != 2 {
+		return 0
+	}
+	page, _ := strconv.Atoi(match[1])
+	return page
 }
 
 func ragPathIncluded(path string, folders []string, patterns []*regexp.Regexp) bool {
@@ -564,6 +810,69 @@ func generateRAGEmbeddings(texts []string, setting RAGSetting, outputDimension i
 		}
 	}
 	return results, nil
+}
+
+func generateRAGBinaryEmbedding(data []byte, mimeType string, setting RAGSetting, outputDimension int) ([]float64, error) {
+	if setting.EmbeddingProvider != "gemini" && setting.EmbeddingProvider != "vertex" {
+		return nil, fmt.Errorf("binary embedding requires Gemini Embedding 2")
+	}
+	model := strings.TrimPrefix(setting.EmbeddingModel, "models/")
+	var endpoint string
+	if setting.EmbeddingProvider == "vertex" {
+		endpoint = vertexRAGEndpoint(strings.TrimSpace(setting.VertexProjectID), strings.TrimSpace(setting.VertexLocation), model)
+	} else {
+		endpoint = fmt.Sprintf("%s/%s:embedContent", geminiEmbeddingBaseURL, model)
+	}
+	bodyValue := map[string]any{
+		"content": map[string]any{"parts": []map[string]any{{
+			"inlineData": map[string]string{"mimeType": mimeType, "data": base64.StdEncoding.EncodeToString(data)},
+		}}},
+	}
+	if outputDimension > 0 {
+		bodyValue["output_dimensionality"] = outputDimension
+	}
+	body, _ := json.Marshal(bodyValue)
+	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if setting.EmbeddingProvider == "vertex" {
+		request.Header.Set("Authorization", "Bearer "+setting.VertexAccessToken)
+	} else {
+		request.Header.Set("x-goog-api-key", setting.EmbeddingAPIKey)
+	}
+	response, err := ragHTTPClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, 256*1024*1024))
+	response.Body.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("embedding API error %d: %s", response.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+	var decoded struct {
+		Embedding struct {
+			Values []float64 `json:"values"`
+		} `json:"embedding"`
+		Embeddings []struct {
+			Values []float64 `json:"values"`
+		} `json:"embeddings"`
+	}
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		return nil, err
+	}
+	values := decoded.Embedding.Values
+	if len(values) == 0 && len(decoded.Embeddings) > 0 {
+		values = decoded.Embeddings[0].Values
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("embedding API returned an empty embedding")
+	}
+	return values, nil
 }
 
 func generateVertexRAGEmbeddings(texts []string, setting RAGSetting, outputDimension int) ([][]float64, error) {

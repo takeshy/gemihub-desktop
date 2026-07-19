@@ -214,3 +214,28 @@ func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInspectLocalPathDistinguishesDirectoryAndFile(t *testing.T) {
+	directory := t.TempDir()
+	file := filepath.Join(directory, "note.md")
+	if err := os.WriteFile(file, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+	directoryInfo, err := app.InspectLocalPath(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !directoryInfo.IsDirectory || directoryInfo.Path != filepath.Clean(directory) {
+		t.Fatalf("unexpected directory info: %#v", directoryInfo)
+	}
+
+	fileInfo, err := app.InspectLocalPath(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fileInfo.IsDirectory || fileInfo.Name != "note.md" {
+		t.Fatalf("unexpected file info: %#v", fileInfo)
+	}
+}

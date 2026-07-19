@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronsRight, Copy, ExternalLink, FileArchive, FilePlus2, SquarePen } from "lucide-react";
+import { Bot, ChevronsRight, Copy, ExternalLink, FileArchive, FilePlus2, SquarePen } from "lucide-react";
 import { useI18n } from "../i18n/context";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { AddFrontmatterButton, FrontmatterEditor, parseFrontmatter, replaceFrontmatterBody } from "../components/FrontmatterEditor";
@@ -183,6 +183,8 @@ export function FileWidgetBody({
   onNavigatePath,
   onActivate,
   onSelectionChange,
+  aiAvailable,
+  onAskAI,
 }: {
   widget: DashboardWidget;
   fallbackFileName: string;
@@ -195,6 +197,8 @@ export function FileWidgetBody({
   onNavigatePath: (path: string) => void;
   onActivate: () => void;
   onSelectionChange: (selection: ActiveSelection | null) => void;
+  aiAvailable: boolean;
+  onAskAI: (selection: ActiveSelection) => void;
 }) {
   const { t: tr } = useI18n();
   const filePath = typeof widget.config.filePath === "string" ? widget.config.filePath : typeof widget.config.path === "string" ? widget.config.path : "";
@@ -688,6 +692,7 @@ export function FileWidgetBody({
   }, [reportWindowSelection]);
 
   const memoConfigured = Boolean(memoDirPath && filePath && hasWailsBackend());
+  const selectionActionsAvailable = memoConfigured || aiAvailable;
 
   useEffect(() => {
     if (!selPopup) return;
@@ -734,7 +739,7 @@ export function FileWidgetBody({
     if (!doc || !win) return;
 
     const onContextMenu = (event: globalThis.MouseEvent) => {
-      if (!memoConfigured) return;
+      if (!selectionActionsAvailable) return;
       if (handleSelectionContextMenu(event.clientX, event.clientY, win, true)) event.preventDefault();
     };
     const onMouseMove = (event: globalThis.MouseEvent) => handlePointerHover(event.clientX, event.clientY, true);
@@ -758,7 +763,7 @@ export function FileWidgetBody({
       doc.removeEventListener("mousedown", onMouseDown);
       doc.removeEventListener("selectionchange", onSelection);
     };
-  }, [kind, frameLoadTick, memoConfigured, handleSelectionContextMenu, handlePointerHover, handleHighlightClick, onActivate, reportWindowSelection]);
+  }, [kind, frameLoadTick, selectionActionsAvailable, handleSelectionContextMenu, handlePointerHover, handleHighlightClick, onActivate, reportWindowSelection]);
 
   // ---- timeline → document jumps (§7.4) ------------------------------------
 
@@ -966,7 +971,7 @@ export function FileWidgetBody({
           value={documentContent}
           onChange={(event) => onConfigChange({ ...widget.config, fileName, content: event.target.value })}
           onSelect={(event) => reportTextareaSelection(event.currentTarget)}
-          onContextMenu={(event) => memoConfigured && handleTextareaContextMenu(event)}
+          onContextMenu={(event) => selectionActionsAvailable && handleTextareaContextMenu(event)}
           spellCheck={false}
           aria-label={tr("doc.openText")}
         />
@@ -1059,7 +1064,7 @@ export function FileWidgetBody({
       <div
         ref={contentWrapRef}
         className="file-widget-content"
-        onContextMenu={interactive && memoConfigured
+        onContextMenu={interactive && selectionActionsAvailable
           ? (event) => {
             if (handleSelectionContextMenu(event.clientX, event.clientY, window, false)) event.preventDefault();
           }
@@ -1075,7 +1080,7 @@ export function FileWidgetBody({
       >
         {renderContent()}
 
-        {selPopup && memoConfigured && (
+        {selPopup && selectionActionsAvailable && (
           <div
             className="memo-context-menu"
             style={{ left: selPopup.x, top: selPopup.y }}
@@ -1095,16 +1100,32 @@ export function FileWidgetBody({
               <Copy size={13} />
               <span>{tr("memo.copy")}</span>
             </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                adoptDraft();
-              }}
-            >
-              <SquarePen size={13} />
-              <span>{tr("memo.addToMemo")}</span>
-            </button>
+            {memoConfigured && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  adoptDraft();
+                }}
+              >
+                <SquarePen size={13} />
+                <span>{tr("memo.addToMemo")}</span>
+              </button>
+            )}
+            {aiAvailable && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!selPopup) return;
+                  onAskAI({ path: selectionPath, text: selPopup.draft.quote, start: -1, end: -1 });
+                  setSelPopup(null);
+                }}
+              >
+                <Bot size={13} />
+                <span>AIに質問</span>
+              </button>
+            )}
           </div>
         )}
 

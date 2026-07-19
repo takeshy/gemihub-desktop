@@ -26,6 +26,8 @@ type App struct {
 	cliMu            sync.Mutex
 	cliCmd           *exec.Cmd
 	ragMu            sync.Mutex
+	ragCancelMu      sync.Mutex
+	ragCancelled     map[string]bool
 	discordMu        sync.Mutex
 	discord          *discordBot
 	chatToolMu       sync.Mutex
@@ -42,8 +44,14 @@ type LocalFileResult struct {
 	Content  string `json:"content"`
 }
 
+type LocalPathInfo struct {
+	Path        string `json:"path"`
+	Name        string `json:"name"`
+	IsDirectory bool   `json:"isDirectory"`
+}
+
 func NewApp() *App {
-	return &App{chatToolCalls: make(map[string]chan chatToolResponse), mcpStdio: make(map[string]*mcpStdioSession)}
+	return &App{chatToolCalls: make(map[string]chan chatToolResponse), mcpStdio: make(map[string]*mcpStdioSession), ragCancelled: make(map[string]bool)}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -105,6 +113,20 @@ func (a *App) SelectExternalEditor() (string, error) {
 
 func (a *App) ReadLocalFile(path string) (*LocalFileResult, error) {
 	return readLocalFile(path)
+}
+
+// InspectLocalPath identifies a native drop before the frontend tries to read
+// it as a file. Wails reports files and directories through the same callback.
+func (a *App) InspectLocalPath(path string) (*LocalPathInfo, error) {
+	cleaned := filepath.Clean(strings.TrimSpace(path))
+	if cleaned == "." || cleaned == "" {
+		return nil, fmt.Errorf("local path is empty")
+	}
+	info, err := os.Stat(cleaned)
+	if err != nil {
+		return nil, err
+	}
+	return &LocalPathInfo{Path: cleaned, Name: info.Name(), IsDirectory: info.IsDir()}, nil
 }
 
 func (a *App) StartupFilePaths() []string {

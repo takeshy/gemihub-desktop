@@ -2438,6 +2438,30 @@ body.resizing-side-pane * {
   padding: 7px;
 }
 
+.rag-search-inline-config { display: grid; gap: 7px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-subtle); padding: 8px; }
+.rag-search-inline-config > label { display: grid; gap: 4px; color: var(--text-muted); font-size: .7rem; }
+.rag-search-inline-config input, .rag-search-inline-config textarea, .rag-search-filter-stack select { width: 100%; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); padding: 6px; }
+.rag-search-sync { display: flex; gap: 6px; }
+.rag-search-sync button, .rag-search-full-settings, .rag-search-filter-stack > button, .rag-search-filter-row button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-raised); color: var(--text); padding: 5px 7px; }
+.rag-search-inline-config progress { width: 100%; }
+.rag-indexed-files { display: grid; max-height: 170px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; }
+.rag-indexed-files > button { display: flex; justify-content: space-between; gap: 8px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); padding: 6px; text-align: left; }
+.rag-indexed-files > button:last-child { border-bottom: 0; }
+.rag-indexed-files span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rag-indexed-files small { flex: none; color: var(--text-muted); }
+.rag-search-filter-stack { display: grid; gap: 5px; border-bottom: 1px solid var(--border); padding: 7px; }
+.rag-search-filter-row { display: flex; gap: 4px; }
+.rag-search-filter-row input { min-width: 0; flex: 1; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); padding: 6px; }
+.rag-search-filter-row button { flex: none; padding: 5px; }
+.rag-search-result-tools > label { display: inline-flex; align-items: center; gap: 4px; }
+.rag-search-results article > header select { min-width: 58px; max-width: 70px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: .65rem; }
+.rag-media-preview { display: grid; min-height: 100px; place-items: center; overflow: hidden; border-top: 1px solid var(--border); background: #111; }
+.rag-media-preview iframe { width: 100%; height: 360px; border: 0; }
+.rag-media-preview .pdf-viewer { width: 100%; height: 420px; min-height: 0; }
+.rag-media-preview img, .rag-media-preview video { max-width: 100%; max-height: 360px; }
+.rag-media-preview audio { width: calc(100% - 16px); margin: 12px 8px; }
+.rag-media-preview span { color: var(--text-muted); padding: 18px; }
+
 .rag-search-result-tools {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
@@ -2732,9 +2756,11 @@ body.resizing-side-pane * {
 .file-tree-mode-bar button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; padding: 6px; font-size: 0.7rem; }
 .file-tree-mode-bar > div button.active { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
 .file-tree-mode-bar .file-tree-collapse,
-.file-tree-mode-bar .file-tree-refresh { width: 27px; height: 27px; flex: none; padding: 0; }
+.file-tree-mode-bar .file-tree-refresh,
+.file-tree-mode-bar .workspace-directory-open { width: 27px; height: 27px; flex: none; padding: 0; }
 .file-tree-mode-bar .file-tree-collapse:hover,
-.file-tree-mode-bar .file-tree-refresh:hover { background: var(--panel-subtle); color: var(--text); }
+.file-tree-mode-bar .file-tree-refresh:hover,
+.file-tree-mode-bar .workspace-directory-open:hover { background: var(--panel-subtle); color: var(--text); }
 
 .file-tree-project { display: flex; min-width: 0; align-items: center; gap: 7px; overflow: hidden; padding: 3px 5px; }
 .file-tree-project > span { display: grid; min-width: 0; gap: 1px; }
@@ -4959,12 +4985,19 @@ body.resizing-modal { cursor: move; user-select: none; }
 
 .rag-setting-selector {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
 }
 
 .rag-setting-selector .settings-browse {
   gap: 5px;
+  white-space: nowrap;
+}
+
+.rag-setting-selector .settings-browse.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  color: var(--danger);
 }
 
 .rag-setting-selector .settings-browse:disabled,

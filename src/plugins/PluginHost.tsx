@@ -57,7 +57,7 @@ function PluginMainViewWidget({ view, api, language, config }: { view: PluginVie
   return <Component api={api} language={language} fileId={filePath || undefined} filePath={filePath || undefined} fileName={fileName} fileContent={fileContent || undefined} />;
 }
 
-export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, settingsOpen, onCollapse, onOpenPluginView, onOpenPluginWidget, onOpenPluginSettings, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; settingsOpen: boolean; onCollapse: () => void; onOpenPluginView: () => void; onOpenPluginWidget: (request: { type: string; config: Record<string, unknown> }) => void; onOpenPluginSettings: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
+export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, chatOpenRequest, settingsOpen, onCollapse, onOpenPluginView, onOpenPluginWidget, onOpenPluginSettings, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; chatOpenRequest: number; settingsOpen: boolean; onCollapse: () => void; onOpenPluginView: () => void; onOpenPluginWidget: (request: { type: string; config: Record<string, unknown> }) => void; onOpenPluginSettings: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
   const configKey = useMemo(() => workspaceConfigKey(projectBase), [projectBase]);
   const selectedPluginKey = useMemo(() => workspaceSelectedPluginKey(projectBase), [projectBase]);
   const [configs, setConfigs] = useState<PluginConfig[]>(() => storedConfigs(configKey));
@@ -66,10 +66,11 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const [settingsTabs, setSettingsTabs] = useState<PluginSettingsTab[]>([]);
   const [slashCommands, setSlashCommands] = useState<PluginSlashCommand[]>([]);
   const [activeTab, setActiveTab] = useState("chat");
+  useEffect(() => { if (chatOpenRequest > 0) setActiveTab("chat"); }, [chatOpenRequest]);
   const [selectedPluginId, setSelectedPluginId] = useState(() => localStorage.getItem(selectedPluginKey) || "");
   const [settingsPluginId, setSettingsPluginId] = useState("");
   const [settingsContainer, setSettingsContainer] = useState<HTMLElement | null>(null);
-  const [chatAttachmentRequest, setChatAttachmentRequest] = useState<{ id: number; files: Array<{ path: string; content: string }> }>({ id: 0, files: [] });
+  const [chatAttachmentRequest, setChatAttachmentRequest] = useState<{ id: number; files: Array<{ path: string; content: string; rag?: boolean }> }>({ id: 0, files: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [repoInput, setRepoInput] = useState("");
   const [pluginBusy, setPluginBusy] = useState<string | null>(null);
@@ -407,7 +408,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
         {aiEnabled && activeTab === "chat" ? (
           <ChatPanel isDark={isDark} directoryBase={directoryBase} projectBase={projectBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} activeFile={activeFile} activeSelection={activeSelection} externalAttachments={chatAttachmentRequest} pluginCommands={slashCommands} onOpenSettings={onOpenChatSettings} onOpenFile={onOpenDirectoryFile} onOpenWorkflow={(path) => { onOpenDirectoryFile(path); setActiveTab("workflow"); }} />
         ) : aiEnabled && activeTab === "rag-search" ? (
-          <RAGSearchPanel directoryBase={directoryBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} onOpenSettings={onOpenRAGSettings} onOpenFile={onOpenDirectoryFile} onChatWithResults={(results) => { setChatAttachmentRequest((current) => ({ id: current.id + 1, files: results.map((result, index) => ({ path: `[RAG] ${result.filePath}#chunk-${result.chunkIndex}-${index + 1}`, content: result.text })) })); setActiveTab("chat"); }} />
+          <RAGSearchPanel directoryBase={directoryBase} settings={chatSettings} onSettingsChange={onChatSettingsChange} onOpenSettings={onOpenRAGSettings} onOpenFile={onOpenDirectoryFile} onChatWithResults={(files) => { setChatAttachmentRequest((current) => ({ id: current.id + 1, files })); setActiveTab("chat"); }} />
         ) : aiEnabled && activeTab === "workflow" ? (
           <WorkflowPanel directoryBase={projectBase} settings={chatSettings} activeFile={activeFile} onOpenFile={onOpenDirectoryFile} />
         ) : activeTab === "plugins" && activePluginId ? (

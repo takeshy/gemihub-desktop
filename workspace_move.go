@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type WorkspaceDirectoryMoveResult struct {
@@ -56,104 +56,38 @@ func ensureTreeHasNoSymlinks(root string) error {
 	})
 }
 
-func copyDirectoryTree(source, destination string) error {
-	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(destination, relative)
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return os.MkdirAll(target, info.Mode().Perm())
-		}
-		input, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		output, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
-		if err != nil {
-			_ = input.Close()
-			return err
-		}
-		_, copyErr := io.Copy(output, input)
-		inputCloseErr := input.Close()
-		closeErr := output.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if inputCloseErr != nil {
-			return inputCloseErr
-		}
-		return closeErr
-	})
-}
-
 func moveDirectory(source, destination string) error {
-	if err := os.Rename(source, destination); err == nil {
-		return nil
-	} else {
-		if _, destinationErr := os.Lstat(destination); destinationErr == nil {
-			return fmt.Errorf("destination appeared while moving: %s", destination)
-		} else if !os.IsNotExist(destinationErr) {
-			return destinationErr
-		}
-		// Rename commonly fails with EXDEV for a cross-volume move. Copying is a
-		// safe fallback for that and for platform-specific equivalents.
-		if copyErr := copyDirectoryTree(source, destination); copyErr != nil {
-			_ = os.RemoveAll(destination)
-			return fmt.Errorf("move directory: %w (copy fallback: %v)", err, copyErr)
-		}
-		// On Windows a directory can reject rename while one of its children is
-		// open without denying removal of the remaining tree. Renaming the source
-		// to a staging name therefore makes the copy fallback fail unnecessarily.
-		// Remove the original tree directly and discard the copy if that fails.
-		if removeErr := os.RemoveAll(source); removeErr != nil {
-			_ = os.RemoveAll(destination)
-			return fmt.Errorf("copied directory but could not remove the original; close applications using files under %s and try again: %w", source, removeErr)
-		}
-		return nil
-	}
+	return moveDirectoryWithRetry(source, destination, os.Rename, time.Sleep)
 }
 
-func moveRegularFile(source, destination string, mode os.FileMode) error {
-	if err := os.Rename(source, destination); err == nil {
-		return nil
-	} else {
-		input, openErr := os.Open(source)
-		if openErr != nil {
-			return err
+func moveDirectoryWith(source, destination string, rename func(string, string) error) error {
+	return moveDirectoryWithRetry(source, destination, rename, func(time.Duration) {})
+}
+
+// moveDirectoryWithRetry keeps directory adoption atomic. In particular, it
+// deliberately does not fall back to copy + delete: on Windows a process that
+// blocks rename commonly blocks cleanup too, which would leave two trees.
+func moveDirectoryWithRetry(source, destination string, rename func(string, string) error, wait func(time.Duration)) error {
+	delays := [...]time.Duration{50 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
+	var lastErr error
+	for attempt := 0; attempt <= len(delays); attempt++ {
+		if err := rename(source, destination); err == nil {
+			return nil
+		} else {
+			lastErr = err
 		}
-		output, createErr := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode.Perm())
-		if createErr != nil {
-			_ = input.Close()
-			return createErr
+		if attempt < len(delays) {
+			wait(delays[attempt])
 		}
-		_, copyErr := io.Copy(output, input)
-		inputCloseErr := input.Close()
-		closeErr := output.Close()
-		if copyErr != nil || inputCloseErr != nil || closeErr != nil {
-			_ = os.Remove(destination)
-			if copyErr != nil {
-				return copyErr
-			}
-			if inputCloseErr != nil {
-				return inputCloseErr
-			}
-			return closeErr
-		}
-		if removeErr := os.Remove(source); removeErr != nil {
-			_ = os.Remove(destination)
-			return removeErr
-		}
-		return nil
 	}
+	return fmt.Errorf("move directory after retrying: %w; close Explorer, terminals, editors, or MCP processes using %s and try again", lastErr, source)
+}
+
+func moveRegularFile(source, destination string) error {
+	if err := os.Rename(source, destination); err != nil {
+		return fmt.Errorf("move file: %w", err)
+	}
+	return nil
 }
 
 // MovePathIntoWorkspace moves an external file or directory into a Workspace
@@ -218,7 +152,7 @@ func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName 
 		if err := moveDirectory(source, destination); err != nil {
 			return nil, err
 		}
-	} else if err := moveRegularFile(source, destination, info.Mode()); err != nil {
+	} else if err := moveRegularFile(source, destination); err != nil {
 		return nil, err
 	}
 	linked := false

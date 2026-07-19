@@ -32,14 +32,14 @@ function NameDialog({ title, initialValue, action, onSubmit, onClose }: { title:
   return <div className="dashboard-name-backdrop" onClick={() => { if (!busy) onClose(); }}><section className="dashboard-name-dialog" onClick={(event) => event.stopPropagation()}><header><strong>{title}</strong><button type="button" disabled={busy} onClick={onClose}><X size={17} /></button></header><div><input autoFocus value={value} disabled={busy} onChange={(event) => { setValue(event.target.value); setError(""); }} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} placeholder="Dashboard name" />{error && <small className="error">{error}</small>}</div><footer><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={busy || !value.trim()} onClick={() => void submit()}>{busy ? `${action}…` : action}</button></footer></section></div>;
 }
 
-export function DashboardToolbar({ files, activePath, homePath, rawMode, canUndo, canRedo, hasWidgets, onSelect, onCreate, onRename, onDelete, onSetHome, onUndo, onRedo, onEqualize, onAddWidget, onToggleRaw }: {
+export function DashboardToolbar({ files, activePath, homePath, rawMode, canUndo, canRedo, activeLayoutDirection, onSelect, onCreate, onRename, onDelete, onSetHome, onUndo, onRedo, onLayoutDirection, onAddWidget, onToggleRaw }: {
   files: DashboardFileEntry[];
   activePath: string;
   homePath: string;
   rawMode: boolean;
   canUndo: boolean;
   canRedo: boolean;
-  hasWidgets: boolean;
+  activeLayoutDirection: EqualizeLayoutDirection;
   onSelect: (path: string) => void;
   onCreate: (name: string) => void;
   onRename: (name: string) => void;
@@ -47,7 +47,7 @@ export function DashboardToolbar({ files, activePath, homePath, rawMode, canUndo
   onSetHome: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  onEqualize: (direction: EqualizeLayoutDirection) => void;
+  onLayoutDirection: (direction: EqualizeLayoutDirection) => void;
   onAddWidget: () => void;
   onToggleRaw: () => void;
 }) {
@@ -72,8 +72,8 @@ export function DashboardToolbar({ files, activePath, homePath, rawMode, canUndo
       <div className="dashboard-native-actions">
         <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo"><Undo2 size={14} /></button>
         <button type="button" onClick={onRedo} disabled={!canRedo} title="Redo"><Redo2 size={14} /></button>
-        <button type="button" onClick={() => onEqualize("horizontal")} disabled={!hasWidgets} title="Align horizontally"><Columns3 size={14} /></button>
-        <button type="button" onClick={() => onEqualize("vertical")} disabled={!hasWidgets} title="Align vertically"><Rows3 size={14} /></button>
+        <button type="button" className={activeLayoutDirection === "horizontal" ? "active" : ""} aria-pressed={activeLayoutDirection === "horizontal"} onClick={() => onLayoutDirection("horizontal")} title="Align horizontally"><Columns3 size={14} /></button>
+        <button type="button" className={activeLayoutDirection === "vertical" ? "active" : ""} aria-pressed={activeLayoutDirection === "vertical"} onClick={() => onLayoutDirection("vertical")} title="Align vertically"><Rows3 size={14} /></button>
         <button type="button" className="add" onClick={onAddWidget}><Plus size={14} /><span>Add Widget</span></button>
         <span />
         <button type="button" onClick={() => setDialog("rename")} disabled={!activePath} title="Rename Dashboard"><Edit3 size={13} /></button>

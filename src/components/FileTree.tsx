@@ -215,11 +215,13 @@ export function FileTree({
   directoryBase,
   projectPath,
   onOpenFile,
+  onDirectoryBaseUnavailable,
   onCollapse,
 }: {
   directoryBase: string;
   projectPath: string;
   onOpenFile: (path: string) => void;
+  onDirectoryBaseUnavailable: () => void;
   onCollapse: () => void;
 }) {
   const [nodes, setNodes] = useState<FileTreeNode[]>([]);
@@ -245,14 +247,23 @@ export function FileTree({
     setLoading(true);
     try {
       if (directoryBase) {
-        await setDirectoryBase(directoryBase);
-        setNodes(await listFileTree());
+        try {
+          await setDirectoryBase(directoryBase);
+          setNodes(await listFileTree());
+        } catch {
+          setNodes([]);
+          onDirectoryBaseUnavailable();
+        }
       } else setNodes([]);
-      setProjectNodes(await listProjectTree());
+      try {
+        setProjectNodes(await listProjectTree());
+      } catch {
+        setProjectNodes([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, [directoryBase, projectPath]);
+  }, [directoryBase, onDirectoryBaseUnavailable, projectPath]);
 
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => { setExternalSelection(new Set()); }, [directoryBase]);
@@ -458,10 +469,21 @@ export function FileTree({
     }
     setWorkspaceMove({ ...workspaceMove, busy: true, error: "" });
     try {
+      window.dispatchEvent(new Event("llm-hub:release-dashboard-files"));
+      await new Promise<void>((resolve) => requestAnimationFrame(() =>
+        requestAnimationFrame(() => window.setTimeout(resolve, 50))
+      ));
       for (const [index, item] of workspaceMove.items.entries()) {
         await movePathIntoWorkspace(item.path, workspaceMove.destination, item.name, workspaceMove.leaveLink && item.isDir);
         if (index % 10 === 9) await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
+      const moved = new Set(workspaceMove.items.map((item) =>
+        item.path.replace(/^workspace:\/\//, "").replace(/^\.\//, "")
+      ));
+      const withoutMoved = (items: FileTreeNode[]): FileTreeNode[] => items
+        .filter((item) => !moved.has(item.path))
+        .map((item) => item.children ? { ...item, children: withoutMoved(item.children) } : item);
+      setNodes((current) => withoutMoved(current));
       setWorkspaceMove(null);
       setExternalSelection(new Set());
       await reload();
@@ -486,7 +508,18 @@ export function FileTree({
   return (
     <aside className="file-tree-panel">
       <div className="file-tree-mode-bar">
-        <strong className="file-tree-title" title={projectPath}><Folder size={14} />Workspace</strong>
+        <button
+          type="button"
+          className="workspace-directory-open"
+          title="Open Workspace in Explorer"
+          aria-label="Open Workspace in Explorer"
+          onClick={() => void openContainingFolder("project://.").catch((error) =>
+            alert(error instanceof Error ? error.message : String(error))
+          )}
+        >
+          <FolderOpen size={16} />
+        </button>
+        <strong className="file-tree-title" title={projectPath}>Workspace</strong>
         {projectPath && <>
           <button type="button" onClick={() => void createAtRoot("file")} title="New file"><FilePlus2 size={15} /></button>
           <button type="button" onClick={() => void createAtRoot("folder")} title="New folder"><FolderPlus size={15} /></button>

@@ -80,6 +80,7 @@ import {
   getRAGStatus,
   getVertexOAuthStatus,
   listProjects,
+  onRAGSyncProgress,
   openDeveloperTools,
   renameRAGIndex,
   type ProjectState,
@@ -227,6 +228,45 @@ function pathIsInside(path: string, base: string): boolean {
   const candidate = normalize(path);
   const root = normalize(base);
   return !!candidate && !!root && (candidate === root || candidate.startsWith(`${root}/`));
+}
+
+function CommaSeparatedInput({ value, onChange }: {
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const serialized = value.join(", ");
+  const [draft, setDraft] = useState(serialized);
+  useEffect(() => setDraft(serialized), [serialized]);
+  const commit = () => {
+    const next = draft.split(",").map((item) => item.trim()).filter(Boolean);
+    onChange(next);
+    setDraft(next.join(", "));
+  };
+  return (
+    <input
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
+  );
+}
+
+function LineSeparatedTextarea({ value, onChange }: {
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const serialized = value.join("\n");
+  const [draft, setDraft] = useState(serialized);
+  useEffect(() => setDraft(serialized), [serialized]);
+  const commit = () => {
+    const next = draft.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    onChange(next);
+    setDraft(next.join("\n"));
+  };
+  return <textarea rows={3} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} />;
 }
 
 function readDashboard(): DashboardData {
@@ -898,6 +938,7 @@ export default function App() {
     readStored(AI_ENABLED_KEY, "true") !== "false"
   );
   const [pluginViewRequest, setPluginViewRequest] = useState(0);
+  const [chatOpenRequest, setChatOpenRequest] = useState(0);
   const [pluginWidgetRequest, setPluginWidgetRequest] = useState<{
     id: number;
     type: string;
@@ -907,11 +948,19 @@ export default function App() {
     projectState.projects.find((project) =>
       project.id === projectState.activeProjectId
     )?.path || "";
-  const handleExternalPathOpened = useCallback((path: string) => {
+  const handleExternalPathOpened = useCallback((path: string, isDirectory = false) => {
     if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path) || pathIsInside(path, activeProjectPath)) return;
-    const parent = parentFilesystemPath(path);
-    if (parent) setDirectoryBaseState(parent);
+    const directory = isDirectory ? path : parentFilesystemPath(path);
+    if (!directory) return;
+    if (isDirectory) {
+      void setDirectoryBase(directory).then((selected) => {
+        setDirectoryBaseState(selected || directory);
+      }).catch((error) => alert(error instanceof Error ? error.message : String(error)));
+    } else setDirectoryBaseState(directory);
   }, [activeProjectPath]);
+  const handleDirectoryBaseUnavailable = useCallback(() => {
+    setDirectoryBaseState("");
+  }, []);
 
   const openFilesDirectory = useCallback(async (path?: string) => {
     try {
@@ -966,6 +1015,11 @@ export default function App() {
   const selectedRAG = chatSettings.selectedRagSetting
     ? chatSettings.ragSettings[chatSettings.selectedRagSetting]
     : undefined;
+  useEffect(() => onRAGSyncProgress((progress) => {
+    if (progress.name !== chatSettings.selectedRagSetting) return;
+    const file = progress.filePath ? ` · ${progress.filePath}` : "";
+    setRAGStatus(`Syncing ${progress.processed}/${progress.total}${file}`);
+  }), [chatSettings.selectedRagSetting]);
   const discordProviders = configuredChatProviders(chatSettings);
   const preferredDiscordProvider = chatSettings.discord.provider ||
     chatSettings.provider;
@@ -1278,6 +1332,16 @@ export default function App() {
       console.warn("Could not set the opened file directory.", error)
     );
   }, [directoryBase, directoryContextLoaded]);
+
+  useEffect(() => {
+    const releaseDashboardFiles = () => {
+      setDashboardRawMode(true);
+      setActiveChatFile(null);
+      setActiveChatSelection(null);
+    };
+    window.addEventListener("llm-hub:release-dashboard-files", releaseDashboardFiles);
+    return () => window.removeEventListener("llm-hub:release-dashboard-files", releaseDashboardFiles);
+  }, []);
 
   useEffect(() => {
     if (!directoryContextLoaded || !projectsContextLoaded || !directoryBase) return;
@@ -1793,6 +1857,7 @@ export default function App() {
             <FileTree
               directoryBase={directoryBase}
               projectPath={activeProjectPath}
+              onDirectoryBaseUnavailable={handleDirectoryBaseUnavailable}
               onOpenFile={(path) => {
                 if (
                   !path.startsWith("workspace://") &&
@@ -1839,7 +1904,7 @@ export default function App() {
                 dashboardPastRef.current.length > 0}
               canRedo={dashboardHistoryVersion >= 0 &&
                 dashboardFutureRef.current.length > 0}
-              hasWidgets={dashboard.widgets.length > 0}
+              activeLayoutDirection={activeLayoutDirection}
               onSelect={(path) => void openDashboardFile(path)}
               onCreate={async (name) => {
                 try {
@@ -1906,11 +1971,17 @@ export default function App() {
               }}
               onUndo={undoDashboard}
               onRedo={redoDashboard}
-              onEqualize={(direction) =>
+              onLayoutDirection={(direction) => {
+                if (direction !== activeLayoutDirectionRef.current) {
+                  activeLayoutDirectionRef.current = direction;
+                  setActiveLayoutDirection(direction);
+                  return;
+                }
                 setEqualizeLayoutRequest((value) => ({
                   id: value.id + 1,
                   direction,
-                }))}
+                }));
+              }}
               onAddWidget={() =>
                 setAddWidgetRequest((value) => ({
                   id: value.id + 1,
@@ -1970,6 +2041,7 @@ export default function App() {
                   onExportDocument={exportDocument}
                   onHistoryClick={() => setHistoryOpen(true)}
                   isDark={isDark}
+                  aiEnabled={aiEnabled}
                   addWidgetRequest={addWidgetRequest}
                   activeLayoutDirection={activeLayoutDirection}
                   equalizeLayoutRequest={equalizeLayoutRequest}
@@ -1984,6 +2056,11 @@ export default function App() {
                   onDeferredHistoryCheckpoint={requestDeferredHistoryCheckpoint}
                   onActiveFileChange={handleActiveDashboardFileChange}
                   onActiveSelectionChange={setActiveChatSelection}
+                  onAskAI={(selection) => {
+                    setActiveChatSelection(selection);
+                    setChatViewOpen(true);
+                    setChatOpenRequest((value) => value + 1);
+                  }}
                   chatSettings={chatSettings}
                   directoryBase={activeProjectPath}
                   workspaceBase={directoryBase}
@@ -2021,6 +2098,7 @@ export default function App() {
                 isDark={isDark}
                 aiEnabled={aiEnabled}
                 pluginViewRequest={pluginViewRequest}
+                chatOpenRequest={chatOpenRequest}
                 settingsOpen={settingsOpen && settingsSection === "plugins"}
                 onCollapse={() => setChatViewOpen(false)}
                 onOpenPluginView={() => {
@@ -3580,11 +3658,14 @@ export default function App() {
                         </button>
                         <button
                           type="button"
-                          className="settings-browse"
+                          className="settings-browse danger"
                           disabled={!chatSettings.selectedRagSetting}
+                          title="Delete RAG setting"
+                          aria-label="Delete RAG setting"
                           onClick={async () => {
                             const name = chatSettings.selectedRagSetting;
                             if (!name) return;
+                            if (!window.confirm(`Delete RAG setting "${name}" and its local index?`)) return;
                             await deleteRAGIndex(name);
                             setChatSettings((current) => {
                               const ragSettings = { ...current.ragSettings };
@@ -3598,7 +3679,7 @@ export default function App() {
                             setRAGStatus("");
                           }}
                         >
-                          <X size={14} />
+                          <X size={14} /> Delete
                         </button>
                       </div>
                       {selectedRAG && chatSettings.selectedRagSetting && (
@@ -4092,12 +4173,9 @@ export default function App() {
                             <span>
                               Target folders (one per line; empty = all)
                             </span>
-                            <textarea
-                              rows={3}
-                              value={selectedRAG.targetFolders.join("\n")}
-                              onChange={(event) => {
-                                const value = event.target.value.split(/\r?\n/)
-                                  .map((item) => item.trim()).filter(Boolean);
+                            <LineSeparatedTextarea
+                              value={selectedRAG.targetFolders}
+                              onChange={(value) => {
                                 setChatSettings((current) => ({
                                   ...current,
                                   ragSettings: {
@@ -4116,12 +4194,9 @@ export default function App() {
                           </label>
                           <label className="settings-field">
                             <span>Exclude regex patterns (one per line)</span>
-                            <textarea
-                              rows={3}
-                              value={selectedRAG.excludePatterns.join("\n")}
-                              onChange={(event) => {
-                                const value = event.target.value.split(/\r?\n/)
-                                  .map((item) => item.trim()).filter(Boolean);
+                            <LineSeparatedTextarea
+                              value={selectedRAG.excludePatterns}
+                              onChange={(value) => {
                                 setChatSettings((current) => ({
                                   ...current,
                                   ragSettings: {
@@ -4143,14 +4218,9 @@ export default function App() {
                               Search file extensions (comma separated; empty =
                               all)
                             </span>
-                            <input
-                              value={selectedRAG.searchFileExtensions.join(
-                                ", ",
-                              )}
-                              onChange={(event) => {
-                                const value = event.target.value.split(",").map(
-                                  (item) => item.trim(),
-                                ).filter(Boolean);
+                            <CommaSeparatedInput
+                              value={selectedRAG.searchFileExtensions}
+                              onChange={(value) => {
                                 setChatSettings((current) => ({
                                   ...current,
                                   ragSettings: {
@@ -4166,14 +4236,20 @@ export default function App() {
                                 }));
                               }}
                             />
+                            <small className="settings-hint">Markdown, TXT, and PDF are indexed. Gemini Embedding 2 also indexes supported images, audio, and video directly. This filter limits search results.</small>
                           </label>
                           <div className="rag-sync-row">
                             <button
                               type="button"
                               className="settings-choice"
-                              disabled={ragBusy || !directoryBase ||
+                              disabled={ragBusy || !activeProjectPath ||
                                 (selectedRAG.embeddingProvider === "vertex" &&
                                   !vertexConnected)}
+                              title={!activeProjectPath
+                                ? "An active Workspace is required"
+                                : selectedRAG.embeddingProvider === "vertex" && !vertexConnected
+                                ? "Connect Vertex AI before syncing"
+                                : "Sync the active Workspace index"}
                               onClick={async () => {
                                 const name = chatSettings.selectedRagSetting!;
                                 const setting = resolveRAGSetting(chatSettings, selectedRAG);
@@ -4181,7 +4257,16 @@ export default function App() {
                                 setRAGStatus("Syncing…");
                                 setRAGErrors([]);
                                 try {
-                                  const result = await syncRAG(name, setting);
+                                  let result = await syncRAG(name, setting);
+                                  let embedded = result.embedded;
+                                  let removed = result.removed;
+                                  const errors = [...result.errors];
+                                  while (result.deferredFiles > 0) {
+                                    result = await syncRAG(name, setting);
+                                    embedded += result.embedded;
+                                    removed += result.removed;
+                                    errors.push(...result.errors);
+                                  }
                                   const now = Date.now();
                                   setChatSettings((current) => ({
                                     ...current,
@@ -4194,17 +4279,13 @@ export default function App() {
                                     },
                                   }));
                                   setRAGStatus(
-                                    `${result.chunkCount} chunks · ${result.fileCount} files · embedded ${result.embedded}, skipped ${result.skipped}, removed ${result.removed}${
-                                      result.deferredFiles
-                                        ? ` · ${result.deferredFiles} deferred`
-                                        : ""
-                                    }${
-                                      result.errors.length
-                                        ? ` · ${result.errors.length} errors`
+                                    `${result.chunkCount} chunks · ${result.fileCount} files · embedded ${embedded}, skipped ${result.skipped}, removed ${removed}${
+                                      errors.length
+                                        ? ` · ${errors.length} errors`
                                         : ""
                                     }`,
                                   );
-                                  setRAGErrors(result.errors);
+                                  setRAGErrors(errors);
                                 } catch (caught) {
                                   const message = caught instanceof Error
                                     ? caught.message

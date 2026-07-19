@@ -4,6 +4,12 @@ export interface LocalFileResult {
   content: string;
 }
 
+export interface LocalPathInfo {
+  path: string;
+  name: string;
+  isDirectory: boolean;
+}
+
 export interface MemoFileResult {
   exists: boolean;
   content: string;
@@ -118,6 +124,13 @@ export interface RAGSyncResult {
   errors: string[];
 }
 
+export interface RAGSyncProgress {
+  name: string;
+  processed: number;
+  total: number;
+  filePath?: string;
+}
+
 export interface RAGSearchResult {
   filePath: string;
   text: string;
@@ -132,6 +145,11 @@ export interface RAGStatus {
   fileCount: number;
   dimension: number;
   embeddingModel: string;
+}
+
+export interface RAGIndexedFile {
+  filePath: string;
+  chunks: number;
 }
 
 export interface ChatMessage {
@@ -411,6 +429,10 @@ interface WailsAppApi {
   SyncRAG: (
     request: { name: string; setting: RAGSetting },
   ) => Promise<RAGSyncResult>;
+  CancelRAGSync: (name: string) => Promise<boolean>;
+  GetRAGIndexedFiles: (name: string) => Promise<RAGIndexedFile[]>;
+  ExtractProjectPDFText: (path: string, pageLabel: string) => Promise<string>;
+  ReadProjectPDFPages: (path: string, pageLabel: string) => Promise<LocalFileResult>;
   SearchRAG: (
     request: { name: string; query: string; setting: RAGSetting },
   ) => Promise<RAGSearchResult[]>;
@@ -474,6 +496,7 @@ interface WailsAppApi {
   MCPStdioClose: (sessionID: string) => Promise<boolean>;
   SelectExternalEditor: () => Promise<string>;
   ReadLocalFile: (path: string) => Promise<LocalFileResult>;
+  InspectLocalPath: (path: string) => Promise<LocalPathInfo>;
   ReadMemoFile: (path: string) => Promise<MemoFileResult>;
   ListMemoFiles: (dir: string) => Promise<MemoListEntry[] | null>;
   AppendMemoFile: (path: string, content: string) => Promise<void>;
@@ -505,6 +528,15 @@ export function onChatToolRequest(
 ): () => void {
   return window.runtime?.EventsOn?.(
     "chat:tool-request",
+    callback as (event: never) => void,
+  ) ?? (() => undefined);
+}
+
+export function onRAGSyncProgress(
+  callback: (event: RAGSyncProgress) => void,
+): () => void {
+  return window.runtime?.EventsOn?.(
+    "rag:sync-progress",
     callback as (event: never) => void,
   ) ?? (() => undefined);
 }
@@ -796,6 +828,22 @@ export async function syncRAG(
   return await api.SyncRAG({ name, setting });
 }
 
+export async function cancelRAGSync(name: string): Promise<boolean> {
+  return await appApi()?.CancelRAGSync(name) ?? false;
+}
+
+export async function getRAGIndexedFiles(name: string): Promise<RAGIndexedFile[]> {
+  return await appApi()?.GetRAGIndexedFiles(name) ?? [];
+}
+
+export async function extractProjectPDFText(path: string, pageLabel = ""): Promise<string> {
+  return await appApi()?.ExtractProjectPDFText(path, pageLabel) ?? "";
+}
+
+export async function readProjectPDFPages(path: string, pageLabel: string): Promise<LocalFileResult | null> {
+  return await appApi()?.ReadProjectPDFPages(path, pageLabel) ?? null;
+}
+
 export async function searchRAG(
   name: string,
   query: string,
@@ -1063,6 +1111,10 @@ export async function readLocalFile(
 ): Promise<LocalFileResult | null> {
   if (!path) return null;
   return await appApi()?.ReadLocalFile(path) ?? null;
+}
+
+export async function inspectLocalPath(path: string): Promise<LocalPathInfo | null> {
+  return await appApi()?.InspectLocalPath(path) ?? null;
 }
 
 export async function startupFilePaths(): Promise<string[]> {
