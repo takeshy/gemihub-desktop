@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import { fileInventory, readFile, writeFile, type ChatToolDefinition } from "../lib/wailsBackend";
+import { listProjectFiles, readProjectFile, writeFile, type ChatToolDefinition } from "../lib/wailsBackend";
 import { getBuiltinSkillMetadata, isBuiltinSkillPath, loadBuiltinSkill } from "./builtinSkills";
 import { findWorkflowBlocks } from "../workflow/parser";
 
@@ -114,7 +114,7 @@ export async function syncSkillWorkflowInputVariables(workflowPath: string, work
   const skillRoot = segments.slice(0, 2).join("/");
   const skillPath = `${skillRoot}/SKILL.md`;
   const relativePath = workflowPath === skillPath ? "SKILL.md" : segments.slice(2).join("/");
-  const skillFile = workflowPath === skillPath ? { content: workflowMarkdown } : await readFile(skillPath);
+  const skillFile = workflowPath === skillPath ? { content: workflowMarkdown } : await readProjectFile(skillPath);
   if (!skillFile) return null;
   const updated = updateSkillWorkflowInputVariables(skillFile.content, relativePath, workflowMarkdown);
   if (!updated) return null;
@@ -158,9 +158,9 @@ export function parseWorkspaceSkill(skillFilePath: string, content: string): Wor
 }
 
 export async function discoverWorkspaceSkills(): Promise<WorkspaceSkill[]> {
-  const paths = (await fileInventory()).map((entry) => entry.path).filter((path) => /^skills\/[^/]+\/SKILL\.md$/i.test(path));
+  const paths = (await listProjectFiles()).map((entry) => entry.path).filter((path) => /^skills\/[^/]+\/SKILL\.md$/i.test(path));
   const loaded = await Promise.all(paths.map(async (path) => {
-    const file = await readFile(path);
+    const file = await readProjectFile(path);
     return file ? parseWorkspaceSkill(path, file.content) : null;
   }));
   return [...getBuiltinSkillMetadata(), ...loaded.filter((skill): skill is WorkspaceSkill => skill !== null)]
@@ -169,13 +169,13 @@ export async function discoverWorkspaceSkills(): Promise<WorkspaceSkill[]> {
 
 /** Load the selected skills' complete prompt content and reference files. */
 export async function loadActiveSkillContents(skills: WorkspaceSkill[]): Promise<WorkspaceSkill[]> {
-  const inventory = await fileInventory();
+  const inventory = await listProjectFiles();
   return await Promise.all(skills.map(async (skill) => {
     if (isBuiltinSkillPath(skill.folderPath)) return loadBuiltinSkill(skill.folderPath) ?? skill;
     const prefix = `${skill.folderPath}/references/`.toLowerCase();
     const paths = inventory.filter((entry) => !entry.binary && entry.path.toLowerCase().startsWith(prefix)).map((entry) => entry.path).sort();
     const references = (await Promise.all(paths.map(async (path) => {
-      const file = await readFile(path);
+      const file = await readProjectFile(path);
       return file ? `[${path.slice(skill.folderPath.length + 1)}]\n${file.content}` : null;
     }))).filter((value): value is string => value !== null);
     return { ...skill, references };

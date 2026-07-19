@@ -7,14 +7,29 @@ function dashboardName(path: string): string {
   return path.split(/[\\/]/).pop()?.replace(/\.dashboard$/i, "") || "Dashboard";
 }
 
-function NameDialog({ title, initialValue, action, onSubmit, onClose }: { title: string; initialValue: string; action: string; onSubmit: (name: string) => void; onClose: () => void }) {
+function NameDialog({ title, initialValue, action, onSubmit, onClose }: { title: string; initialValue: string; action: string; onSubmit: (name: string) => void | Promise<void>; onClose: () => void }) {
   const [value, setValue] = useState(initialValue);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    const name = value.trim();
+    if (!name || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onSubmit(name);
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
-  return <div className="dashboard-name-backdrop" onClick={onClose}><section className="dashboard-name-dialog" onClick={(event) => event.stopPropagation()}><header><strong>{title}</strong><button type="button" onClick={onClose}><X size={17} /></button></header><div><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && value.trim()) onSubmit(value.trim()); }} placeholder="Dashboard name" /></div><footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={!value.trim()} onClick={() => onSubmit(value.trim())}>{action}</button></footer></section></div>;
+  return <div className="dashboard-name-backdrop" onClick={() => { if (!busy) onClose(); }}><section className="dashboard-name-dialog" onClick={(event) => event.stopPropagation()}><header><strong>{title}</strong><button type="button" disabled={busy} onClick={onClose}><X size={17} /></button></header><div><input autoFocus value={value} disabled={busy} onChange={(event) => { setValue(event.target.value); setError(""); }} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} placeholder="Dashboard name" />{error && <small className="error">{error}</small>}</div><footer><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={busy || !value.trim()} onClick={() => void submit()}>{busy ? `${action}…` : action}</button></footer></section></div>;
 }
 
 export function DashboardToolbar({ files, activePath, homePath, rawMode, canUndo, canRedo, hasWidgets, onSelect, onCreate, onRename, onDelete, onSetHome, onUndo, onRedo, onEqualize, onAddWidget, onToggleRaw }: {
@@ -67,7 +82,7 @@ export function DashboardToolbar({ files, activePath, homePath, rawMode, canUndo
         <button type="button" className={rawMode ? "active" : ""} onClick={onToggleRaw} disabled={!activePath} title={rawMode ? "Show Dashboard" : "Edit YAML"}>{rawMode ? <Eye size={14} /> : <Code2 size={14} />}</button>
       </div>
     </div>
-    {dialog === "create" && <NameDialog title="New Dashboard" initialValue="" action="Create" onClose={() => setDialog(null)} onSubmit={(name) => { setDialog(null); onCreate(name); }} />}
-    {dialog === "rename" && <NameDialog title="Rename Dashboard" initialValue={dashboardName(activePath)} action="Rename" onClose={() => setDialog(null)} onSubmit={(name) => { setDialog(null); onRename(name); }} />}
+    {dialog === "create" && <NameDialog title="New Dashboard" initialValue="" action="Create" onClose={() => setDialog(null)} onSubmit={onCreate} />}
+    {dialog === "rename" && <NameDialog title="Rename Dashboard" initialValue={dashboardName(activePath)} action="Rename" onClose={() => setDialog(null)} onSubmit={onRename} />}
   </>;
 }

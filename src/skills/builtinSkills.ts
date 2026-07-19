@@ -1247,7 +1247,7 @@ export function builtinFolderPath(id: string): string {
   return `${BUILTIN_SKILL_PREFIX}${id}`;
 }
 
-/** Select the format-specific skill for the active DirectoryBase file. */
+/** Select the format-specific skill for the active Workspace file. */
 export function contextualBuiltinFolderPath(path: string | undefined): string | null {
   const lower = path?.toLowerCase() ?? "";
   if (lower.endsWith(".canvas")) return builtinFolderPath("json-canvas");

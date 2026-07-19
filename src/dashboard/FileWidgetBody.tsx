@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronsRight, Copy, FilePlus2, SquarePen } from "lucide-react";
+import { ChevronsRight, Copy, ExternalLink, FileArchive, FilePlus2, SquarePen } from "lucide-react";
 import { useI18n } from "../i18n/context";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { AddFrontmatterButton, FrontmatterEditor, parseFrontmatter, replaceFrontmatterBody } from "../components/FrontmatterEditor";
@@ -29,7 +29,7 @@ import {
   setMemoHighlights,
   type TextIndex,
 } from "../lib/textAnchor";
-import { appendMemoFile, hasWailsBackend, readFile, readLocalFile, readMemoFile, writeMemoFileAtomic } from "../lib/wailsBackend";
+import { appendMemoFile, hasWailsBackend, openLocalFileDefault, readFile, readLocalFile, readMemoFile, writeMemoFileAtomic } from "../lib/wailsBackend";
 import { isLocalDocumentHref, localHrefToPathCandidates, pathDirName, transformWikiLinks, wikiTargetToPath } from "../lib/wikiLinks";
 import { MemoTimelinePanel, memoHoverPreview, type MemoDraft } from "./MemoTimelinePanel";
 import type { MarkdownMode } from "../App";
@@ -213,13 +213,14 @@ export function FileWidgetBody({
   const memoPanelVisible = memoPanelOpen && !memoPanelCollapsed;
   const kind = docKindFor(fileName);
   const selectionPath = filePath || fileName;
+  const downloadPath = widget.config.fileScope === "workspace" ? `workspace://${filePath}` : widget.config.fileScope === "project" ? `project://${filePath}` : filePath;
 
   const memoFilePath = useMemo(
     () => (memoDirPath && filePath ? memoFilePathFor(memoDirPath, filePath) : ""),
     [memoDirPath, filePath],
   );
   const wikiBaseDirPath = useMemo(() => pathDirName(filePath) || memoDirPath, [filePath, memoDirPath]);
-  const parsedFrontmatter = useMemo(() => parseFrontmatter(documentContent), [documentContent]);
+  const parsedFrontmatter = useMemo(() => parseFrontmatter(kind === "external" ? "" : documentContent), [documentContent, kind]);
   const markdownBody = parsedFrontmatter.hasFrontmatter && parsedFrontmatter.valid ? parsedFrontmatter.body : documentContent;
   const previewContent = useMemo(() => transformWikiLinks(markdownBody), [markdownBody]);
 
@@ -316,6 +317,7 @@ export function FileWidgetBody({
       // a pure suffix so existing bytes stay untouched.
       await appendMemoFile(memoFilePath, `\n\n---\n\n${block}\n`);
     }
+    let timelineSyncError = "";
     if (memoSyncTimeline.trim()) {
       try {
         await appendTimelineEntry(memoSyncTimeline, memoTimelineBody(filePath, fileName, postDraft?.quote || "", body));
@@ -323,9 +325,11 @@ export function FileWidgetBody({
         // The memo is already durable. Do not make a sync failure invite a
         // retry that would duplicate the source memo.
         console.warn("Could not sync memo post to Timeline.", error);
+        timelineSyncError = `メモは保存されましたが、Timelineへの連携に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
       }
     }
     await reloadMemo();
+    if (timelineSyncError) setMemoError(timelineSyncError);
   }, [fileName, filePath, memoFilePath, memoSyncTimeline, reloadMemo]);
 
   const rewriteMemo = useCallback(async (mutate: (content: string) => string | null) => {
@@ -870,6 +874,9 @@ export function FileWidgetBody({
   // ---- content rendering ----------------------------------------------------
 
   const renderContent = () => {
+    if (kind === "external") {
+      return <div className="binary-download-view"><div><FileArchive size={32} /><h3>{fileName}</h3><p>このファイル形式はアプリ内でプレビューできません。</p><button type="button" onClick={() => void openLocalFileDefault(downloadPath).catch((error) => alert(error instanceof Error ? error.message : String(error)))} disabled={!filePath}><ExternalLink size={16} />外部アプリで開く</button></div></div>;
+    }
     if (kind === "canvas") {
       return (
         <CanvasFileView

@@ -46,17 +46,62 @@ func TestAgentSkillFileToolAliases(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "skills", "review", "SKILL.md"), []byte("instructions"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{directoryBase: base}
+	app := &App{directoryBase: t.TempDir(), projectState: ProjectState{ActiveProjectID: "project", Projects: []Project{{ID: "project", Path: base}}}}
 	value, pending, err := app.executeFileTool("read_note", `{"path":"skills/review/SKILL.md"}`)
 	if err != nil || pending != nil || value.(*LocalFileResult).Content != "instructions" {
 		t.Fatalf("read_note failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}
 	_, pending, err = app.executeFileTool("create_note", `{"name":"index.md","folder":"Knowledge/demo","content":"# Demo"}`)
-	if err != nil || pending == nil || pending.Path != "Knowledge/demo/index.md" || pending.Content != "# Demo" {
+	if err != nil || pending == nil || pending.Path != "project://Knowledge/demo/index.md" || pending.Content != "# Demo" {
 		t.Fatalf("create_note failed: pending=%#v error=%v", pending, err)
 	}
 	if _, _, err = app.executeFileTool("create_note", `{"name":"escape.md","folder":"../outside","content":"no"}`); err == nil {
-		t.Fatal("create_note accepted a folder outside DirectoryBase")
+		t.Fatal("create_note accepted a folder outside Workspace")
+	}
+}
+
+func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	external := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "inside.md"), []byte("workspace needle"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(external, "outside.md"), []byte("external needle"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{directoryBase: external, projectState: ProjectState{ActiveProjectID: "project", Projects: []Project{{ID: "project", Path: workspace}}}}
+
+	value, _, err := app.executeFileTool("read_file", `{"path":"inside.md"}`)
+	if err != nil || value.(*LocalFileResult).Content != "workspace needle" {
+		t.Fatalf("Workspace read failed: %#v, %v", value, err)
+	}
+	if _, _, err := app.executeFileTool("read_file", `{"path":"workspace://outside.md"}`); err == nil {
+		t.Fatal("AI read_file accessed external Files")
+	}
+	for _, path := range []string{"/etc/passwd", `C:\\Users\\outside.md`, `\\\\server\\share\\outside.md`} {
+		if _, _, err := app.executeFileTool("read_file", fmt.Sprintf(`{"path":%q}`, path)); err == nil {
+			t.Fatalf("AI read_file accepted absolute path %q", path)
+		}
+	}
+	value, _, err = app.executeFileTool("search_files", `{"query":"needle"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := value.([]FileSearchResult)
+	if len(results) != 1 || results[0].Path != "inside.md" {
+		t.Fatalf("AI search escaped Workspace: %#v", results)
+	}
+	value, _, err = app.executeFileTool("list_files", `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := value.([]DirectoryFileEntry)
+	if len(items) != 1 || items[0].Path != "inside.md" {
+		t.Fatalf("AI list escaped Workspace: %#v", items)
+	}
+	_, pending, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md","content":"draft"}`)
+	if err != nil || pending == nil || pending.Path != "project://draft.md" {
+		t.Fatalf("AI edit was not Workspace-scoped: %#v, %v", pending, err)
 	}
 }
 

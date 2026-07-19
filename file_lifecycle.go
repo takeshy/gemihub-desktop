@@ -60,7 +60,7 @@ func (a *App) recordFileVersion(path, target string) error {
 	}
 	now := time.Now()
 	id := fmt.Sprintf("%d", now.UnixNano())
-	binary := shouldReadAsDataURL(filepath.Base(target)) || strings.IndexByte(string(data), 0) >= 0
+	binary := isBinaryFileName(filepath.Base(target)) || strings.IndexByte(string(data), 0) >= 0
 	entry := storedFileHistory{FileHistoryEntry: FileHistoryEntry{ID: id, Path: filepath.ToSlash(path), Timestamp: now.UnixMilli(), Size: len(data), Binary: binary}, Content: base64.StdEncoding.EncodeToString(data)}
 	dir := filepath.Join(base, ".llm-hub", "history", historyPathKey(path))
 	if err := os.MkdirAll(dir, 0o700); err != nil {

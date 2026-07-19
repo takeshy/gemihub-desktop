@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Braces, CheckCircle, ChevronDown, ChevronRight, Download, FileCode2, FilePlus2, GripVertical, History, Info, Library, Loader2, Pencil, Play, Plus, RefreshCw, RotateCcw, Sparkles, Square, Workflow as WorkflowIcon, X, XCircle } from "lucide-react";
-import { fileInventory, readFile, writeFile } from "../lib/wailsBackend";
+import { listProjectFiles, readProjectFile as readFile, writeProjectFile as writeFile } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
 import { executeWorkflow, reopenWorkflowMcpApp } from "./executor";
 import { canonicalWorkflowPath, findWorkflowBlocks, isWorkflowFilePath, parseWorkflowFile, replaceWorkflowDefinition, serializeWorkflowYaml, workflowNameFromFilePath, workflowYamlFromContent } from "./parser";
@@ -18,7 +18,7 @@ import { buildSkillMarkdown, deriveWorkflowInputVariables, parseWorkspaceSkill, 
 
 function workflowTemplate(name: string): string {
   return serializeWorkflowYaml({ name, nodes: [
-    { id: "input", type: "variable", name: "topic", value: "DirectoryBase" },
+    { id: "input", type: "variable", name: "topic", value: "Workspace" },
     { id: "ask", type: "command", prompt: "Summarize {{topic}} in a concise paragraph.", saveTo: "result", enableThinking: true },
     { id: "save", type: "note", path: "workflow-output.md", content: "{{result}}", mode: "overwrite", confirm: true },
   ] });
@@ -107,7 +107,7 @@ export function WorkflowPanel({ directoryBase, settings, activeFile, onOpenFile 
     if (!directoryBase) { setPaths([]); return; }
     setLoading(true);
     try {
-      const candidates = (await fileInventory()).filter((item) => !item.binary && isWorkflowFilePath(item.path)).slice(0, 1000);
+      const candidates = (await listProjectFiles()).filter((item) => !item.binary && isWorkflowFilePath(item.path)).slice(0, 1000);
       const found: string[] = [];
       for (let index = 0; index < candidates.length; index += 20) {
         const batch = await Promise.all(candidates.slice(index, index + 20).map(async (item) => ({ path: item.path, file: await readFile(item.path).catch(() => null) })));

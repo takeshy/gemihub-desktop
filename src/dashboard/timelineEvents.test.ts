@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { memoTimelineBody, parseTimelineCalendarPosts, sanitizeTimelineName } from "./timelineEvents";
+import { memoTimelineBody, parseTimelineCalendarPosts, sanitizeTimelineName, timelineFolder } from "./timelineEvents";
 
 Deno.test("timeline calendar posts parse shared timeline and event markers", () => {
   const content = `<!-- timeline-post: 2026-07-18T01:02:03.000Z -->
@@ -31,6 +31,8 @@ id: kanban-history
 Deno.test("timeline names use the shared portable folder convention", () => {
   assertEquals(sanitizeTimelineName(" Team / Launch.md "), "Team-Launch");
   assertEquals(sanitizeTimelineName(""), "Timeline");
+  assertEquals(timelineFolder(" Team / Launch.md "), "Dashboards/Timeline/Team-Launch");
+  assertEquals(timelineFolder(""), "Dashboards/Timeline/Timeline");
 });
 
 Deno.test("memo Timeline history retains its source, quote, and body", () => {

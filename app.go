@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -261,12 +262,18 @@ func (a *App) OpenExternalEditor(editorPath string, filePath string) error {
 }
 
 func readLocalFile(path string) (*LocalFileResult, error) {
+	fileName := filepath.Base(path)
+	if shouldShowDownloadOnly(fileName) {
+		if _, err := os.Stat(path); err != nil {
+			return nil, err
+		}
+		return &LocalFileResult{Path: path, FileName: fileName, Content: ""}, nil
+	}
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	fileName := filepath.Base(path)
 	content := string(bytes)
 	if shouldReadAsDataURL(fileName) {
 		mimeType := mime.TypeByExtension(stringsToLower(filepath.Ext(fileName)))
@@ -281,6 +288,54 @@ func readLocalFile(path string) (*LocalFileResult, error) {
 		FileName: fileName,
 		Content:  content,
 	}, nil
+}
+
+func shouldShowDownloadOnly(fileName string) bool {
+	switch stringsToLower(filepath.Ext(fileName)) {
+	case ".xlsx", ".xls", ".xlsm", ".xlsb", ".ods", ".doc", ".docx", ".ppt", ".pptx", ".pages", ".numbers", ".key", ".zip", ".7z", ".rar", ".tar", ".gz":
+		return true
+	default:
+		return false
+	}
+}
+
+func isBinaryFileName(fileName string) bool {
+	return shouldReadAsDataURL(fileName) || shouldShowDownloadOnly(fileName)
+}
+
+// OpenLocalFileDefault opens a file with the OS default associated app without
+// transporting its binary contents through the WebView/JSON bridge.
+func (a *App) OpenLocalFileDefault(path string) error {
+	var source string
+	var err error
+	if filepath.IsAbs(strings.TrimSpace(path)) {
+		source = filepath.Clean(path)
+	} else {
+		source, err = a.directoryPath(path, false)
+		if err != nil {
+			return err
+		}
+	}
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("only regular files can be opened")
+	}
+	var command *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		command = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", source)
+	case "darwin":
+		command = exec.Command("open", source)
+	default:
+		command = exec.Command("xdg-open", source)
+	}
+	if err := command.Start(); err != nil {
+		return err
+	}
+	return command.Process.Release()
 }
 
 func shouldReadAsDataURL(fileName string) bool {

@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import { createDirectory, deleteFile, fileInventory, readFile, renameFile, writeFile } from "../lib/wailsBackend";
+import { createDirectory, deleteFile, listProjectFiles, readFile, renameFile, writeFile } from "../lib/wailsBackend";
 import { DASHBOARD_EXT, DASHBOARD_FOLDER, DEFAULT_DASHBOARD_GRID, emptyDashboard, type DashboardData, type DashboardFileEntry, type DashboardGrid, type DashboardWidget, type LayoutPos } from "./types";
 
 const dumpOptions = { lineWidth: -1, noRefs: true, sortKeys: false } as const;
@@ -76,25 +76,25 @@ export function widgetLabel(type: string): string {
 }
 
 export async function listDashboardFiles(): Promise<DashboardFileEntry[]> {
-  return (await fileInventory()).filter((entry) => entry.path.startsWith(`${DASHBOARD_FOLDER}/`) && entry.path.toLowerCase().endsWith(DASHBOARD_EXT) && !/(?:^|\/)(?:trash|history)\//i.test(entry.path))
+  return (await listProjectFiles()).filter((entry) => entry.path.toLowerCase().endsWith(DASHBOARD_EXT) && !/(?:^|\/)(?:trash|history)\//i.test(entry.path))
     .map((entry) => ({ path: entry.path, name: dashboardName(entry.path), modTime: entry.modTime })).sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export async function loadDashboard(path: string): Promise<DashboardData | null> {
-  const file = await readFile(path);
+  const file = await readFile(`project://${path}`);
   return file ? parseDashboard(file.content) : null;
 }
 
 export async function saveDashboard(path: string, data: DashboardData): Promise<void> {
-  await createDirectory(DASHBOARD_FOLDER);
-  await writeFile(path, serializeDashboard(data));
+  await createDirectory(`project://${DASHBOARD_FOLDER}`);
+  await writeFile(`project://${path}`, serializeDashboard(data));
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
 }
 
 export async function createDashboard(name: string): Promise<{ path: string; data: DashboardData }> {
   const path = safeDashboardPath(name);
   if (!path) throw new Error("Dashboard name must not contain path separators.");
-  if (await readFile(path)) throw new Error(`Dashboard already exists: ${name}`);
+  if (await readFile(`project://${path}`)) throw new Error(`Dashboard already exists: ${name}`);
   const data = emptyDashboard();
   await saveDashboard(path, data);
   return { path, data };
@@ -103,13 +103,13 @@ export async function createDashboard(name: string): Promise<{ path: string; dat
 export async function renameDashboard(path: string, name: string): Promise<string> {
   const next = safeDashboardPath(name);
   if (!next) throw new Error("Dashboard name must not contain path separators.");
-  if (next !== path && await readFile(next)) throw new Error(`Dashboard already exists: ${name}`);
-  if (next !== path) await renameFile(path, next);
+  if (next !== path && await readFile(`project://${next}`)) throw new Error(`Dashboard already exists: ${name}`);
+  if (next !== path) await renameFile(`project://${path}`, `project://${next}`);
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   return next;
 }
 
 export async function removeDashboard(path: string): Promise<void> {
-  await deleteFile(path);
+  await deleteFile(`project://${path}`);
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
 }

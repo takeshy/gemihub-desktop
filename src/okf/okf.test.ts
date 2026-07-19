@@ -31,7 +31,7 @@ async function withFakeBackend<T>(run: () => Promise<T>): Promise<T> {
   } as unknown as { go?: unknown };
   scope.window.go = {
     main: { App: {
-      FileInventory: () => Promise.resolve([...files.keys()].map((path) => ({
+      ListProjectFiles: () => Promise.resolve([...files.keys()].map((path) => ({
         path,
         size: files.get(path)?.length ?? 0,
         createdTime: 0,
@@ -39,7 +39,7 @@ async function withFakeBackend<T>(run: () => Promise<T>): Promise<T> {
         md5: "",
         binary: false,
       }))),
-      ReadFile: (path: string) => Promise.resolve(files.has(path) ? {
+      ReadProjectFile: (path: string) => Promise.resolve(files.has(path) ? {
         path,
         fileName: path.split("/").pop() ?? path,
         content: files.get(path) ?? "",

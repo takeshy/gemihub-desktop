@@ -99,13 +99,17 @@ func TestRAGSyncAndSemanticSearch(t *testing.T) {
 	})}
 
 	app := NewApp()
+	app.projectConfigDir = t.TempDir()
+	if err := app.initializeProjects(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := app.SetDirectoryBase(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.WriteFile("notes/apple.md", "apple orchard fruit"); err != nil {
+	if err := app.WriteProjectFile("notes/apple.md", "apple orchard fruit"); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.WriteFile("notes/banana.md", "banana yellow fruit"); err != nil {
+	if err := app.WriteProjectFile("notes/banana.md", "banana yellow fruit"); err != nil {
 		t.Fatal(err)
 	}
 	setting := RAGSetting{

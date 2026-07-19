@@ -70,6 +70,17 @@ func TestDirectoryBaseFileOperations(t *testing.T) {
 	}
 }
 
+func TestReadFileReturnsNilForMissingFile(t *testing.T) {
+	app, _ := testDirectoryApp(t)
+	result, err := app.ReadFile("Dashboards/Timeline/Timeline/2026-07-19.md")
+	if err != nil {
+		t.Fatalf("ReadFile returned an error for a missing file: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("ReadFile returned %#v for a missing file, want nil", result)
+	}
+}
+
 func TestWriteFileCannotReplaceBinaryWithDataURLText(t *testing.T) {
 	app, dir := testDirectoryApp(t)
 	target := filepath.Join(dir, "document.pdf")
@@ -95,6 +106,28 @@ func TestAudioScoreFormatsUseBinaryProjectIO(t *testing.T) {
 		if !shouldReadAsDataURL(name) {
 			t.Errorf("%s was not classified as binary", name)
 		}
+	}
+}
+
+func TestOfficeFilesUseDownloadOnlyViewWithoutLoadingContents(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "large.xlsx")
+	if err := os.WriteFile(path, []byte("PK\x03\x04large workbook payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := readLocalFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "" || result.FileName != "large.xlsx" {
+		t.Fatalf("download-only result = %#v", result)
+	}
+	if !isBinaryFileName("large.xlsx") {
+		t.Fatal("xlsx was not classified as binary")
+	}
+	inventory, err := fileInventoryForBase(dir)
+	if err != nil || len(inventory) != 1 || !inventory[0].Binary || inventory[0].MD5 != "" {
+		t.Fatalf("binary inventory should use metadata only: %#v, %v", inventory, err)
 	}
 }
 

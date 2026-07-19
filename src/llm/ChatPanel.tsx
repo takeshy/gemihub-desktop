@@ -23,12 +23,13 @@ import {
   chat,
   type ChatMessage,
   type ChatStreamEvent,
-  fileInventory,
+  listProjectFiles,
   onChatStream,
   onChatToolRequest,
   type PendingFileAction,
   type RAGSearchResult,
   readFile,
+  readProjectFile,
   readProjectStateFile,
   resolveChatTool,
   searchRAG,
@@ -263,12 +264,12 @@ function contextMessage(text: string, files: AttachedFile[]): string {
   const context = files.map((file) =>
     `\n--- BEGIN FILE: ${file.path} ---\n${file.content}\n--- END FILE: ${file.path} ---`
   ).join("\n");
-  return `${text}\n\nThe following DirectoryBase files are attached as context:${context}`;
+  return `${text}\n\nThe following Workspace files are attached as context:${context}`;
 }
 
 function semanticRAGContext(results: RAGSearchResult[]): string {
   if (results.length === 0) return "";
-  return `\n\n--- Relevant context from DirectoryBase (semantic search) ---\n${
+  return `\n\n--- Relevant context from Workspace (semantic search) ---\n${
     results.map((result) =>
       `\n[Source: ${result.filePath}] (relevance: ${
         result.score.toFixed(3)
@@ -479,7 +480,7 @@ export function ChatPanel({
   );
   const refreshOkfBundles = useCallback(async () => {
     const builtin = getBuiltinOkfBundle();
-    if (!directoryBase) {
+    if (!projectBase) {
       setOkfBundles([builtin]);
       return;
     }
@@ -491,7 +492,7 @@ export function ChatPanel({
     } catch {
       setOkfBundles([builtin]);
     }
-  }, [directoryBase, settings.okfRoot]);
+  }, [projectBase, settings.okfRoot]);
   const configuredProviders = configuredChatProviders(settings);
   const thinkingModelKey = `${settings.provider}:${settings.model}`;
   const { available: thinkingAvailable, required: thinkingRequired } =
@@ -763,7 +764,7 @@ export function ChatPanel({
       cancelled = true;
       window.removeEventListener("llm-hub:file-tree-refresh", refresh);
     };
-  }, [directoryBase]);
+  }, [projectBase]);
 
   const runSkillWorkflow = useCallback(
     async (
@@ -1053,7 +1054,7 @@ export function ChatPanel({
     if (filePaths.length > 0 || fileLoading) return;
     setFileLoading(true);
     try {
-      const entries = await fileInventory();
+      const entries = await listProjectFiles();
       setFilePaths(
         entries.filter((entry) => !entry.binary && entry.size <= 1024 * 1024)
           .map((entry) => entry.path),
@@ -1069,7 +1070,7 @@ export function ChatPanel({
       !/(?:^|\s)@(?:"[^"]*|[^\s]*)$/.test(input) || filePaths.length > 0 ||
       fileLoading
     ) return;
-    void fileInventory().then((entries) =>
+    void listProjectFiles().then((entries) =>
       setFilePaths(
         entries.filter((entry) => !entry.binary && entry.size <= 1024 * 1024)
           .map((entry) => entry.path),
@@ -1083,7 +1084,7 @@ export function ChatPanel({
       return;
     }
     try {
-      const file = await readFile(path);
+      const file = await readProjectFile(path);
       if (file) {
         setAttachedFiles((
           current,
@@ -1179,7 +1180,7 @@ export function ChatPanel({
         item === name || item.endsWith(`/${name}`)
       );
       if (!path) continue;
-      const file = await readFile(path);
+      const file = await readProjectFile(path);
       if (file) {
         promptText +=
           `\n\n--- BEGIN REFERENCED FILE: ${path} ---\n${file.content}\n--- END REFERENCED FILE ---`;
@@ -1191,7 +1192,7 @@ export function ChatPanel({
     let ragSources: GroundingSource[] = [];
     const ragName = settings.selectedRagSetting;
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
-    if (ragName && ragSetting && directoryBase) {
+    if (ragName && ragSetting && projectBase) {
       try {
         const fallbackKey = ragSetting.embeddingProvider === "gemini" &&
             settings.provider === "gemini"
@@ -1633,9 +1634,9 @@ export function ChatPanel({
             <Bot size={28} />
             <strong>How can I help?</strong>
             <span>
-              {directoryBase
+              {projectBase
                 ? "Attach files or ask me to inspect your workspace."
-                : "Select a workspace directory to enable file tools."}
+                : "Select a Workspace to enable file tools."}
             </span>
           </div>
         )}
@@ -1981,10 +1982,10 @@ export function ChatPanel({
           <button
             type="button"
             className="chat-clear"
-            disabled={!directoryBase}
+            disabled={!projectBase}
             onClick={() =>
               filePickerOpen ? setFilePickerOpen(false) : void openFilePicker()}
-            title="Attach DirectoryBase file"
+            title="Attach Workspace file"
           >
             <Paperclip size={15} />
           </button>
@@ -2049,9 +2050,9 @@ export function ChatPanel({
                   : ""
               }`}
               disabled={loading || settings.provider === "cli" ||
-                (!directoryBase && settings.mcpServers.length === 0)}
+                (!projectBase && settings.mcpServers.length === 0)}
               onClick={() => setToolMenuOpen((open) => !open)}
-              title="DirectoryBase and MCP tools"
+              title="Workspace and MCP tools"
             >
               <Database size={15} />
             </button>
@@ -2164,7 +2165,7 @@ export function ChatPanel({
           </select>
           <select
             value={settings.selectedRagSetting ?? ""}
-            disabled={loading || !directoryBase}
+            disabled={loading || !projectBase}
             onChange={(event) => onSettingsChange({
               ...settings,
               selectedRagSetting: event.target.value || null,

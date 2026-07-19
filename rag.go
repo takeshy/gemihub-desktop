@@ -380,7 +380,7 @@ func (a *App) DeleteRAGIndex(name string) error {
 }
 
 func (a *App) ragFiles(setting RAGSetting) ([]ragFile, error) {
-	base := a.GetDirectoryBase()
+	base := a.GetActiveProjectPath()
 	if base == "" {
 		return []ragFile{}, nil
 	}

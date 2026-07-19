@@ -4,18 +4,18 @@ import {
   type ChatRequest,
   type ChatToolDefinition,
   executeWorkflowShell,
-  fileInventory,
   type FileTreeNode,
-  listFileTree,
+  listProjectTree,
+  listProjectFiles,
   onChatStream,
   onChatToolRequest,
-  readFile,
+  readProjectFile,
   resolveChatTool,
   searchRAG,
   trashFile,
   workflowHTTPRequest,
-  writeBinaryFile,
-  writeFile,
+  writeProjectBinaryFile,
+  writeProjectFile,
 } from "../lib/wailsBackend";
 import yaml from "js-yaml";
 import {
@@ -758,10 +758,10 @@ async function executeNode(
       let path = property(node, "path", variables);
       if (!path) throw new Error("note-read node is missing path.");
       if (!path.endsWith(".md") && !path.endsWith(".encrypted")) path += ".md";
-      let result = await readFile(path);
+      let result = await readProjectFile(path);
       if (!result && path.endsWith(".md")) {
         path += ".encrypted";
-        result = await readFile(path);
+        result = await readProjectFile(path);
       }
       if (!result) throw new Error(`File not found: ${path}`);
       save(variables, node.properties.saveTo, result.content);
@@ -774,7 +774,7 @@ async function executeNode(
       path = sanitizeWorkflowNotePath(path);
       const content = property(node, "content", variables);
       const mode = node.properties.mode ?? "overwrite";
-      const existing = await readFile(path).catch(() => null);
+      const existing = await readProjectFile(path).catch(() => null);
       if (mode === "create" && existing) {
         return { output: { path, skipped: true } };
       }
@@ -815,7 +815,7 @@ async function executeNode(
         }
         if (!result?.confirmed) throw new Error("File write cancelled.");
       }
-      await writeFile(path, finalContent);
+      await writeProjectFile(path, finalContent);
       return { output: { path, mode } };
     }
     case "note-search": {
@@ -823,7 +823,7 @@ async function executeNode(
       const query = property(node, "query", variables);
       if (!query) throw new Error("note-search node is missing query.");
       const limit = Number(node.properties.limit) || 10;
-      const candidates = (await fileInventory()).filter((item) =>
+      const candidates = (await listProjectFiles()).filter((item) =>
         /\.md$/i.test(item.path)
       );
       const result: Array<
@@ -832,7 +832,7 @@ async function executeNode(
       for (const item of candidates) {
         if (result.length >= limit) break;
         if (boolProperty(node, "searchContent", false)) {
-          const content = (await readFile(item.path))?.content || "",
+          const content = (await readProjectFile(item.path))?.content || "",
             index = content.toLowerCase().indexOf(query.toLowerCase());
           if (index >= 0) {
             const start = Math.max(0, index - 50),
@@ -876,7 +876,7 @@ async function executeNode(
       ) => tag.trim()).filter(Boolean).map((tag) =>
         tag.startsWith("#") ? tag : `#${tag}`
       );
-      const candidates = (await fileInventory()).filter((item) => {
+      const candidates = (await listProjectFiles()).filter((item) => {
         if (!item.path.toLowerCase().endsWith(".md")) return false;
         if (
           createdWithin !== null &&
@@ -893,7 +893,7 @@ async function executeNode(
         candidates.map(async (item) => ({
           item,
           tags: tagsRequired.length
-            ? markdownTags((await readFile(item.path))?.content || "")
+            ? markdownTags((await readProjectFile(item.path))?.content || "")
             : [],
         })),
       );
@@ -935,7 +935,7 @@ async function executeNode(
       const parent = property(node, "folder", variables) ||
         property(node, "path", variables);
       const normalizedParent = parent.replace(/^\/+|\/+$/g, "");
-      const sorted = collectFolderPaths(await listFileTree()).filter((folder) =>
+      const sorted = collectFolderPaths(await listProjectTree()).filter((folder) =>
         !normalizedParent || folder === normalizedParent ||
         folder.startsWith(`${normalizedParent}/`)
       ).sort();
@@ -1115,7 +1115,7 @@ async function executeNode(
             content = String(variable);
           }
         } else {
-          const file = await readFile(name);
+          const file = await readProjectFile(name);
           const dataUrl = file?.content.match(
             /^data:([^;,]+);base64,([\s\S]+)$/,
           );
@@ -1531,7 +1531,7 @@ async function executeNode(
               "confirmed" in confirmed && confirmed.confirmed))
         ) throw new Error("File deletion cancelled.");
       }
-      await trashFile(path);
+      await trashFile(`project://${path}`);
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
       return { output: { path, trashed: true } };
     }
@@ -1563,13 +1563,13 @@ async function executeNode(
             node,
             "title",
             variables,
-            "Select a DirectoryBase file",
+            "Select a Workspace file",
           ),
           defaultPath: fallback,
           extensions: ["md", "encrypted"],
         }) as string | null;
       if (!path) throw new Error("File selection cancelled.");
-      const file = await readFile(path);
+      const file = await readProjectFile(path);
       if (!file) throw new Error(`File not found: ${path}`);
       save(variables, node.properties.saveTo, file.content);
       if (node.properties.saveFileTo) {
@@ -1657,7 +1657,7 @@ async function executeNode(
           node,
           "title",
           variables,
-          "Select a DirectoryBase file",
+          "Select a Workspace file",
         ),
         defaultPath: property(node, "default", variables) ||
           services.activeFile?.path || "",
@@ -1684,7 +1684,7 @@ async function executeNode(
         save(variables, node.properties.savePathTo, path);
         return { output: value };
       }
-      const file = await readFile(path);
+      const file = await readProjectFile(path);
       if (!file) throw new Error(`File not found: ${path}`);
       const dataMatch = file.content.match(/^data:([^;,]+)?;base64,(.*)$/s);
       const value = {
@@ -1743,8 +1743,8 @@ async function executeNode(
         ) throw new Error("File save cancelled.");
       }
       if (value.contentType === "binary") {
-        await writeBinaryFile(path, value.data || "");
-      } else await writeFile(path, value.data || "");
+        await writeProjectBinaryFile(path, value.data || "");
+      } else await writeProjectFile(path, value.data || "");
       save(variables, node.properties.savePathTo, path);
       return { output: path };
     }

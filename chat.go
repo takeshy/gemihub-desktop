@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -191,12 +192,12 @@ type openAIToolCall struct {
 }
 
 var fileToolDefinitions = []map[string]any{
-	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read a file relative to DirectoryBase.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
-	{"type": "function", "function": map[string]any{"name": "read_note", "description": "Agent Skills compatibility alias for reading a text file relative to DirectoryBase.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
-	{"type": "function", "function": map[string]any{"name": "search_files", "description": "Search file names and text content under DirectoryBase.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer"}}, "required": []string{"query"}}}},
-	{"type": "function", "function": map[string]any{"name": "list_files", "description": "List files under DirectoryBase.", "parameters": map[string]any{"type": "object", "properties": map[string]any{}}}},
-	{"type": "function", "function": map[string]any{"name": "propose_file_edit", "description": "Propose a file write. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "string", "enum": []string{"replace", "append", "prepend"}}}, "required": []string{"path", "content"}}}},
-	{"type": "function", "function": map[string]any{"name": "create_note", "description": "Agent Skills compatibility alias that proposes creating a DirectoryBase file. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "folder": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}}, "required": []string{"name", "content"}}}},
+	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read a file inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
+	{"type": "function", "function": map[string]any{"name": "read_note", "description": "Agent Skills compatibility alias for reading a text file inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
+	{"type": "function", "function": map[string]any{"name": "search_files", "description": "Search file names and text content inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer"}}, "required": []string{"query"}}}},
+	{"type": "function", "function": map[string]any{"name": "list_files", "description": "List files inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{}}}},
+	{"type": "function", "function": map[string]any{"name": "propose_file_edit", "description": "Propose a Workspace file write. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "string", "enum": []string{"replace", "append", "prepend"}}}, "required": []string{"path", "content"}}}},
+	{"type": "function", "function": map[string]any{"name": "create_note", "description": "Agent Skills compatibility alias that proposes creating a Workspace file. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "folder": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}}, "required": []string{"name", "content"}}}},
 	{"type": "function", "function": map[string]any{"name": "propose_file_rename", "description": "Propose renaming a file. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "newPath": map[string]any{"type": "string"}}, "required": []string{"path", "newPath"}}}},
 }
 
@@ -518,7 +519,11 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 	stringArg := func(key string) string { value, _ := args[key].(string); return value }
 	switch name {
 	case "read_file", "read_note":
-		result, err := a.ReadFile(stringArg("path"))
+		path, err := aiWorkspacePath(stringArg("path"))
+		if err != nil {
+			return nil, nil, err
+		}
+		result, err := a.ReadProjectFile(path)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -531,16 +536,23 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if number, ok := args["limit"].(float64); ok {
 			limit = int(number)
 		}
-		result, err := a.SearchFiles(stringArg("query"), limit)
+		result, err := a.SearchProjectFiles(stringArg("query"), limit)
 		return result, nil, err
 	case "list_files":
-		inventory, err := a.FileInventory()
+		inventory, err := a.ListProjectFiles()
 		if len(inventory) > 1000 {
 			inventory = inventory[:1000]
 		}
 		return inventory, nil, err
 	case "propose_file_edit":
-		return nil, &PendingFileAction{Kind: "write", Path: stringArg("path"), Content: stringArg("content"), Mode: stringArg("mode")}, nil
+		path, err := aiWorkspacePath(stringArg("path"))
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, err := a.projectPath(path, true); err != nil {
+			return nil, nil, err
+		}
+		return nil, &PendingFileAction{Kind: "write", Path: "project://" + filepath.ToSlash(path), Content: stringArg("content"), Mode: stringArg("mode")}, nil
 	case "create_note":
 		name := strings.TrimSpace(strings.ReplaceAll(stringArg("name"), "\\", "/"))
 		folder := strings.Trim(strings.TrimSpace(strings.ReplaceAll(stringArg("folder"), "\\", "/")), "/")
@@ -551,15 +563,48 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if folder != "" {
 			path = folder + "/" + name
 		}
-		if _, err := a.directoryPath(path, true); err != nil {
+		if _, err := a.projectPath(path, true); err != nil {
 			return nil, nil, err
 		}
-		return nil, &PendingFileAction{Kind: "write", Path: path, Content: stringArg("content"), Mode: "replace"}, nil
+		return nil, &PendingFileAction{Kind: "write", Path: "project://" + path, Content: stringArg("content"), Mode: "replace"}, nil
 	case "propose_file_rename":
-		return nil, &PendingFileAction{Kind: "rename", Path: stringArg("path"), NewPath: stringArg("newPath")}, nil
+		path, err := aiWorkspacePath(stringArg("path"))
+		if err != nil {
+			return nil, nil, err
+		}
+		newPath, err := aiWorkspacePath(stringArg("newPath"))
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, err := a.projectPath(path, false); err != nil {
+			return nil, nil, err
+		}
+		if _, err := a.projectPath(newPath, true); err != nil {
+			return nil, nil, err
+		}
+		return nil, &PendingFileAction{Kind: "rename", Path: "project://" + filepath.ToSlash(path), NewPath: "project://" + filepath.ToSlash(newPath)}, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown file tool: %s", name)
 	}
+}
+
+func aiWorkspacePath(path string) (string, error) {
+	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+	if strings.HasPrefix(strings.ToLower(path), "workspace://") {
+		return "", fmt.Errorf("AI file tools cannot access Files outside the active Workspace")
+	}
+	if strings.HasPrefix(strings.ToLower(path), "project://") {
+		path = path[len("project://"):]
+	}
+	if strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("AI file tools require a Workspace-relative path")
+	}
+	path = strings.TrimLeft(path, "/")
+	windowsAbsolute := len(path) >= 3 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':' && path[2] == '/'
+	if path == "" || windowsAbsolute || filepath.IsAbs(filepath.FromSlash(path)) {
+		return "", fmt.Errorf("AI file tools require a Workspace-relative path")
+	}
+	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(path))), nil
 }
 
 func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any, *PendingFileAction, error) {

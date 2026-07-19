@@ -15,3 +15,9 @@ Deno.test("File widgets route .canvas files to the visual Canvas editor", () => 
   assertEquals(docKindFor("Boards/Planning.canvas"), "canvas");
   assertEquals(docKindFor("MAP.CANVAS"), "canvas");
 });
+
+Deno.test("File widgets route office and archive files to external-app view", () => {
+  assertEquals(docKindFor("report.xlsx"), "external");
+  assertEquals(docKindFor("proposal.docx"), "external");
+  assertEquals(docKindFor("assets.zip"), "external");
+});

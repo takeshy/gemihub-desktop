@@ -55,6 +55,12 @@ export interface ProjectState {
   projects: Project[];
 }
 
+export interface WorkspaceDirectoryMoveResult {
+  workspacePath: string;
+  originalPath: string;
+  linkCreated: boolean;
+}
+
 export interface RAGSetting {
   embeddingProvider: "gemini" | "vertex" | "openai";
   embeddingBaseUrl: string;
@@ -358,6 +364,17 @@ interface WailsAppApi {
   ListFileTree: () => Promise<FileTreeNode[]>;
   ListProjectTree: () => Promise<FileTreeNode[]>;
   OpenContainingFolder: (path: string) => Promise<void>;
+  MoveDirectoryIntoWorkspace: (
+    path: string,
+    destinationName: string,
+    leaveLink: boolean,
+  ) => Promise<WorkspaceDirectoryMoveResult>;
+  MovePathIntoWorkspace: (
+    path: string,
+    destinationDirectory: string,
+    destinationName: string,
+    leaveLink: boolean,
+  ) => Promise<WorkspaceDirectoryMoveResult>;
   ListProjectFiles: () => Promise<DirectoryFileEntry[]>;
   ReadProjectFile: (path: string) => Promise<LocalFileResult>;
   WriteProjectFile: (path: string, content: string) => Promise<void>;
@@ -366,6 +383,7 @@ interface WailsAppApi {
   RenameProjectFile: (oldPath: string, newPath: string) => Promise<void>;
   DeleteProjectFile: (path: string) => Promise<void>;
   ReadFile: (path: string) => Promise<LocalFileResult>;
+  OpenLocalFileDefault: (path: string) => Promise<void>;
   WriteFile: (path: string, content: string) => Promise<void>;
   ReadProjectStateFile: (name: string) => Promise<string>;
   WriteProjectStateFile: (name: string, content: string) => Promise<void>;
@@ -588,6 +606,12 @@ export async function readProjectFile(path: string): Promise<LocalFileResult | n
   return await appApi()?.ReadProjectFile(path) ?? null;
 }
 
+export async function openLocalFileDefault(path: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Opening a file externally requires the desktop app.");
+  await api.OpenLocalFileDefault(path);
+}
+
 export async function writeProjectFile(path: string, content: string): Promise<void> {
   const api = appApi();
   if (!api) throw new Error("Project file writes require the desktop app.");
@@ -681,6 +705,27 @@ export async function createDirectory(path: string): Promise<void> {
     notifyProjectRequired(error);
     throw error;
   }
+}
+
+export async function moveDirectoryIntoWorkspace(
+  path: string,
+  destinationName: string,
+  leaveLink: boolean,
+): Promise<WorkspaceDirectoryMoveResult> {
+  const api = appApi();
+  if (!api) throw new Error("Moving into the Workspace requires the desktop app.");
+  return await api.MoveDirectoryIntoWorkspace(path, destinationName, leaveLink);
+}
+
+export async function movePathIntoWorkspace(
+  path: string,
+  destinationDirectory: string,
+  destinationName: string,
+  leaveLink: boolean,
+): Promise<WorkspaceDirectoryMoveResult> {
+  const api = appApi();
+  if (!api) throw new Error("Moving into the Workspace requires the desktop app.");
+  return await api.MovePathIntoWorkspace(path, destinationDirectory, destinationName, leaveLink);
 }
 
 export async function renameFile(

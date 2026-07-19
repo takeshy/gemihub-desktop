@@ -162,7 +162,7 @@ export const defaultChatSettings: ChatSettings = {
   selectedModelProfileId: "",
   verifiedCliTypes: [],
   systemPrompt:
-    "You are a helpful assistant working with the user's local DirectoryBase. Inspect files before making assumptions. Use propose_file_edit for changes.",
+    "You are a helpful assistant working inside the user's active Workspace. Inspect Workspace files before making assumptions. Use propose_file_edit for changes.",
   enableFileTools: true,
   fileToolMode: "all",
   thinkingEnabledModels: [],
@@ -189,7 +189,7 @@ export const defaultChatSettings: ChatSettings = {
     provider: "",
     model: "",
     systemPrompt:
-      "You are a helpful assistant connected to the user's local DirectoryBase. Use file tools when needed and keep Discord responses concise.",
+      "You are a helpful assistant connected to the user's active Workspace. Use Workspace file tools when needed and keep Discord responses concise.",
     maxResponseLength: 1900,
     respondToDMs: true,
     requireMention: true,

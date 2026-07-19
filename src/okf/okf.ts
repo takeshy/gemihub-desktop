@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import { fileInventory, readFile, type ChatToolDefinition } from "../lib/wailsBackend";
+import { listProjectFiles, readProjectFile, type ChatToolDefinition } from "../lib/wailsBackend";
 import {
   BUILTIN_OKF_BUNDLE_ID,
   BUILTIN_OKF_BUNDLE_NAME,
@@ -83,7 +83,7 @@ async function listMarkdown(root: string): Promise<string[]> {
   const normalizedRoot = normalizePath(root);
   if (!normalizedRoot) return [];
   const prefix = `${normalizedRoot}/`;
-  return (await fileInventory()).map((entry) => normalizePath(entry.path))
+  return (await listProjectFiles()).map((entry) => normalizePath(entry.path))
     .filter((path) =>
       path.toLowerCase().endsWith(".md") &&
       path.toLowerCase().startsWith(prefix.toLowerCase()) &&
@@ -117,7 +117,7 @@ export async function discoverOkfBundles(root: string): Promise<OkfBundle[]> {
   const bundles = await Promise.all(topLevel.map(async (indexPath) => {
     const id = dirOf(indexPath);
     let name = id.split("/").pop() || rootBasename(normalizedRoot);
-    const file = await readFile(`${normalizedRoot}/${indexPath}`);
+    const file = await readProjectFile(`${normalizedRoot}/${indexPath}`);
     if (file) {
       const title = asString(parseFrontmatter(file.content).frontmatter.title);
       if (title) name = title;
@@ -128,7 +128,7 @@ export async function discoverOkfBundles(root: string): Promise<OkfBundle[]> {
 }
 
 async function toDocument(root: string, path: string): Promise<OkfDocument | null> {
-  const file = await readFile(`${normalizePath(root)}/${path}`);
+  const file = await readProjectFile(`${normalizePath(root)}/${path}`);
   if (!file) return null;
   const { frontmatter, body } = parseFrontmatter(file.content);
   return {

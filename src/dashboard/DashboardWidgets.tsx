@@ -1,6 +1,7 @@
 import {
   type DragEvent,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   Fragment,
   useCallback,
   useEffect,
@@ -39,6 +40,7 @@ import { WysiwygEditor } from "../components/WysiwygEditor";
 import { EncryptedFileModal } from "../components/EncryptedFileModal";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 import { decodeMemoPath } from "../lib/memoPath";
+import { transformWikiLinks, wikiTargetToPath } from "../lib/wikiLinks";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import {
   appendEntryBlock,
@@ -94,7 +96,7 @@ import { BaseViewRenderer } from "./BaseViewRenderer";
 import type { DashboardWidget } from "./types";
 import { KanbanCardModal } from "./KanbanCardModal";
 import { WidgetDialog } from "./WidgetDialog";
-import { appendTimelineEntry } from "./timelineEvents";
+import { appendTimelineEntry, timelineFolder } from "./timelineEvents";
 
 function configText(
   config: Record<string, unknown>,
@@ -370,15 +372,16 @@ function withoutTimelineTags(body: string): string {
     .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 export function TimelineDashboardWidget(
-  { config, isDark, settings, onChange }: {
+  { config, isDark, settings, onChange, onOpenPath }: {
     config: Record<string, unknown>;
     isDark: boolean;
     settings: ChatSettings;
     onChange: (config: Record<string, unknown>) => void;
+    onOpenPath: (path: string) => void;
   },
 ) {
-  const name = configText(config, "name").replace(/[\\/:*?"<>|]/g, "").trim();
-  const folder = `Dashboards/Timeline/${name}`;
+  const name = configText(config, "name");
+  const folder = timelineFolder(name);
   const composerMode = config.composerMode === "wysiwyg" ? "wysiwyg" : "raw";
   const pageSize = Math.max(1, Number(config.latestCount) || 20),
     collapseLines = Math.max(1, Number(config.collapseLineLimit) || 8),
@@ -571,6 +574,14 @@ export function TimelineDashboardWidget(
     setPinnedOnly(false);
   };
   const hasFilters = !!(word || tag || from || to || pinnedOnly);
+  const handleTimelineLinkClick = useCallback((href: string, event: ReactMouseEvent<HTMLElement>) => {
+    if (!href.startsWith("#wiki:")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const target = decodeURIComponent(href.slice("#wiki:".length));
+    const path = wikiTargetToPath("", target);
+    if (path) onOpenPath(path);
+  }, [onOpenPath]);
   if (!name) {
     return (
       <div className="dashboard-widget-empty centered">
@@ -734,15 +745,17 @@ export function TimelineDashboardWidget(
                           <details>
                             <summary>Show post</summary>
                             <MarkdownPreview
-                              content={displayBody}
+                              content={transformWikiLinks(displayBody)}
                               isDark={isDark}
+                              onLinkClick={handleTimelineLinkClick}
                             />
                           </details>
                         )
                         : (
                           <MarkdownPreview
-                            content={displayBody}
+                            content={transformWikiLinks(displayBody)}
                             isDark={isDark}
+                            onLinkClick={handleTimelineLinkClick}
                           />
                         )}
                       {tags.length > 0 && (

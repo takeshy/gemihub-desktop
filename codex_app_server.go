@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -296,9 +295,9 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	workingDirectory := a.GetDirectoryBase()
+	workingDirectory := a.GetActiveProjectPath()
 	if workingDirectory == "" {
-		workingDirectory, _ = os.UserHomeDir()
+		return nil, fmt.Errorf("active Workspace is not configured")
 	}
 	cmd := exec.Command(invocation.Command, invocation.Args...)
 	cmd.Dir = workingDirectory

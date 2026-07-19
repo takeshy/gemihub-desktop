@@ -79,7 +79,7 @@ import {
   isDashboardWidgetConfigured,
 } from "./widgetRegistry";
 import { shouldPersistFileWidgetText } from "./fileWidgetPersistence";
-import { isBinaryDocumentFileName } from "./documentKind";
+import { docKindFor, isBinaryDocumentFileName } from "./documentKind";
 import { renderMarkdownToPrintableHTML } from "../lib/printableHtml";
 import { openEncryptedWorkspaceFile, rememberedFilePassword } from "../lib/fileEncryption";
 import { isEncryptedFile, reencryptFileContent } from "../lib/hybridEncryption";
@@ -540,6 +540,7 @@ export function DashboardView({
   dashboardPath,
   startupPaths,
   pluginWidgetRequest,
+  onExternalPathOpened,
 }: {
   data: DashboardData;
   onChange: Dispatch<SetStateAction<DashboardData>>;
@@ -570,7 +571,7 @@ export function DashboardView({
   openPathRequest: {
     id: number;
     path: string;
-    source?: "local" | "directory" | "filetree";
+    source?: "local" | "directory" | "filetree" | "startup";
   };
   onHistoryCheckpoint: (reason: "reload") => void;
   onDeferredHistoryCheckpoint: (reason: "reload") => void;
@@ -582,6 +583,7 @@ export function DashboardView({
   dashboardPath?: string;
   startupPaths: string[] | null;
   pluginWidgetRequest: { id: number; type: string; config: Record<string, unknown> };
+  onExternalPathOpened: (path: string) => void;
 }) {
   const { t: tr } = useI18n();
   const cols = Math.max(
@@ -836,9 +838,9 @@ export function DashboardView({
 
   const openFilePicker = useCallback(
     (targetId?: string) => {
-      const fallbackTarget = data.widgets.find((widget) =>
-        isFileWidgetType(widget.type)
-      )?.id;
+      const activeTarget = data.widgets.find((widget) => widget.id === activeWidgetId && isFileWidgetType(widget.type))?.id;
+      const lastTarget = data.widgets.find((widget) => widget.id === lastActiveFileWidgetIdRef.current && isFileWidgetType(widget.type))?.id;
+      const fallbackTarget = activeTarget ?? lastTarget ?? data.widgets.find((widget) => isFileWidgetType(widget.type))?.id;
       const nextTargetId = targetId ?? fallbackTarget;
       if (nextTargetId) {
         setFilePickerTargetId(nextTargetId);
@@ -852,7 +854,7 @@ export function DashboardView({
       setFilePickerCreateDirection(activeLayoutDirection);
       setFilePickerQuery("");
     },
-    [activeLayoutDirection, data.widgets],
+    [activeLayoutDirection, activeWidgetId, data.widgets],
   );
 
   const getGridMetrics = useCallback(() => {
@@ -1300,7 +1302,7 @@ export function DashboardView({
 
   const resolveOpenedFile = useCallback(async (path: string, result: { path: string; fileName: string; content: string }) => {
     if (!result.fileName.toLowerCase().endsWith(".encrypted") && !path.toLowerCase().endsWith(".encrypted") && !isEncryptedFile(result.content)) {
-      return { fileName: result.fileName, content: await prepareOpenedContent(result.fileName, result.content), filePath: result.path, extraConfig: {} };
+      return { fileName: result.fileName, content: await prepareOpenedContent(result.fileName, result.content), filePath: result.path, extraConfig: docKindFor(result.fileName) === "external" ? { externalOnly: true } : {} };
     }
     const password = rememberedFilePassword(result.path) || prompt("暗号化ファイルのパスワードを入力してください") || "";
     if (!password) throw new Error("Password is required to open an encrypted file.");
@@ -1333,7 +1335,7 @@ export function DashboardView({
       const content = typeof widget.config.content === "string"
         ? widget.config.content
         : "";
-      if (!fileName || !filePath || content) return;
+      if (!fileName || !filePath || content || widget.config.externalOnly === true || docKindFor(fileName) === "external") return;
 
       const hydrateKey = `${widget.id}:${filePath}`;
       if (hydratedFilePathsRef.current.has(hydrateKey)) return;
@@ -1404,15 +1406,19 @@ export function DashboardView({
         // A plugin main view owns this file type; do not create or replace a
         // generic File widget with its binary/file-object representation.
       } else if (filePickerCreatesWidget) {
-        createFileWidget(
+        const widgetId = createFileWidget(
           fileName,
           content,
           mode,
           filePickerCreateDirection,
           filePath,
         );
+        setActiveWidgetId(widgetId);
+        setMaximizedWidgetId(widgetId);
       } else if (filePickerTargetId) {
         openFileInWidget(filePickerTargetId, fileName, content, mode, filePath);
+        setActiveWidgetId(filePickerTargetId);
+        setMaximizedWidgetId(filePickerTargetId);
       }
       setFilePickerTargetId(null);
       setFilePickerCreatesWidget(false);
@@ -1522,7 +1528,7 @@ export function DashboardView({
       const targetId = lastActiveFileWidgetIdRef.current;
       const target = data.widgets.find((widget) =>
         widget.id === targetId && isFileWidgetType(widget.type)
-      );
+      ) ?? data.widgets.find((widget) => isFileWidgetType(widget.type));
       if (!target) {
         return createFileWidget(
           result.fileName,
@@ -1575,7 +1581,7 @@ export function DashboardView({
       const targetId = lastActiveFileWidgetIdRef.current;
       const target = data.widgets.find((widget) =>
         widget.id === targetId && isFileWidgetType(widget.type)
-      );
+      ) ?? data.widgets.find((widget) => isFileWidgetType(widget.type));
       if (!target) {
         return createFileWidget(
           result.fileName,
@@ -1713,24 +1719,16 @@ export function DashboardView({
     void (async () => {
       const paths = startupPaths;
       if (!paths.length) return;
-
-      const emptyWidget = data.widgets.find((widget) => {
-        if (!isFileWidgetType(widget.type)) return false;
-        const filePath = filePathFromConfig(widget.config);
-        const fileName = typeof widget.config.fileName === "string"
-          ? widget.config.fileName
-          : filePath.split("/").pop() || "";
-        const content = typeof widget.config.content === "string"
-          ? widget.config.content
-          : "";
-        return !fileName && !filePath && !content;
-      });
+      onExternalPathOpened(paths[0]);
 
       for (const [index, path] of paths.entries()) {
         try {
-          if (index === 0 && emptyWidget) {
-            await openPathInWidget(emptyWidget.id, path);
-            setMaximizedWidgetId(emptyWidget.id);
+          if (index === 0) {
+            const widgetId = await openKnownPathInLastActiveWidget(path);
+            if (widgetId) {
+              setActiveWidgetId(widgetId);
+              setMaximizedWidgetId(widgetId);
+            }
           } else {
             const widgetId = await openPathAsWidget(path);
             if (index === 0 && widgetId) setMaximizedWidgetId(widgetId);
@@ -1740,13 +1738,14 @@ export function DashboardView({
         }
       }
     })();
-  }, [data.widgets, openPathAsWidget, openPathInWidget, startupPaths]);
+  }, [data.widgets, onExternalPathOpened, openKnownPathInLastActiveWidget, openPathAsWidget, startupPaths]);
 
   const browseLocalFile = useCallback(async () => {
     if (hasWailsBackend()) {
       try {
         const path = await selectLocalFilePath();
         if (!path) return;
+        onExternalPathOpened(path);
         setFilePickerTargetId(null);
         setFilePickerCreatesWidget(false);
         setFilePickerCreateDirection(activeLayoutDirection);
@@ -1772,13 +1771,14 @@ export function DashboardView({
       return;
     }
     alert(tr("alert.desktopOnly"));
-  }, [activeLayoutDirection, applyPickedFile, tr]);
+  }, [activeLayoutDirection, applyPickedFile, onExternalPathOpened, tr]);
 
   useEffect(() => {
     if (!hasWailsBackend()) return;
     const dispose = onWailsFileDrop((x, y, paths) => {
       const path = paths[0];
       if (!path) return;
+      onExternalPathOpened(path);
       const target = document.elementFromPoint(x, y)?.closest<HTMLElement>(
         "[data-widget-id]",
       );
@@ -1790,7 +1790,7 @@ export function DashboardView({
       }
     });
     return () => dispose?.();
-  }, [openPathAsWidget, openPathInWidget]);
+  }, [onExternalPathOpened, openPathAsWidget, openPathInWidget]);
 
   const addWidget = (
     type: DashboardWidget["type"],
@@ -1927,12 +1927,18 @@ export function DashboardView({
     if (!openPathRequest.path) return;
     void (async () => {
       try {
-        const widgetId = openPathRequest.source === "filetree"
+        const widgetId = openPathRequest.source === "startup"
+          ? await openKnownPathInLastActiveWidget(openPathRequest.path)
+          : openPathRequest.source === "filetree"
           ? await openDirectoryPathInLastActiveWidget(openPathRequest.path)
           : openPathRequest.source === "directory"
           ? await openDirectoryPathAsWidget(openPathRequest.path)
           : await openPathAsWidget(openPathRequest.path);
         if (!widgetId) alert(tr("alert.openFileFailed"));
+        else if (openPathRequest.source === "startup") {
+          setActiveWidgetId(widgetId);
+          setMaximizedWidgetId(widgetId);
+        }
       } catch (error) {
         console.error(error);
         alert(tr("alert.openFromListFailed"));
@@ -1941,6 +1947,7 @@ export function DashboardView({
   }, [
     openDirectoryPathAsWidget,
     openDirectoryPathInLastActiveWidget,
+    openKnownPathInLastActiveWidget,
     openPathAsWidget,
     openPathRequest,
     tr,
@@ -2867,6 +2874,7 @@ export function DashboardView({
                         config={widget.config}
                         isDark={isDark}
                         settings={chatSettings}
+                        onOpenPath={(path) => void openPathAsWidget(path)}
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
                       />

@@ -5,7 +5,7 @@ import {
   type ChatAttachment,
   type ChatUsage,
   onChatStream,
-  readFile,
+  readProjectFile as readFile,
 } from "../lib/wailsBackend";
 import {
   chatModelChoices,
@@ -381,7 +381,7 @@ export function AIWorkflowBuilderModal({
     try {
       const references = await referenceInputs();
       const text = await call(
-        "Plan a DirectoryBase workflow in plain language. Cover goal, ordered steps, inputs, outputs, and edge cases. Do not mention YAML or node types. Keep it concise.",
+        "Plan a Workspace workflow in plain language. Cover goal, ordered steps, inputs, outputs, and edge cases. Do not mention YAML or node types. Keep it concise.",
         `Workflow name: ${name}\nRequest: ${request}${
           additionalInstructions
             ? `\nAdditional requirements:\n${additionalInstructions}`
@@ -676,7 +676,7 @@ export function AIWorkflowBuilderModal({
                 placeholder="images/design.png, docs/spec.pdf"
               />
               <small>
-                Comma-separated DirectoryBase paths. Text is embedded; images,
+                Comma-separated Workspace paths. Text is embedded; images,
                 PDFs, audio, and video are sent as multimodal attachments.
               </small>
             </label>

@@ -57,12 +57,12 @@ FileExplorerData is JSON with path, basename, name, extension, mimeType, content
 
 For skill workflows, every {{variable}} that is never initialized by variable/set or a save property becomes an input. Save meaningful outputs to named variables; the chat caller automatically receives every variable not beginning with __. Do not add a final command merely to display a value.
 
-Prefer DirectoryBase file nodes (note, note-read, note-search, note-list) and never call them vault operations in names or descriptions. Use confirm: true for writes. Keep the graph connected and finite; only while nodes may be loop targets. Always specify saveTo for output-producing nodes. Use one task per command node and add a comment property when its purpose is not obvious.
+Prefer Workspace file nodes (note, note-read, note-search, note-list) and never call them vault operations in names or descriptions. Use confirm: true for writes. Keep the graph connected and finite; only while nodes may be loop targets. Always specify saveTo for output-producing nodes. Use one task per command node and add a comment property when its purpose is not obvious.
 `.trim();
 
 export const getWorkflowSpecTool: ChatToolDefinition = {
   name: "get_workflow_spec",
-  description: "Return the DirectoryBase workflow specification. Pass nodeTypes to retrieve only the requested node documentation. Use this before explaining, debugging, or writing workflow YAML.",
+  description: "Return the Workspace workflow specification. Pass nodeTypes to retrieve only the requested node documentation. Use this before explaining, debugging, or writing workflow YAML.",
   parameters: {
     type: "object",
     properties: {
@@ -118,7 +118,7 @@ export function getWorkflowNodeSpec(rawNodeTypes?: unknown, context?: { models?:
   if (!requested.length) return `${workflowGenerationSpec}${contextLines ? `\n\n${contextLines}` : ""}`;
   const sections = requested.map((name) => workflowNodeDocumentation[name as WorkflowNodeType] ?? `- ${name}: unknown node type; verify the name against the full workflow specification.`);
   return [
-    "DirectoryBase workflow nodes use unique id/type fields. Normal nodes use next; if/while use trueNext and falseNext. Variables use {{name}} and nested paths such as {{items[index].path}}.",
+    "Workspace workflow nodes use unique id/type fields. Normal nodes use next; if/while use trueNext and falseNext. Variables use {{name}} and nested paths such as {{items[index].path}}.",
     ...sections,
     contextLines,
   ].filter(Boolean).join("\n\n");

@@ -1,4 +1,4 @@
-import { createDirectory, externalHTTPRequest, fileInventory, readFile, writeFile } from "../lib/wailsBackend";
+import { createDirectory, externalHTTPRequest, listProjectFiles, readFile, writeFile } from "../lib/wailsBackend";
 import { applyHostPatches } from "../lib/hostPatches";
 
 export const OFFICIAL_SKILLS_REPO = "takeshy/llm-hub-skills";
@@ -141,7 +141,7 @@ export async function fetchSkillCatalog(): Promise<SkillCatalogEntry[]> {
 }
 
 export async function listInstalledSkills(): Promise<InstalledSkill[]> {
-  const skillFiles = (await fileInventory()).filter((file) => /^skills\/[^/]+\/SKILL\.md$/i.test(file.path));
+  const skillFiles = (await listProjectFiles()).filter((file) => /^skills\/[^/]+\/SKILL\.md$/i.test(file.path));
   const result = await Promise.all(skillFiles.map(async (entry) => {
     const id = entry.path.split("/")[1];
     if (!safeSkillID(id)) return null;

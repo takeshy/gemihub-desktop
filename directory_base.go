@@ -261,7 +261,7 @@ func (a *App) WriteProjectFile(path, content string) error {
 	if err != nil {
 		return err
 	}
-	if shouldReadAsDataURL(filepath.Base(target)) {
+	if isBinaryFileName(filepath.Base(target)) {
 		return fmt.Errorf("refusing text write to binary file %q", filepath.Base(target))
 	}
 	if err := a.recordFileVersion(path, target); err != nil {
@@ -416,11 +416,16 @@ func (a *App) ListPluginIDs() ([]string, error) {
 }
 
 func (a *App) ReadFile(path string) (*LocalFileResult, error) {
-	target, err := a.directoryPath(path, false)
+	// Reads are nullable at the Wails boundary: callers use a missing file as
+	// the empty starting point when creating Timeline and other Workspace data.
+	target, err := a.directoryPath(path, true)
 	if err != nil {
 		return nil, err
 	}
 	result, err := readLocalFile(target)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +438,7 @@ func (a *App) WriteFile(path, content string) error {
 	if err != nil {
 		return err
 	}
-	if shouldReadAsDataURL(filepath.Base(target)) {
+	if isBinaryFileName(filepath.Base(target)) {
 		return fmt.Errorf("refusing text write to binary file %q; use WriteBinaryFile", filepath.Base(target))
 	}
 	if err := a.recordFileVersion(path, target); err != nil {
@@ -560,7 +565,7 @@ func searchFilesInBase(base, query string, limit int) ([]FileSearchResult, error
 			return nil
 		}
 		info, err := entry.Info()
-		if err != nil || info.Size() > 2*1024*1024 || shouldReadAsDataURL(entry.Name()) {
+		if err != nil || info.Size() > 2*1024*1024 || isBinaryFileName(entry.Name()) {
 			return nil
 		}
 		bytes, err := os.ReadFile(path)
@@ -631,17 +636,23 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
-		bytes, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
 		info, err := entry.Info()
 		if err != nil {
 			return nil
 		}
-		sum := md5.Sum(bytes)
 		rel, _ := filepath.Rel(base, path)
-		binary := shouldReadAsDataURL(entry.Name()) || strings.IndexByte(string(bytes), 0) >= 0
+		if isBinaryFileName(entry.Name()) {
+			result = append(result, DirectoryFileEntry{
+				Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(info), ModTime: info.ModTime().UnixMilli(), Binary: true,
+			})
+			return nil
+		}
+		bytes, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		sum := md5.Sum(bytes)
+		binary := strings.IndexByte(string(bytes), 0) >= 0
 		result = append(result, DirectoryFileEntry{
 			Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(info), ModTime: info.ModTime().UnixMilli(),
 			MD5: hex.EncodeToString(sum[:]), Binary: binary,

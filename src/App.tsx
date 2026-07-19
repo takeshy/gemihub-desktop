@@ -167,6 +167,7 @@ const STORAGE_KEY = "gemihub-desktop:document";
 const NAME_KEY = "gemihub-desktop:fileName";
 const EXTERNAL_EDITOR_KEY = "gemihub-desktop:externalEditorPath";
 const MEMO_SYNC_TIMELINE_KEY = "gemihub-desktop:memoSyncTimeline";
+const MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY = "gemihub-desktop:memoSyncTimelineDefaultV1";
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
 const LANGUAGE_KEY = "gemihub-desktop:language";
 const LAST_OPENED_DIRECTORY_KEY = "llm-hub:lastOpenedDirectory";
@@ -207,6 +208,18 @@ function readStored(key: string, fallback: string): string {
   } catch {
     return fallback;
   }
+}
+
+function parentFilesystemPath(path: string): string {
+  const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return index > 0 ? path.slice(0, index) : "";
+}
+
+function pathIsInside(path: string, base: string): boolean {
+  const normalize = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLocaleLowerCase();
+  const candidate = normalize(path);
+  const root = normalize(base);
+  return !!candidate && !!root && (candidate === root || candidate.startsWith(`${root}/`));
 }
 
 function readDashboard(): DashboardData {
@@ -843,9 +856,16 @@ export default function App() {
   const [externalEditorPath, setExternalEditorPath] = useState(() =>
     readStored(EXTERNAL_EDITOR_KEY, "")
   );
-  const [memoSyncTimeline, setMemoSyncTimeline] = useState(() =>
-    readStored(MEMO_SYNC_TIMELINE_KEY, "")
-  );
+  const [memoSyncTimeline, setMemoSyncTimeline] = useState(() => {
+    const stored = readStored(MEMO_SYNC_TIMELINE_KEY, "");
+    try {
+      if (localStorage.getItem(MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY) !== "1") {
+        localStorage.setItem(MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY, "1");
+        return stored.trim() || "Timeline";
+      }
+    } catch { /* Storage may be unavailable; use the normal fallback. */ }
+    return stored;
+  });
   const [languageSetting, setLanguageSetting] = useState<LanguageSetting>(
     () => {
       const stored = readStored(LANGUAGE_KEY, "system");
@@ -858,7 +878,7 @@ export default function App() {
   ]);
   const [memoListOpen, setMemoListOpen] = useState(false);
   const [openPathRequest, setOpenPathRequest] = useState<
-    { id: number; path: string; source?: "local" | "directory" | "filetree" }
+    { id: number; path: string; source?: "local" | "directory" | "filetree" | "startup" }
   >({ id: 0, path: "" });
   const [projectState, setProjectState] = useState<ProjectState>({
     activeProjectId: "",
@@ -882,6 +902,11 @@ export default function App() {
     projectState.projects.find((project) =>
       project.id === projectState.activeProjectId
     )?.path || "";
+  const handleExternalPathOpened = useCallback((path: string) => {
+    if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path) || pathIsInside(path, activeProjectPath)) return;
+    const parent = parentFilesystemPath(path);
+    if (parent) setDirectoryBaseState(parent);
+  }, [activeProjectPath]);
   const memoDirPath = activeProjectPath ? `${activeProjectPath.replace(/[\\/]+$/, "")}/Memos` : "";
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [chatViewOpen, setChatViewOpen] = useState(() =>
@@ -1199,6 +1224,10 @@ export default function App() {
     let cancelled = false;
     void Promise.all([getDirectoryBase(), startupFilePaths()]).then(([startupDirectory, paths]) => {
       if (cancelled) return;
+      if (paths.length > 0) {
+        setFileTreeOpen(false);
+        setChatViewOpen(false);
+      }
       const startupFile = paths[0] || "";
       const separator = Math.max(startupFile.lastIndexOf("/"), startupFile.lastIndexOf("\\"));
       const associatedDirectory = separator >= 0 ? startupFile.slice(0, separator) : "";
@@ -1243,7 +1272,40 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!directoryContextLoaded || !projectsContextLoaded || startupPaths === null) return;
+    if (!directoryContextLoaded || startupPaths === null) return;
+    if (startupPaths.length > 0) {
+      // Show the associated file immediately in the lightweight default
+      // dashboard. Load the persisted Workspace dashboard in the background,
+      // then re-apply the file to its existing FileWidget.
+      setDashboardContextReady(true);
+      if (!projectsContextLoaded || !projectState.activeProjectId) return;
+      void (async () => {
+        const files = await listDashboardFiles();
+        if (cancelled) return;
+        setDashboardFiles(files);
+        const homeKey = `gemihub-desktop:home-dashboard:${encodeURIComponent(projectState.activeProjectId)}`;
+        const lastKey = `gemihub-desktop:last-dashboard:${encodeURIComponent(projectState.activeProjectId)}`;
+        const preferred = localStorage.getItem(lastKey) || localStorage.getItem(homeKey);
+        const target = files.find((file) => file.path === preferred)?.path || files[0]?.path;
+        setHomeDashboardPath(target || "");
+        if (target) await openDashboardFile(target);
+        else {
+          const path = "Dashboards/home.dashboard";
+          const data = defaultDashboard();
+          await saveDashboard(path, data);
+          if (cancelled) return;
+          setDashboardFiles(await listDashboardFiles());
+          replaceDashboard(data, path);
+          localStorage.setItem(homeKey, path);
+          setHomeDashboardPath(path);
+        }
+        if (!cancelled) setOpenPathRequest((current) => ({ id: current.id + 1, path: startupPaths[0], source: "startup" }));
+      })().catch((error) => {
+        if (!cancelled) setDashboardError(error instanceof Error ? error.message : String(error));
+      });
+      return () => { cancelled = true; };
+    }
+    if (!projectsContextLoaded) return;
     setDashboardContextReady(false);
     setActiveDashboardPath("");
     setHomeDashboardPath("");
@@ -1251,10 +1313,6 @@ export default function App() {
     setActiveChatFile(null);
     setDashboardRawMode(false);
     replaceDashboard(defaultDashboard(), "");
-    if (startupPaths.length > 0) {
-      setDashboardContextReady(true);
-      return;
-    }
     if (!projectState.activeProjectId) {
       setDashboardContextReady(true);
       return;
@@ -1589,15 +1647,6 @@ export default function App() {
           <div className="document-meta">
             <LayoutDashboard size={18} aria-hidden="true" />
             <strong className="app-title">{APP_NAME}</strong>
-            {directoryBase && (
-              <span className="global-context">Directory: {directoryBase}</span>
-            )}
-            <span className="global-context">
-              Workspace:{" "}
-              {projectState.projects.find((project) =>
-                project.id === projectState.activeProjectId
-              )?.name || "Workspace"}
-            </span>
           </div>
 
           <div className="global-toolbar">
@@ -1660,9 +1709,7 @@ export default function App() {
           {fileTreeOpen && (
             <FileTree
               directoryBase={directoryBase}
-              onDirectoryBaseChange={setDirectoryBaseState}
               projectPath={activeProjectPath}
-              openFilesOnStartup={Boolean(startupPaths?.length)}
               onOpenFile={(path) => {
                 if (
                   !path.startsWith("workspace://") &&
@@ -1687,7 +1734,6 @@ export default function App() {
               >
                 <ChevronsRight size={18} />
               </button>
-              <span>Files</span>
             </aside>
           )}
           {fileTreeOpen && (
@@ -1712,15 +1758,17 @@ export default function App() {
                 dashboardFutureRef.current.length > 0}
               hasWidgets={dashboard.widgets.length > 0}
               onSelect={(path) => void openDashboardFile(path)}
-              onCreate={(name) => {
-                void createDashboard(name).then(async (created) => {
+              onCreate={async (name) => {
+                try {
+                  const created = await createDashboard(name);
                   await refreshDashboardFiles();
                   replaceDashboard(created.data, created.path);
-                }).catch((error) =>
+                } catch (error) {
                   setDashboardError(
                     error instanceof Error ? error.message : String(error),
-                  )
-                );
+                  );
+                  throw error;
+                }
               }}
               onRename={(name) => {
                 const previous = activeDashboardPath;
@@ -1859,6 +1907,7 @@ export default function App() {
                   dashboardPath={activeDashboardPath}
                   startupPaths={dashboardContextReady ? startupPaths : null}
                   pluginWidgetRequest={pluginWidgetRequest}
+                  onExternalPathOpened={handleExternalPathOpened}
                 />
               )}
             {!dashboardRawMode && dashboardError && (
