@@ -20,14 +20,15 @@ import {
   writeProjectBinaryFile,
   writeProjectFile,
 } from "../lib/wailsBackend";
-import type { PluginAPI, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
+import type { PluginAPI, PluginLLMChatOptions, PluginLLMModel, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
 import { registerPluginWidget } from "../dashboard/widgetRegistry";
 
 export interface PluginRegistrationCallbacks {
   onRegisterView: (view: PluginView) => void;
   onRegisterSettingsTab: (tab: PluginSettingsTab) => void;
   onRegisterSlashCommand: (command: PluginSlashCommand) => void;
-  onLLMChat?: (messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }) => Promise<string>;
+  onLLMChat?: (messages: Array<{ role: string; content: string }>, options?: PluginLLMChatOptions) => Promise<string>;
+  onLLMListModels?: () => Promise<PluginLLMModel[]>;
 }
 
 function safePluginId(pluginId: string): string {
@@ -132,7 +133,10 @@ export function createPluginAPI(
   }
   if (has("network")) api.network = { request: externalHTTPRequest };
   if (has("llm") && callbacks.onLLMChat) {
-    api.llm = { chat: callbacks.onLLMChat };
+    api.llm = {
+      chat: callbacks.onLLMChat,
+      listModels: callbacks.onLLMListModels ?? (async () => []),
+    };
     api.gemini = api.llm;
   }
 

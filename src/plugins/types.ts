@@ -65,6 +65,20 @@ export interface PluginSlashCommand {
   execute: (args: string) => string | Promise<string>;
 }
 
+export interface PluginLLMModel {
+  id: string;
+  label: string;
+  provider: string;
+  model: string;
+}
+
+export interface PluginLLMChatOptions {
+  model?: string;
+  /** Exact configured-model identifier returned by listModels(). */
+  modelId?: string;
+  systemPrompt?: string;
+}
+
 export interface PluginAPI {
   language: string;
   registerView(view: Omit<PluginView, "id" | "pluginId"> & { id: string }): void;
@@ -94,7 +108,10 @@ export interface PluginAPI {
     delete(path: string): Promise<void>;
   };
   network?: { request(request: ExternalHTTPRequest): Promise<ExternalHTTPResponse> };
-  llm?: { chat(messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }): Promise<string> };
+  llm?: {
+    listModels(): Promise<PluginLLMModel[]>;
+    chat(messages: Array<{ role: string; content: string }>, options?: PluginLLMChatOptions): Promise<string>;
+  };
   gemini?: { chat(messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }): Promise<string> };
   storage?: {
     get(key: string): Promise<unknown>;

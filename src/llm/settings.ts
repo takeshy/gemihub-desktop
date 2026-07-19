@@ -638,6 +638,7 @@ export function selectConfiguredModel(
     return {
       ...syncActiveModelProfile(settings),
       provider: "cli",
+      model: "",
       cliType: option.cliType,
     };
   }

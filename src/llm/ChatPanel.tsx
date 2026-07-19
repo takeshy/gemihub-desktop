@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BookOpen,
   Bot,
   Brain,
   Check,
@@ -7,6 +8,7 @@ import {
   FileCode2,
   FileText,
   Library,
+  LayoutDashboard,
   Paperclip,
   Plus,
   Search,
@@ -436,6 +438,7 @@ export function ChatPanel({
   const streamTimerRef = useRef<number | null>(null);
   const skillMenuRef = useRef<HTMLDivElement | null>(null);
   const checkedOkfBundleRef = useRef("");
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSession = sessions.find((session) => session.id === activeID) ??
     sessions[0];
@@ -478,6 +481,14 @@ export function ChatPanel({
     },
     [activeSession?.id],
   );
+  const draftWithDesktopHelp = useCallback((draft: string) => {
+    const helpBundleId = getBuiltinOkfBundle().id;
+    setActiveOkfBundleIds((ids) =>
+      ids.includes(helpBundleId) ? ids : [...ids, helpBundleId]
+    );
+    setInput(draft);
+    queueMicrotask(() => composerRef.current?.focus());
+  }, [setActiveOkfBundleIds]);
   const refreshOkfBundles = useCallback(async () => {
     const builtin = getBuiltinOkfBundle();
     if (!projectBase) {
@@ -1638,6 +1649,29 @@ export function ChatPanel({
                 ? "Attach files or ask me to inspect your workspace."
                 : "Select a Workspace to enable file tools."}
             </span>
+            <div className="chat-welcome-guides">
+              <article>
+                <div><BookOpen size={16} /><strong>GemiHub Help</strong></div>
+                <p>Use the built-in help knowledge to ask about features, settings, workflows, and files.</p>
+                <button
+                  type="button"
+                  onClick={() => draftWithDesktopHelp("How do I use GemiHub Desktop?")}
+                >
+                  <BookOpen size={13} />Ask about GemiHub
+                </button>
+              </article>
+              <article>
+                <div><LayoutDashboard size={16} /><strong>Build Dashboards with AI</strong></div>
+                <p>Describe what you need in natural language. AI can create or update Dashboard widgets, files, and workflows for you.</p>
+                <button
+                  type="button"
+                  disabled={!projectBase}
+                  onClick={() => draftWithDesktopHelp("Create a Dashboard for my workspace. Ask me what information and widgets it should include.")}
+                >
+                  <LayoutDashboard size={13} />Draft a Dashboard request
+                </button>
+              </article>
+            </div>
           </div>
         )}
         {messages.map((message, index) => (
@@ -1897,6 +1931,7 @@ export function ChatPanel({
         )}
         <div className="chat-composer">
           <textarea
+            ref={composerRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {

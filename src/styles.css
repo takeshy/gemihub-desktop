@@ -619,6 +619,56 @@ body.resizing-side-pane * {
   line-height: 1.45;
 }
 
+.chat-welcome-guides {
+  display: grid;
+  width: min(100%, 360px);
+  gap: 8px;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.chat-welcome-guides article {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  padding: 10px;
+}
+
+.chat-welcome-guides article > div,
+.chat-welcome-guides button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-welcome-guides article > div {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.chat-welcome-guides p {
+  margin: 6px 0 9px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.chat-welcome-guides button {
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.chat-welcome-guides button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .chat-message {
   margin-bottom: 13px;
 }

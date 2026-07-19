@@ -19,3 +19,16 @@ Deno.test("Gemini Pro models that require thinking cannot be switched off", () =
   assertEquals(chatThinkingCapabilities("gemini", "gemini-3.1-pro-preview"), { available: true, required: true });
   assertEquals(chatThinkingCapabilities("gemini", "gemini-3.5-flash"), { available: true, required: false });
 });
+
+Deno.test("selecting a CLI clears the previous API model", () => {
+  const settings = {
+    ...defaultChatSettings,
+    model: "gemini-3.5-flash",
+    verifiedCliTypes: ["codex" as const],
+  };
+  const selected = selectConfiguredModel(settings, "cli:codex");
+  assertEquals(
+    { provider: selected.provider, cliType: selected.cliType, model: selected.model },
+    { provider: "cli", cliType: "codex", model: "" },
+  );
+});

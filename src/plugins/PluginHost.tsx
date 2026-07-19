@@ -5,23 +5,28 @@ import { chat, listPluginIDs } from "../lib/wailsBackend";
 import { ChatPanel } from "../llm/ChatPanel";
 import type { ActiveSelection } from "../llm/selection";
 import { RAGSearchPanel } from "../llm/RAGSearchPanel";
-import type { ChatSettings } from "../llm/settings";
+import { configuredModelOptions, selectConfiguredModel, settingsForModel, type ChatSettings } from "../llm/settings";
 import { WorkflowPanel } from "../workflow/WorkflowPanel";
 import { WorkflowAutomationHost } from "../workflow/WorkflowAutomationHost";
 import { WorkflowPromptHost } from "../workflow/WorkflowPromptHost";
 import { WorkflowMcpAppHost } from "../workflow/McpAppHost";
 import { createPluginAPI } from "./api";
 import { loadPlugin, readPluginManifest, unloadPlugin } from "./loader";
-import type { PluginAPI, PluginConfig, PluginInstance, PluginManifest, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
+import type { PluginAPI, PluginConfig, PluginInstance, PluginLLMChatOptions, PluginManifest, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
 import { SkillWorkflowToolHost } from "../skills/SkillWorkflowToolHost";
 import { checkPluginUpdate, installPluginRelease, PLUGIN_HOST_ID, previewPluginRelease, readPluginInstallMetadata, uninstallPluginRelease } from "./manager";
 import { pluginMainViewWidgetType, registerPluginWidget, unregisterPluginWidgets } from "../dashboard/widgetRegistry";
 import { normalizeDesktopPluginView, pluginViewForPath } from "./pluginViews";
 
 const CONFIG_KEY = "llm-hub:plugins";
+const SELECTED_PLUGIN_KEY = "llm-hub:selected-plugin";
 
 function workspaceConfigKey(projectBase: string): string {
   return `${CONFIG_KEY}:${encodeURIComponent(projectBase)}`;
+}
+
+function workspaceSelectedPluginKey(projectBase: string): string {
+  return `${SELECTED_PLUGIN_KEY}:${encodeURIComponent(projectBase)}`;
 }
 
 function storedConfigs(key: string): PluginConfig[] {
@@ -54,13 +59,14 @@ function PluginMainViewWidget({ view, api, language, config }: { view: PluginVie
 
 export function PluginHost({ directoryBase, projectBase, language, isDark, aiEnabled, pluginViewRequest, settingsOpen, onCollapse, onOpenPluginView, onOpenPluginWidget, onOpenPluginSettings, chatSettings, onChatSettingsChange, activeFile, activeSelection, onOpenChatSettings, onOpenRAGSettings, onOpenDirectoryFile }: { directoryBase: string; projectBase: string; language: string; isDark: boolean; aiEnabled: boolean; pluginViewRequest: number; settingsOpen: boolean; onCollapse: () => void; onOpenPluginView: () => void; onOpenPluginWidget: (request: { type: string; config: Record<string, unknown> }) => void; onOpenPluginSettings: () => void; chatSettings: ChatSettings; onChatSettingsChange: (settings: ChatSettings) => void; activeFile: { path: string; content: string } | null; activeSelection: ActiveSelection | null; onOpenChatSettings: () => void; onOpenRAGSettings: () => void; onOpenDirectoryFile: (path: string) => void }) {
   const configKey = useMemo(() => workspaceConfigKey(projectBase), [projectBase]);
+  const selectedPluginKey = useMemo(() => workspaceSelectedPluginKey(projectBase), [projectBase]);
   const [configs, setConfigs] = useState<PluginConfig[]>(() => storedConfigs(configKey));
   const [manifests, setManifests] = useState<PluginManifest[]>([]);
   const [views, setViews] = useState<PluginView[]>([]);
   const [settingsTabs, setSettingsTabs] = useState<PluginSettingsTab[]>([]);
   const [slashCommands, setSlashCommands] = useState<PluginSlashCommand[]>([]);
   const [activeTab, setActiveTab] = useState("chat");
-  const [selectedPluginId, setSelectedPluginId] = useState("");
+  const [selectedPluginId, setSelectedPluginId] = useState(() => localStorage.getItem(selectedPluginKey) || "");
   const [settingsPluginId, setSettingsPluginId] = useState("");
   const [settingsContainer, setSettingsContainer] = useState<HTMLElement | null>(null);
   const [chatAttachmentRequest, setChatAttachmentRequest] = useState<{ id: number; files: Array<{ path: string; content: string }> }>({ id: 0, files: [] });
@@ -74,6 +80,7 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
   const handledPluginViewRequestRef = useRef(0);
   const handledPluginFileRef = useRef("");
   const loadingConfigRef = useRef(false);
+  const loadingSelectedPluginRef = useRef(false);
 
   useEffect(() => {
     setSettingsContainer(settingsOpen ? document.getElementById("plugin-settings-manager") : null);
@@ -91,6 +98,20 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
     }
     localStorage.setItem(configKey, JSON.stringify(configs));
   }, [configKey, configs]);
+
+  useEffect(() => {
+    loadingSelectedPluginRef.current = true;
+    setSelectedPluginId(localStorage.getItem(selectedPluginKey) || "");
+  }, [selectedPluginKey]);
+
+  useEffect(() => {
+    if (loadingSelectedPluginRef.current) {
+      loadingSelectedPluginRef.current = false;
+      return;
+    }
+    if (selectedPluginId) localStorage.setItem(selectedPluginKey, selectedPluginId);
+    else localStorage.removeItem(selectedPluginKey);
+  }, [selectedPluginId, selectedPluginKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,8 +186,24 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
       },
       onRegisterSettingsTab: (tab: PluginSettingsTab) => { registeredSettings.push(tab); if (!cancelled) setSettingsTabs([...registeredSettings]); },
       onRegisterSlashCommand: (command: PluginSlashCommand) => { registeredCommands.push(command); if (!cancelled) setSlashCommands([...registeredCommands]); },
-      onLLMChat: async (messages: Array<{ role: string; content: string }>, options?: { model?: string; systemPrompt?: string }) => {
-        const result = await chat({ provider: chatSettings.provider, endpoint: chatSettings.endpoint, apiKey: chatSettings.apiKey, model: options?.model || chatSettings.model, vertexProjectId: chatSettings.vertexProjectId, vertexLocation: chatSettings.vertexLocation, systemPrompt: options?.systemPrompt || chatSettings.systemPrompt, messages: messages.filter((item) => item.role === "user" || item.role === "assistant").map((item) => ({ role: item.role as "user" | "assistant", content: item.content })), enableFileTools: false, fileToolMode: "none", cliType: chatSettings.cliType, cliPath: chatSettings.cliPaths[chatSettings.cliType], cliSessionId: "" });
+      onLLMListModels: async () => configuredModelOptions(chatSettings).map((option) => ({
+        id: option.key,
+        label: option.label,
+        provider: option.provider,
+        model: option.model || option.cliType || "",
+      })),
+      onLLMChat: async (
+        messages: Array<{ role: string; content: string }>,
+        options?: PluginLLMChatOptions,
+      ) => {
+        const modelId = options?.modelId || "";
+        const knownModelId = configuredModelOptions(chatSettings).some((option) => option.key === modelId);
+        const selectedSettings = knownModelId
+          ? selectConfiguredModel(chatSettings, modelId)
+          : options?.model
+          ? settingsForModel(chatSettings, options.model)
+          : chatSettings;
+        const result = await chat({ provider: selectedSettings.provider, endpoint: selectedSettings.endpoint, apiKey: selectedSettings.apiKey, model: selectedSettings.provider === "cli" ? "" : selectedSettings.model, vertexProjectId: selectedSettings.vertexProjectId, vertexLocation: selectedSettings.vertexLocation, systemPrompt: options?.systemPrompt || selectedSettings.systemPrompt, messages: messages.filter((item) => item.role === "user" || item.role === "assistant").map((item) => ({ role: item.role as "user" | "assistant", content: item.content })), enableFileTools: false, fileToolMode: "none", cliType: selectedSettings.cliType, cliPath: selectedSettings.cliPaths[selectedSettings.cliType], cliSessionId: "" });
         return result.content;
       },
     };
@@ -258,10 +295,6 @@ export function PluginHost({ directoryBase, projectBase, language, isDark, aiEna
       config: { filePath: path },
     });
   }, [activeFile?.path, mainViews, onOpenPluginWidget]);
-
-  useEffect(() => {
-    if (activePluginId && activePluginId !== selectedPluginId) setSelectedPluginId(activePluginId);
-  }, [activePluginId, selectedPluginId]);
 
   useEffect(() => {
     if (pluginViewRequest <= handledPluginViewRequestRef.current) return;
