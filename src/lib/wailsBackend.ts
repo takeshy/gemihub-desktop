@@ -62,6 +62,7 @@ export interface WorkspaceDirectoryMoveResult {
 }
 
 export interface RAGSetting {
+  embeddingSource: "ai" | "custom";
   embeddingProvider: "gemini" | "vertex" | "openai";
   embeddingBaseUrl: string;
   embeddingApiKey: string;
@@ -424,6 +425,7 @@ interface WailsAppApi {
   ) => Promise<RAGSearchResult[]>;
   GetRAGStatus: (name: string) => Promise<RAGStatus>;
   DeleteRAGIndex: (name: string) => Promise<void>;
+  RenameRAGIndex: (oldName: string, newName: string) => Promise<void>;
   SelectVertexOAuthClient: () => Promise<VertexOAuthClient | null>;
   ConnectVertexOAuth: (
     clientId: string,
@@ -827,6 +829,10 @@ export async function getRAGStatus(name: string): Promise<RAGStatus> {
 
 export async function deleteRAGIndex(name: string): Promise<void> {
   await appApi()?.DeleteRAGIndex(name);
+}
+
+export async function renameRAGIndex(oldName: string, newName: string): Promise<void> {
+  await appApi()?.RenameRAGIndex(oldName, newName);
 }
 
 export async function selectVertexOAuthClient(): Promise<

@@ -40,7 +40,7 @@ import { WysiwygEditor } from "../components/WysiwygEditor";
 import { EncryptedFileModal } from "../components/EncryptedFileModal";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 import { decodeMemoPath } from "../lib/memoPath";
-import { transformWikiLinks, wikiTargetToPath } from "../lib/wikiLinks";
+import { isLocalDocumentHref, localHrefToPathCandidates, transformWikiLinks, wikiTargetToPath } from "../lib/wikiLinks";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import {
   appendEntryBlock,
@@ -107,6 +107,20 @@ function configText(
 }
 function baseName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
+}
+function localDateKey(value: unknown): string {
+  if (typeof value === "string") {
+    const direct = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    if (direct) return direct[1];
+  }
+  const date = new Date(typeof value === "number" || typeof value === "string" ? value : NaN);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+function isBaseDateProperty(property: string, rows: DashboardDataRow[]): boolean {
+  if (/^(?:file\.)?[cm]time$/.test(property)) return true;
+  return rows.some((row) => localDateKey(baseCellValue(row, property)) !== "");
 }
 
 export function WebDashboardWidget(
@@ -354,6 +368,7 @@ export function MemoListDashboardWidget(
 interface TimelineItem {
   path: string;
   id: string;
+  index: number;
   createdAt: string;
   body: string;
   pinned: boolean;
@@ -402,6 +417,7 @@ export function TimelineDashboardWidget(
     [editing, setEditing] = useState<TimelineItem | null>(null),
     [editDraft, setEditDraft] = useState(""),
     [aiTarget, setAITarget] = useState<"draft" | "edit" | null>(null),
+    [previewPath, setPreviewPath] = useState(""),
     [aiInstruction, setAIInstruction] = useState(
       "Improve clarity while preserving meaning.",
     );
@@ -415,9 +431,10 @@ export function TimelineDashboardWidget(
       );
       const next = loaded.flatMap(({ path, file }) =>
         file
-          ? parseMemoFile(file.content).entries.map((entry) => ({
+          ? parseMemoFile(file.content).entries.map((entry, index) => ({
             path,
             id: entry.id,
+            index,
             createdAt: entry.createdAt,
             body: entry.body || entry.quote,
             pinned: entry.pinned,
@@ -425,10 +442,10 @@ export function TimelineDashboardWidget(
           : []
       );
       setItems(
-        next.sort((a, b) =>
-          Number(b.pinned) - Number(a.pinned) ||
-          b.createdAt.localeCompare(a.createdAt)
-        ),
+        next.sort((a, b) => {
+          const byTime = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+          return byTime || b.index - a.index;
+        }),
       );
       setError("");
     } catch (caught) {
@@ -565,7 +582,10 @@ export function TimelineDashboardWidget(
       (!from || day >= from) && (!to || day <= to) &&
       (!pinnedOnly || item.pinned);
   });
-  const visible = filtered.slice(0, visibleCount);
+  const visible = filtered.slice(0, visibleCount).sort((a, b) => {
+    const byTime = Date.parse(a.createdAt) - Date.parse(b.createdAt);
+    return byTime || a.index - b.index;
+  });
   const clearFilters = () => {
     setWord("");
     setTag("");
@@ -575,13 +595,14 @@ export function TimelineDashboardWidget(
   };
   const hasFilters = !!(word || tag || from || to || pinnedOnly);
   const handleTimelineLinkClick = useCallback((href: string, event: ReactMouseEvent<HTMLElement>) => {
-    if (!href.startsWith("#wiki:")) return;
+    if (!isLocalDocumentHref(href)) return;
     event.preventDefault();
     event.stopPropagation();
-    const target = decodeURIComponent(href.slice("#wiki:".length));
-    const path = wikiTargetToPath("", target);
-    if (path) onOpenPath(path);
-  }, [onOpenPath]);
+    const path = href.startsWith("#wiki:")
+      ? wikiTargetToPath("", decodeURIComponent(href.slice("#wiki:".length)))
+      : localHrefToPathCandidates(folder, href)[0];
+    if (path) setPreviewPath(path);
+  }, [folder]);
   if (!name) {
     return (
       <div className="dashboard-widget-empty centered">
@@ -932,6 +953,19 @@ export function TimelineDashboardWidget(
             </footer>
           </form>
         </WidgetDialog>
+      )}
+      {previewPath && (
+        <KanbanCardModal
+          path={previewPath}
+          isDark={isDark}
+          onNavigate={() => {
+            const path = previewPath;
+            setPreviewPath("");
+            onOpenPath(path);
+          }}
+          onSaved={() => void load()}
+          onClose={() => setPreviewPath("")}
+        />
       )}
     </div>
   );
@@ -1509,16 +1543,24 @@ export function BaseDashboardWidget({
   const view = views.find((item) => item.name === selected) || views[0];
   const fields = [...new Set(rows.flatMap((row) => Object.keys(row.cells)))]
     .sort();
+  const quickFilterIsDate = !!filterProperty &&
+    isBaseDateProperty(filterProperty, rows);
   const order = view?.order?.length
     ? view.order
     : ["file.name", ...Object.keys(rows[0]?.frontmatter || {}).slice(0, 5)];
   let visibleRows = searchBaseRows(rows, query);
   if (filterProperty && filterValue.trim()) {
-    const needle = filterValue.trim().toLocaleLowerCase();
-    visibleRows = visibleRows.filter((row) =>
-      String(baseCellValue(row, filterProperty) ?? "").toLocaleLowerCase()
-        .includes(needle)
-    );
+    if (quickFilterIsDate) {
+      visibleRows = visibleRows.filter((row) =>
+        localDateKey(baseCellValue(row, filterProperty)) === filterValue
+      );
+    } else {
+      const needle = filterValue.trim().toLocaleLowerCase();
+      visibleRows = visibleRows.filter((row) =>
+        String(baseCellValue(row, filterProperty) ?? "").toLocaleLowerCase()
+          .includes(needle)
+      );
+    }
   }
   visibleRows = sortBaseRows(visibleRows, viewSort || undefined);
   const displayBaseData = baseData
@@ -1699,8 +1741,10 @@ export function BaseDashboardWidget({
                     <span>Property</span>
                     <select
                       value={filterProperty}
-                      onChange={(event) =>
-                        setFilterProperty(event.target.value)}
+                      onChange={(event) => {
+                        setFilterProperty(event.target.value);
+                        setFilterValue("");
+                      }}
                     >
                       <option value="">Select property…</option>
                       {fields.map((field) => (
@@ -1711,8 +1755,9 @@ export function BaseDashboardWidget({
                     </select>
                   </label>
                   <label>
-                    <span>Contains</span>
+                    <span>{quickFilterIsDate ? "Date" : "Contains"}</span>
                     <input
+                      type={quickFilterIsDate ? "date" : "text"}
                       value={filterValue}
                       disabled={!filterProperty}
                       onChange={(event) => setFilterValue(event.target.value)}

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { createPortal } from "react-dom";
 import { Code, ExternalLink, Eye, PenLine, Save, X } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
+import { PdfViewer } from "../components/PdfViewer";
 import { WysiwygEditor } from "../components/WysiwygEditor";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 import { readFile, writeFile } from "../lib/wailsBackend";
+import { docKindFor } from "./documentKind";
 
 type CardMode = "preview" | "wysiwyg" | "raw";
 
@@ -55,6 +57,8 @@ export function KanbanCardModal({ path, isDark, onNavigate, onSaved, onClose }: 
   const [geometry, setGeometry] = useState<ModalGeometry>(() => clampGeometry(sessionGeometry ?? initialGeometry()));
   const interaction = useRef<{ kind: "move" | "resize"; x: number; y: number; initial: ModalGeometry } | null>(null);
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
+  const kind = docKindFor(path);
+  const binaryPreview = kind === "pdf" || kind === "image";
   const dirty = content !== savedContent;
 
   useEffect(() => {
@@ -148,20 +152,20 @@ export function KanbanCardModal({ path, isDark, onNavigate, onSaved, onClose }: 
     >
       <header onPointerDown={(event) => beginInteraction("move", event)}>
         <strong title={path}>{path.split(/[\\/]/).pop() || path}</strong>
-        <div className="kanban-card-modal-modes">
+        {!binaryPreview && <div className="kanban-card-modal-modes">
           <button type="button" className={mode === "preview" ? "active" : ""} onClick={() => changeMode("preview")} title="Preview"><Eye size={14} /></button>
           <button type="button" className={mode === "wysiwyg" ? "active" : ""} onClick={() => changeMode("wysiwyg")} title="WYSIWYG"><PenLine size={14} /></button>
           <button type="button" className={mode === "raw" ? "active" : ""} onClick={() => changeMode("raw")} title="Raw"><Code size={14} /></button>
-        </div>
+        </div>}
         <button type="button" onClick={onNavigate} title="Open in widget"><ExternalLink size={16} /></button>
         <button type="button" onClick={onClose} title="Close"><X size={16} /></button>
       </header>
       <div className="kanban-card-modal-body">
-        {loading ? <div className="dashboard-widget-empty">Loading…</div> : error && !content ? <div className="dashboard-widget-error">{error}</div> : mode === "preview" ? <MarkdownPreview content={parsed.body} isDark={isDark} /> : mode === "wysiwyg" ? <WysiwygEditor value={parsed.body} onChange={(body) => setContent((current) => replaceBody(current, body))} /> : <textarea value={content} onChange={(event) => setContent(event.target.value)} spellCheck={false} />}
+        {loading ? <div className="dashboard-widget-empty">Loading…</div> : error && !content ? <div className="dashboard-widget-error">{error}</div> : kind === "pdf" ? <PdfViewer content={content} title={path} scalePercent={100} /> : kind === "image" ? <img className="dashboard-image" src={content} alt={path} /> : mode === "preview" ? <MarkdownPreview content={parsed.body} isDark={isDark} /> : mode === "wysiwyg" ? <WysiwygEditor value={parsed.body} onChange={(body) => setContent((current) => replaceBody(current, body))} /> : <textarea value={content} onChange={(event) => setContent(event.target.value)} spellCheck={false} />}
       </div>
       <footer>
         <span>{error}</span>
-        <button type="button" disabled={!dirty || saving} onClick={() => void save()}><Save size={14} />{saving ? "Saving…" : "Save"}</button>
+        {!binaryPreview && <button type="button" disabled={!dirty || saving} onClick={() => void save()}><Save size={14} />{saving ? "Saving…" : "Save"}</button>}
       </footer>
       <button type="button" className="kanban-card-modal-resize" aria-label="Resize dialog" title="Drag to resize" onPointerDown={(event) => beginInteraction("resize", event)} />
     </section>

@@ -2883,8 +2883,6 @@ export function DashboardView({
                       <CalendarDashboardWidget
                         config={widget.config}
                         isDark={isDark}
-                        onOpenPath={(path) =>
-                          void openKnownPathInLastActiveWidget(path)}
                       />
                     )}
                     {widget.type === "kanban" && (

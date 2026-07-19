@@ -681,7 +681,7 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 				checksum, _ = streamedFileMD5(path, info)
 			}
 			result = append(result, DirectoryFileEntry{
-				Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(info), ModTime: info.ModTime().UnixMilli(), MD5: checksum, Binary: true,
+				Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(path, info), ModTime: info.ModTime().UnixMilli(), MD5: checksum, Binary: true,
 			})
 			return nil
 		}
@@ -692,7 +692,7 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 		sum := md5.Sum(bytes)
 		binary := strings.IndexByte(string(bytes), 0) >= 0
 		result = append(result, DirectoryFileEntry{
-			Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(info), ModTime: info.ModTime().UnixMilli(),
+			Path: filepath.ToSlash(rel), Size: info.Size(), CreatedTime: fileCreatedTime(path, info), ModTime: info.ModTime().UnixMilli(),
 			MD5: hex.EncodeToString(sum[:]), Binary: binary,
 		})
 		return nil

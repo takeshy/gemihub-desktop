@@ -1090,10 +1090,6 @@ export function WidgetSettingsPanel({
                 <input value={text(widget.config, "timelineName") || "Timeline"} onChange={(event) => set("timelineName", event.target.value)} />
                 <small>Events and posts use Dashboards/Timeline/&lt;name&gt;.</small>
               </label>
-              <label className="check">
-                <span>Show locally created files</span>
-                <input type="checkbox" checked={widget.config.showCreatedFiles !== false} onChange={(event) => set("showCreatedFiles", event.target.checked)} />
-              </label>
             </>
           )}
           {widget.type === "secret-manager" && fileInput("folder", "Secrets")}

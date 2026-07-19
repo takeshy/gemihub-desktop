@@ -33,6 +33,10 @@ export function BaseConfigEditor(
     extractFolder(root.filters) ?? "";
   const [vaultFields, setVaultFields] = useState<string[]>([]);
   const [vaultFolders, setVaultFolders] = useState<string[]>([]);
+  const [vaultDateFields, setVaultDateFields] = useState<string[]>([
+    "file.ctime",
+    "file.mtime",
+  ]);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -54,6 +58,7 @@ export function BaseConfigEditor(
         "file.tags",
       ]);
       const folders = new Set<string>();
+      const dateFields = new Set<string>(["file.ctime", "file.mtime"]);
       for (const entry of entries) {
         const parts = entry.path.split("/");
         for (let index = 1; index < parts.length; index++) {
@@ -62,14 +67,16 @@ export function BaseConfigEditor(
       }
       for (const file of files) {
         if (file) {
-          for (
-            const key of Object.keys(parseFrontmatter(file.content).frontmatter)
-          ) fields.add(key);
+          for (const [key, value] of Object.entries(parseFrontmatter(file.content).frontmatter)) {
+            fields.add(key);
+            if (isDateFieldValue(value)) dateFields.add(key);
+          }
         }
       }
       if (!cancelled) {
         setVaultFields([...fields].sort());
         setVaultFolders([...folders].sort());
+        setVaultDateFields([...dateFields].sort());
       }
     })();
     return () => {
@@ -167,6 +174,7 @@ export function BaseConfigEditor(
       <FilterEditor
         filters={activeView.filters}
         fieldNames={fieldNames}
+        dateFieldNames={vaultDateFields}
         folderNames={vaultFolders}
         onChange={(filters) => updateView({ filters })}
       />
@@ -361,23 +369,29 @@ function CardOptions(
 }
 
 function FilterEditor(
-  { filters, fieldNames, folderNames, onChange }: {
+  { filters, fieldNames, dateFieldNames, folderNames, onChange }: {
     filters: unknown;
     fieldNames: string[];
+    dateFieldNames: string[];
     folderNames: string[];
     onChange: (filters: unknown) => void;
   },
 ) {
   const parsed = parseFilters(filters),
     combinator = parsed.combinator,
-    terms = parsed.terms;
+    dateFields = new Set(dateFieldNames),
+    terms = parsed.terms.map((term) =>
+      dateFields.has(term.property)
+        ? { ...term, value: unwrapDateExpression(term.value) }
+        : term
+    );
   const commit = (next: FilterTerm[], nextCombinator = combinator) =>
     onChange(
       next.length === 0
         ? undefined
         : next.length === 1
-        ? termExpression(next[0])
-        : { [nextCombinator]: next.map(termExpression) },
+        ? termExpression(next[0], dateFields.has(next[0].property))
+        : { [nextCombinator]: next.map((term) => termExpression(term, dateFields.has(term.property))) },
     );
   if (!parsed.representable) {
     return (
@@ -416,7 +430,14 @@ function FilterEditor(
               onChange={(event) =>
                 commit(terms.map((item, itemIndex) =>
                   itemIndex === index
-                    ? { ...item, property: event.target.value }
+                    ? {
+                      ...item,
+                      property: event.target.value,
+                      operator: dateFields.has(event.target.value) &&
+                          (item.operator === "contains" || item.operator === "notContains")
+                        ? "eq"
+                        : item.operator,
+                    }
                     : item
                 ))}
             >
@@ -439,12 +460,12 @@ function FilterEditor(
               >
                 <option value="eq">is</option>
                 <option value="neq">is not</option>
-                <option value="contains">contains</option>
-                <option value="notContains">does not contain</option>
-                <option value="gt">greater than</option>
-                <option value="lt">less than</option>
-                <option value="gte">at least</option>
-                <option value="lte">at most</option>
+                {!dateFields.has(term.property) && <option value="contains">contains</option>}
+                {!dateFields.has(term.property) && <option value="notContains">does not contain</option>}
+                <option value="gt">{dateFields.has(term.property) ? "is after" : "greater than"}</option>
+                <option value="lt">{dateFields.has(term.property) ? "is before" : "less than"}</option>
+                <option value="gte">{dateFields.has(term.property) ? "is on or after" : "at least"}</option>
+                <option value="lte">{dateFields.has(term.property) ? "is on or before" : "at most"}</option>
                 <option value="empty">is empty</option>
                 <option value="notEmpty">is not empty</option>
               </select>
@@ -471,6 +492,7 @@ function FilterEditor(
               )
               : (
                 <input
+                  type={dateFields.has(term.property) ? "date" : "text"}
                   value={term.value}
                   disabled={term.operator === "empty" ||
                     term.operator === "notEmpty"}
@@ -619,7 +641,8 @@ function parseFilters(
         value: unquote(contains[3]),
       }];
     }
-    const condition = node.match(/^([\w.]+)\s*(==|!=|>=|<=|>|<)\s*(.*?)$/);
+    const dateCondition = node.match(/^([\w.]+)\.date\(\)\s*(==|!=|>=|<=|>|<)\s*(.*?)$/);
+    const condition = dateCondition ?? node.match(/^([\w.]+)\s*(==|!=|>=|<=|>|<)\s*(.*?)$/);
     return condition
       ? [{
         property: condition[1],
@@ -641,7 +664,7 @@ function parseFilters(
     representable: nodes.length === terms.length || filters == null,
   };
 }
-function termExpression(term: FilterTerm): string {
+function termExpression(term: FilterTerm, dateField = false): string {
   if (term.property === "@inFolder") {
     return `file.inFolder(${JSON.stringify(term.value)})`;
   }
@@ -650,7 +673,9 @@ function termExpression(term: FilterTerm): string {
   }
   if (term.operator === "empty") return `${term.property}.isEmpty()`;
   if (term.operator === "notEmpty") return `!${term.property}.isEmpty()`;
-  const literal = /^-?\d+(?:\.\d+)?$/.test(term.value)
+  const literal = dateField && term.value
+    ? `date(${JSON.stringify(term.value)})`
+    : /^-?\d+(?:\.\d+)?$/.test(term.value)
     ? term.value
     : JSON.stringify(term.value);
   if (term.operator === "contains") {
@@ -664,7 +689,14 @@ function termExpression(term: FilterTerm): string {
       string,
       string
     >)[term.operator] ?? "==";
-  return `${term.property} ${operator} ${literal}`;
+  return `${term.property}${dateField && term.value ? ".date()" : ""} ${operator} ${literal}`;
+}
+function unwrapDateExpression(value: string): string {
+  const match = value.trim().match(/^date\((['"])(\d{4}-\d{2}-\d{2})(?:[ T][^'"]*)?\1\)$/);
+  return match?.[2] ?? value;
+}
+function isDateFieldValue(value: unknown): boolean {
+  return value instanceof Date || typeof value === "string" && /^\d{4}-\d{2}-\d{2}(?:[ T].*)?$/.test(value.trim());
 }
 function unquote(value: string): string {
   const trimmed = value.trim();

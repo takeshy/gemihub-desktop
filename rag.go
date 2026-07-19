@@ -379,6 +379,29 @@ func (a *App) DeleteRAGIndex(name string) error {
 	return nil
 }
 
+func (a *App) RenameRAGIndex(oldName, newName string) error {
+	oldDirectory, err := a.ragDirectory(oldName, false)
+	if err != nil {
+		return err
+	}
+	newDirectory, err := a.ragDirectory(newName, false)
+	if err != nil {
+		return err
+	}
+	if oldDirectory == newDirectory {
+		return nil
+	}
+	if _, err := os.Stat(newDirectory); err == nil {
+		return fmt.Errorf("RAG setting already exists: %s", newName)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Rename(oldDirectory, newDirectory); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func (a *App) ragFiles(setting RAGSetting) ([]ragFile, error) {
 	base := a.GetActiveProjectPath()
 	if base == "" {

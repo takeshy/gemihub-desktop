@@ -19,6 +19,9 @@ export function wikiTargetToPath(baseDirPath: string, target: string): string {
 export function localTargetToPath(baseDirPath: string, target: string): string {
   const clean = target.split("#")[0].trim();
   if (!clean) return "";
+  if (/^(?:workspace|project):\/\//i.test(clean)) {
+    return /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
+  }
   const windows = isWindowsPath(baseDirPath) || isWindowsPath(clean);
   if (clean.startsWith("/") || isWindowsPath(clean) || clean.startsWith("\\\\")) {
     return /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
@@ -56,6 +59,7 @@ export function localHrefToPathCandidates(baseDirPath: string, href: string): st
 export function isLocalDocumentHref(href: string): boolean {
   if (!href) return false;
   const decoded = safeDecodeURIComponent(href);
+  if (/^(?:workspace|project):\/\//i.test(decoded)) return true;
   if (isWindowsPath(decoded) || /^file:\/\//i.test(decoded)) return true;
   if (href.startsWith("#wiki:") || href.startsWith("#wikiembed:")) return true;
   if (href.startsWith("#")) return false;

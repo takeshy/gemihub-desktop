@@ -88,8 +88,6 @@ export interface ChatSettings {
   selectedRagSetting: string | null;
   ragSettings: Record<string, RAGSetting>;
   okfRoot: string;
-  okfUpdateEndpoint: string;
-  okfUpdateToken: string;
   discord: DiscordIntegrationSettings;
 }
 
@@ -179,8 +177,6 @@ export const defaultChatSettings: ChatSettings = {
   selectedRagSetting: null,
   ragSettings: {},
   okfRoot: "Knowledge",
-  okfUpdateEndpoint: "",
-  okfUpdateToken: "",
   discord: {
     enabled: false,
     botToken: "",
@@ -198,6 +194,7 @@ export const defaultChatSettings: ChatSettings = {
 };
 
 export const defaultRAGSetting: RAGSetting = {
+  embeddingSource: "ai",
   embeddingProvider: "gemini",
   embeddingBaseUrl: "",
   embeddingApiKey: "",
@@ -403,6 +400,30 @@ export function switchChatProvider(
   };
 }
 
+export function resolveRAGSetting(
+  settings: ChatSettings,
+  rag: RAGSetting,
+): RAGSetting {
+  if (rag.embeddingSource === "custom") {
+    return rag;
+  }
+  const provider = rag.embeddingProvider;
+  const resolved = switchChatProvider(settings, provider);
+  return {
+    ...rag,
+    embeddingBaseUrl: provider === "openai" ? resolved.endpoint : "",
+    embeddingApiKey: provider === "vertex" ? "" : resolved.apiKey,
+    vertexProjectId: provider === "vertex" ? resolved.vertexProjectId : "",
+    vertexLocation: provider === "vertex" ? resolved.vertexLocation : "global",
+    vertexOAuthClientId: provider === "vertex"
+      ? resolved.vertexOAuthClientId
+      : "",
+    vertexOAuthClientSecret: provider === "vertex"
+      ? resolved.vertexOAuthClientSecret
+      : "",
+  };
+}
+
 function profileConfigured(
   provider: Exclude<ChatProvider, "cli">,
   profile: APIProviderProfile,
@@ -544,10 +565,16 @@ export function loadChatSettings(): ChatSettings {
             const value = setting as Partial<RAGSetting>;
             const inferredProvider = value.embeddingProvider ??
               (value.embeddingBaseUrl ? "openai" : "gemini");
+            const embeddingSource = value.embeddingSource ??
+              (value.embeddingBaseUrl || value.embeddingApiKey ||
+                  value.vertexOAuthClientId
+                ? "custom"
+                : "ai");
             return [name, {
               ...defaultRAGSetting,
               ...value,
               embeddingProvider: inferredProvider,
+              embeddingSource,
             }];
           }),
         )

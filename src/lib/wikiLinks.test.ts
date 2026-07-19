@@ -15,6 +15,19 @@ Deno.test("wiki links preserve workspace URI roots", () => {
   assertEquals(wikiTargetToPath("workspace://folder", "Note"), "workspace://folder/Note.md");
 });
 
+Deno.test("scoped Markdown links preserve PDF workspace and project paths", () => {
+  assertEquals(
+    localHrefToPathCandidates("Dashboards/Timeline/Timeline", "workspace://Research/Paper.pdf"),
+    ["workspace://Research/Paper.pdf"],
+  );
+  assertEquals(
+    localHrefToPathCandidates("Dashboards/Timeline/Timeline", "project://Sources/Paper.pdf"),
+    ["project://Sources/Paper.pdf"],
+  );
+  assertEquals(isLocalDocumentHref("workspace://Research/Paper.pdf"), true);
+  assertEquals(isLocalDocumentHref("project://Sources/Paper.pdf"), true);
+});
+
 Deno.test("root-relative markdown links resolve from the workspace root", () => {
   assertEquals(localHrefToPathCandidates("task", "/task/cron-parent.md"), [
     "task/cron-parent.md",

@@ -22,6 +22,7 @@ import {
   type ChatProvider,
   type ChatSettings,
   configuredChatProviders,
+  resolveRAGSetting,
   selectModelProfile,
   switchChatProvider,
 } from "../llm/settings";
@@ -1139,14 +1140,11 @@ async function executeNode(
       if (ragName && ragName !== "__none__" && ragName !== "__websearch__") {
         const rag = settings.ragSettings[ragName];
         if (!rag) throw new Error(`RAG setting not found: ${ragName}`);
-        const fallbackKey =
-          rag.embeddingProvider === "gemini" && settings.provider === "gemini"
-            ? settings.apiKey
-            : "";
-        const matches = await searchRAG(ragName, prompt, {
-          ...rag,
-          embeddingApiKey: rag.embeddingApiKey || fallbackKey,
-        });
+        const matches = await searchRAG(
+          ragName,
+          prompt,
+          resolveRAGSetting(settings, rag),
+        );
         commandPrompt += `\n\nRetrieved context:\n${
           matches.map((match) => `[${match.filePath}]\n${match.text}`).join(
             "\n\n",

@@ -81,6 +81,7 @@ import {
   getVertexOAuthStatus,
   listProjects,
   openDeveloperTools,
+  renameRAGIndex,
   type ProjectState,
   selectExternalEditor,
   selectDirectoryBase,
@@ -106,6 +107,7 @@ import {
   configuredChatProviders,
   defaultRAGSetting,
   loadChatSettings,
+  resolveRAGSetting,
   saveChatSettings,
   switchChatProvider,
 } from "./llm/settings";
@@ -705,14 +707,7 @@ async function discordBotRequest(
   const ragName = settings.discord.ragSetting ?? "";
   const selectedRAG = ragName ? settings.ragSettings[ragName] : undefined;
   const ragSetting = selectedRAG
-    ? {
-      ...selectedRAG,
-      embeddingApiKey: selectedRAG.embeddingApiKey ||
-        (selectedRAG.embeddingProvider === "gemini" &&
-            resolved.provider === "gemini"
-          ? resolved.apiKey
-          : ""),
-    }
+    ? resolveRAGSetting(resolved, selectedRAG)
     : structuredClone(defaultRAGSetting);
   const skills = await discoverWorkspaceSkills().then(loadActiveSkillContents)
     .catch(() => []);
@@ -3463,14 +3458,10 @@ export default function App() {
                     <>
                       <OkfSettingsCard
                         root={chatSettings.okfRoot}
-                        updateEndpoint={chatSettings.okfUpdateEndpoint}
-                        updateToken={chatSettings.okfUpdateToken}
-                        onChange={(okf) =>
+                        onChange={(okfRoot) =>
                           setChatSettings((current) => ({
                             ...current,
-                            okfRoot: okf.root,
-                            okfUpdateEndpoint: okf.updateEndpoint,
-                            okfUpdateToken: okf.updateToken,
+                            okfRoot,
                           }))}
                       />
                       <section className="settings-info-card">
@@ -3519,18 +3510,73 @@ export default function App() {
                               index++;
                               name = `RAG ${index}`;
                             }
+                            const embeddingProvider = configuredChatProviders(chatSettings)
+                              .find((provider) => provider === "gemini" || provider === "vertex" || provider === "openai") as "gemini" | "vertex" | "openai" | undefined;
                             setChatSettings((current) => ({
                               ...current,
                               selectedRagSetting: name,
                               ragSettings: {
                                 ...current.ragSettings,
-                                [name]: structuredClone(defaultRAGSetting),
+                                [name]: {
+                                  ...structuredClone(defaultRAGSetting),
+                                  embeddingProvider: embeddingProvider ?? "gemini",
+                                },
                               },
                             }));
                             setRAGStatus("Not synced");
                           }}
                         >
                           <Plus size={14} /> New
+                        </button>
+                        <button
+                          type="button"
+                          className="settings-browse"
+                          disabled={!chatSettings.selectedRagSetting}
+                          onClick={async () => {
+                            const oldName = chatSettings.selectedRagSetting;
+                            if (!oldName) return;
+                            const requested = window.prompt("RAG name", oldName);
+                            const newName = requested?.trim() ?? "";
+                            if (!newName || newName === oldName) return;
+                            if (chatSettings.ragSettings[newName]) {
+                              setRAGStatus(`A RAG setting named ${newName} already exists.`);
+                              return;
+                            }
+                            try {
+                              await renameRAGIndex(oldName, newName);
+                              setChatSettings((current) => {
+                                const ragSettings = Object.fromEntries(
+                                  Object.entries(current.ragSettings).map(([name, setting]) => [
+                                    name,
+                                    {
+                                      ...setting,
+                                      sourceRagSettings: setting.sourceRagSettings.map((source) =>
+                                        source === oldName ? newName : source
+                                      ),
+                                    },
+                                  ]),
+                                );
+                                ragSettings[newName] = ragSettings[oldName];
+                                delete ragSettings[oldName];
+                                return {
+                                  ...current,
+                                  selectedRagSetting: newName,
+                                  ragSettings,
+                                  discord: {
+                                    ...current.discord,
+                                    ragSetting: current.discord.ragSetting === oldName
+                                      ? newName
+                                      : current.discord.ragSetting,
+                                  },
+                                };
+                              });
+                              setRAGStatus(`Renamed ${oldName} to ${newName}.`);
+                            } catch (caught) {
+                              setRAGStatus(caught instanceof Error ? caught.message : String(caught));
+                            }
+                          }}
+                        >
+                          <Pencil size={14} /> Rename
                         </button>
                         <button
                           type="button"
@@ -3558,15 +3604,12 @@ export default function App() {
                       {selectedRAG && chatSettings.selectedRagSetting && (
                         <>
                           <label className="settings-field">
-                            <span>Embedding provider</span>
+                            <span>Embedding connection</span>
                             <select
                               className="settings-select"
-                              value={selectedRAG.embeddingProvider}
+                              value={selectedRAG.embeddingSource}
                               onChange={(event) => {
-                                const embeddingProvider = event.target.value as
-                                  | "gemini"
-                                  | "vertex"
-                                  | "openai";
+                                const embeddingSource = event.target.value as "ai" | "custom";
                                 setChatSettings((current) => ({
                                   ...current,
                                   ragSettings: {
@@ -3576,27 +3619,62 @@ export default function App() {
                                         .ragSettings[
                                           current.selectedRagSetting!
                                         ],
-                                      embeddingProvider,
-                                      embeddingModel:
-                                        embeddingProvider === "vertex"
-                                          ? "gemini-embedding-2"
-                                          : current
-                                            .ragSettings[
-                                              current.selectedRagSetting!
-                                            ].embeddingModel,
+                                      embeddingSource,
+                                      embeddingProvider: embeddingSource === "custom"
+                                        ? "openai"
+                                        : current.ragSettings[current.selectedRagSetting!].embeddingProvider,
                                     },
                                   },
                                 }));
                               }}
                             >
-                              <option value="gemini">Gemini API</option>
-                              <option value="vertex">Vertex AI</option>
-                              <option value="openai">OpenAI compatible</option>
+                              <option value="ai">Use AI settings</option>
+                              <option value="custom">Custom URL and API key</option>
                             </select>
                           </label>
-                          {selectedRAG.embeddingProvider === "openai" && (
+                          {selectedRAG.embeddingSource === "ai" && (
                             <label className="settings-field">
-                              <span>Embedding base URL</span>
+                              <span>AI provider</span>
+                              <select
+                                className="settings-select"
+                                value={selectedRAG.embeddingProvider}
+                                disabled={!configuredChatProviders(chatSettings).some((provider) =>
+                                  provider === "gemini" || provider === "vertex" || provider === "openai"
+                                )}
+                                onChange={(event) => {
+                                  const embeddingProvider = event.target.value as "gemini" | "vertex" | "openai";
+                                  setChatSettings((current) => ({
+                                    ...current,
+                                    ragSettings: {
+                                      ...current.ragSettings,
+                                      [current.selectedRagSetting!]: {
+                                        ...current.ragSettings[current.selectedRagSetting!],
+                                        embeddingProvider,
+                                        embeddingModel: embeddingProvider === "vertex"
+                                          ? "gemini-embedding-2"
+                                          : current.ragSettings[current.selectedRagSetting!].embeddingModel,
+                                      },
+                                    },
+                                  }));
+                                }}
+                              >
+                                {!configuredChatProviders(chatSettings).some((provider) =>
+                                  provider === "gemini" || provider === "vertex" || provider === "openai"
+                                ) && <option value="">No embedding-capable AI provider configured</option>}
+                                {configuredChatProviders(chatSettings)
+                                  .filter((provider) => provider === "gemini" || provider === "vertex" || provider === "openai")
+                                  .map((provider) => (
+                                    <option key={provider} value={provider}>
+                                      {provider === "gemini" ? "Gemini" : provider === "vertex" ? "Vertex AI" : "OpenAI compatible"}
+                                    </option>
+                                  ))}
+                              </select>
+                              <small className="settings-hint">Credentials and endpoint come from AI settings.</small>
+                            </label>
+                          )}
+                          {selectedRAG.embeddingSource === "custom" && (
+                            <label className="settings-field">
+                              <span>Embedding URL</span>
                               <input
                                 value={selectedRAG.embeddingBaseUrl}
                                 placeholder="http://localhost:11434"
@@ -3623,7 +3701,9 @@ export default function App() {
                               </small>
                             </label>
                           )}
-                          {selectedRAG.embeddingProvider === "vertex"
+                          {selectedRAG.embeddingSource === "ai"
+                            ? null
+                            : selectedRAG.embeddingProvider === "vertex"
                             ? (
                               <section className="vertex-oauth-settings">
                                 <div>
@@ -3791,7 +3871,7 @@ export default function App() {
                                 <input
                                   type="password"
                                   value={selectedRAG.embeddingApiKey}
-                                  placeholder="Gemini API key"
+                                  placeholder="API key"
                                   onChange={(event) => {
                                     const value = event.target.value;
                                     setChatSettings((current) => ({
@@ -3810,12 +3890,11 @@ export default function App() {
                                   }}
                                 />
                                 <small className="settings-hint">
-                                  A Chat API key is reused only for the Gemini
-                                  API provider.
+                                  Used only with this custom embedding URL.
                                 </small>
                               </label>
                             )}
-                          {selectedRAG.embeddingProvider === "vertex" && (
+                          {selectedRAG.embeddingSource === "custom" && selectedRAG.embeddingProvider === "vertex" && (
                             <details className="vertex-advanced">
                               <summary>Advanced</summary>
                               <div className="rag-number-grid">
@@ -4097,16 +4176,7 @@ export default function App() {
                                   !vertexConnected)}
                               onClick={async () => {
                                 const name = chatSettings.selectedRagSetting!;
-                                const fallbackKey =
-                                  selectedRAG.embeddingProvider === "gemini" &&
-                                    chatSettings.provider === "gemini"
-                                    ? chatSettings.apiKey
-                                    : "";
-                                const setting = {
-                                  ...selectedRAG,
-                                  embeddingApiKey:
-                                    selectedRAG.embeddingApiKey || fallbackKey,
-                                };
+                                const setting = resolveRAGSetting(chatSettings, selectedRAG);
                                 setRAGBusy(true);
                                 setRAGStatus("Syncing…");
                                 setRAGErrors([]);

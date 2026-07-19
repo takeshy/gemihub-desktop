@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { chatThinkingCapabilities, configuredModelOptions, defaultChatSettings, newModelProfile, selectConfiguredModel, selectModelProfile } from "./settings.ts";
+import { chatThinkingCapabilities, configuredModelOptions, defaultChatSettings, defaultRAGSetting, newModelProfile, resolveRAGSetting, selectConfiguredModel, selectModelProfile } from "./settings.ts";
 
 Deno.test("Gemini 3.5 Flash thinking can be switched on and off", () => {
   assertEquals(chatThinkingCapabilities("gemini", "gemini-3.5-flash"), { available: true, required: false });
@@ -31,4 +31,30 @@ Deno.test("selecting a CLI clears the previous API model", () => {
     { provider: selected.provider, cliType: selected.cliType, model: selected.model },
     { provider: "cli", cliType: "codex", model: "" },
   );
+});
+
+Deno.test("RAG embeddings use AI provider credentials or isolated custom credentials", () => {
+  const ai = resolveRAGSetting({
+    ...defaultChatSettings,
+    provider: "gemini",
+    apiKey: "chat-key",
+  }, { ...defaultRAGSetting, embeddingProvider: "gemini" });
+  assertEquals(ai.embeddingApiKey, "chat-key");
+
+  const custom = resolveRAGSetting(defaultChatSettings, {
+    ...defaultRAGSetting,
+    embeddingSource: "custom",
+    embeddingProvider: "openai",
+    embeddingBaseUrl: "http://localhost:11434/v1",
+    embeddingApiKey: "custom-key",
+  });
+  assertEquals({
+    provider: custom.embeddingProvider,
+    url: custom.embeddingBaseUrl,
+    key: custom.embeddingApiKey,
+  }, {
+    provider: "openai",
+    url: "http://localhost:11434/v1",
+    key: "custom-key",
+  });
 });

@@ -14,7 +14,7 @@ Timelineは日々のログや進捗メモのように「投稿時刻順で記録
 
 TimelineはCalendarとKanbanの同期先でもあります。Calendarの予定とKanbanのステータス変更履歴は通常の投稿と同じ `Dashboards/Timeline/<name>/YYYY-MM-DD.md` に保存され、GemiHubのObsidian版とDesktop版から同じデータを利用できます。
 
-Calendar widgetでは月表示から日付を選び、Timeline投稿、予定、ローカルで作成されたファイルをまとめて確認できます。予定は追加後に別の日付へ移動できます。widget settingsの `timelineName` で参照先を指定し、`showCreatedFiles` で作成ファイルの表示を切り替えます。
+Calendar widgetでは月表示から日付を選び、Timeline投稿と予定をまとめて確認できます。予定は追加後に別の日付へ移動できます。widget settingsの `timelineName` で参照先を指定します。ファイルの作成日・更新日による一覧は、Base widgetで `file.ctime` または `file.mtime` に日付フィルターを設定して作成できます。
 
 # 保存の仕組みとタグ
 

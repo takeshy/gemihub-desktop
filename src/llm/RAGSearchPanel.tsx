@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Clipboard, FileText, Loader2, MessageSquare, Pencil, Search, Settings2, Sparkles, X } from "lucide-react";
 import { chat, getAdjacentRAGChunks, searchRAG, type RAGSearchResult } from "../lib/wailsBackend";
-import { configuredChatProviders, type ChatSettings } from "./settings";
+import { configuredChatProviders, resolveRAGSetting, type ChatSettings } from "./settings";
 
 interface ChunkEditState {
   index: number;
@@ -73,13 +73,11 @@ export function RAGSearchPanel({ directoryBase, settings, onSettingsChange, onOp
     setError("");
     setCopied(false);
     try {
-      const fallbackKey = selectedSetting.embeddingProvider === "gemini" && settings.provider === "gemini" ? settings.apiKey : "";
       const result = await searchRAG(selectedName, query.trim(), {
-        ...selectedSetting,
+        ...resolveRAGSetting(settings, selectedSetting),
         topK,
         scoreThreshold: threshold,
         searchFileExtensions: extensions.split(",").map((item) => item.trim().replace(/^\./, "")).filter(Boolean),
-        embeddingApiKey: selectedSetting.embeddingApiKey || fallbackKey,
       });
       setResults(result);
       setSelected(new Set());

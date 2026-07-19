@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func fileCreatedTime(info os.FileInfo) int64 {
+func fileCreatedTime(_ string, info os.FileInfo) int64 {
 	if data, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
 		return time.Unix(0, data.CreationTime.Nanoseconds()).UnixMilli()
 	}

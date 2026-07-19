@@ -81,13 +81,6 @@ import {
   okfDocumentTool,
 } from "../okf/okf";
 import { OkfSelector } from "../okf/OkfSelector";
-import { OkfUpdateDialog } from "../okf/OkfUpdateDialog";
-import {
-  checkGemihubOkfUpdate,
-  type GemihubOkfUpdateInfo,
-  installGemihubOkfUpdate,
-} from "../okf/gemihubOkfUpdate";
-import { isGemihubOkfBundleName } from "../okf/gemihubOkfManifest";
 import {
   type ChatProvider,
   type ChatSettings,
@@ -97,6 +90,7 @@ import {
   configuredChatProviders,
   configuredModelOptions,
   type FileToolMode,
+  resolveRAGSetting,
   selectConfiguredModel,
   selectedModelOptionKey,
   type SlashCommand,
@@ -414,9 +408,6 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [okfBundles, setOkfBundles] = useState<OkfBundle[]>([]);
-  const [okfUpdate, setOkfUpdate] = useState<GemihubOkfUpdateInfo | null>(null);
-  const [okfUpdating, setOkfUpdating] = useState(false);
-  const [okfUpdateError, setOkfUpdateError] = useState("");
   const [skillProgress, setSkillProgress] = useState<
     {
       workflow: Workflow;
@@ -437,7 +428,6 @@ export function ChatPanel({
   const streamQueueRef = useRef<ChatStreamEvent[]>([]);
   const streamTimerRef = useRef<number | null>(null);
   const skillMenuRef = useRef<HTMLDivElement | null>(null);
-  const checkedOkfBundleRef = useRef("");
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeSession = sessions.find((session) => session.id === activeID) ??
@@ -584,58 +574,6 @@ export function ChatPanel({
     return () =>
       window.removeEventListener("llm-hub:file-tree-refresh", refresh);
   }, [refreshOkfBundles]);
-
-  useEffect(() => {
-    const bundle = okfBundles.find((candidate) =>
-      !candidate.builtin && activeOkfBundleIds.includes(candidate.id) &&
-      isGemihubOkfBundleName(candidate.name)
-    );
-    if (!bundle || !settings.okfUpdateEndpoint.trim()) {
-      checkedOkfBundleRef.current = "";
-      setOkfUpdate(null);
-      setOkfUpdateError("");
-      return;
-    }
-    const key =
-      `${settings.okfUpdateEndpoint}:${settings.okfRoot}:${bundle.id}`;
-    if (checkedOkfBundleRef.current === key) return;
-    checkedOkfBundleRef.current = key;
-    void checkGemihubOkfUpdate(
-      settings.okfUpdateEndpoint,
-      settings.okfUpdateToken,
-      settings.okfRoot || "Knowledge",
-      bundle,
-    )
-      .then(setOkfUpdate)
-      .catch((caught) => {
-        checkedOkfBundleRef.current = "";
-        console.warn("Failed to check GemiHub OKF update", caught);
-      });
-  }, [
-    activeOkfBundleIds,
-    okfBundles,
-    settings.okfRoot,
-    settings.okfUpdateEndpoint,
-    settings.okfUpdateToken,
-  ]);
-
-  const applyOkfUpdate = useCallback(async () => {
-    if (!okfUpdate || okfUpdating) return;
-    setOkfUpdating(true);
-    setOkfUpdateError("");
-    try {
-      await installGemihubOkfUpdate(okfUpdate);
-      await refreshOkfBundles();
-      setOkfUpdate(null);
-      window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
-    } catch (caught) {
-      setOkfUpdateError(
-        caught instanceof Error ? caught.message : String(caught),
-      );
-    } finally {
-      setOkfUpdating(false);
-    }
-  }, [okfUpdate, okfUpdating, refreshOkfBundles]);
 
   useEffect(() => {
     if (!skillMenuOpen) return;
@@ -1205,14 +1143,11 @@ export function ChatPanel({
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
     if (ragName && ragSetting && projectBase) {
       try {
-        const fallbackKey = ragSetting.embeddingProvider === "gemini" &&
-            settings.provider === "gemini"
-          ? settings.apiKey
-          : "";
-        const results = await searchRAG(ragName, promptText, {
-          ...ragSetting,
-          embeddingApiKey: ragSetting.embeddingApiKey || fallbackKey,
-        });
+        const results = await searchRAG(
+          ragName,
+          promptText,
+          resolveRAGSetting(settings, ragSetting),
+        );
         ragContext = semanticRAGContext(results);
         ragSources = groundingSources(results);
       } catch (caught) {
@@ -2249,20 +2184,6 @@ export function ChatPanel({
           running={skillProgress.running}
           onStop={() => skillProgress.controller.abort()}
           onClose={() => setSkillProgress(null)}
-        />
-      )}
-      {okfUpdate && (
-        <OkfUpdateDialog
-          update={okfUpdate}
-          updating={okfUpdating}
-          error={okfUpdateError}
-          onUpdate={() => void applyOkfUpdate()}
-          onClose={() => {
-            if (!okfUpdating) {
-              setOkfUpdate(null);
-              setOkfUpdateError("");
-            }
-          }}
         />
       )}
     </section>
