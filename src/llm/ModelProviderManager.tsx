@@ -4,8 +4,8 @@ import { fetchProviderModels } from "./modelProviders";
 import {
   type ChatSettings,
   type LocalLLMFramework,
-  type ModelProviderProfile,
   localLLMFrameworks,
+  type ModelProviderProfile,
   newModelProfile,
   selectModelProfile,
   syncActiveModelProfile,
@@ -153,61 +153,55 @@ export function ModelProviderManager(
                         patch(profile.id, { name: event.target.value })}
                     />
                   </label>
-                  <label>
-                    <span>Type</span>
-                    <select
-                      value={profile.local
-                        ? "local"
-                        : profile.provider === "openai" &&
-                            profile.openAICompatible
-                        ? "openai-compatible"
-                        : profile.provider}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        if (value === "local") {
-                          const local = localLLMFrameworks.ollama;
-                          patch(profile.id, {
-                            local: true,
-                            provider: "openai",
-                            openAICompatible: true,
-                            localFramework: "ollama",
-                            name: local.label,
-                            endpoint: local.endpoint,
-                            availableModels: [],
-                            enabledModels: [],
-                            model: "",
-                          });
-                        } else {
-                          const compatible = value === "openai-compatible";
-                          const provider = compatible
-                            ? "openai"
-                            : value as ModelProviderProfile["provider"];
-                          const fresh = newModelProfile(
-                            provider,
-                            false,
-                            compatible,
-                          );
-                          patch(profile.id, {
-                            local: false,
-                            provider,
-                            openAICompatible: compatible,
-                            endpoint: fresh.endpoint,
-                            localFramework: "ollama",
-                            username: "",
-                            password: "",
-                          });
-                        }
-                      }}
-                    >
-                      <option value="openai">OpenAI</option>
-                      <option value="openai-compatible">
-                        OpenAI Compatible
-                      </option>
-                      <option value="gemini">Google Gemini</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="local">Local LLM</option>
-                    </select>
-                  </label>
+                  {profile.local
+                    ? (
+                      <label>
+                        <span>Type</span>
+                        <div className="model-provider-fixed-type">
+                          Local LLM
+                        </div>
+                      </label>
+                    )
+                    : (
+                      <label>
+                        <span>API provider</span>
+                        <select
+                          value={profile.provider === "openai" &&
+                              profile.openAICompatible
+                            ? "openai-compatible"
+                            : profile.provider}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            const compatible = value === "openai-compatible";
+                            const provider = compatible
+                              ? "openai"
+                              : value as ModelProviderProfile["provider"];
+                            const fresh = newModelProfile(
+                              provider,
+                              false,
+                              compatible,
+                            );
+                            patch(profile.id, {
+                              provider,
+                              openAICompatible: compatible,
+                              endpoint: fresh.endpoint,
+                              availableModels: [],
+                              enabledModels: [],
+                              model: "",
+                              username: "",
+                              password: "",
+                            });
+                          }}
+                        >
+                          <option value="openai">OpenAI</option>
+                          <option value="openai-compatible">
+                            OpenAI Compatible
+                          </option>
+                          <option value="gemini">Google Gemini</option>
+                          <option value="anthropic">Anthropic</option>
+                        </select>
+                      </label>
+                    )}
                 </div>
                 {profile.local && (
                   <label>

@@ -1231,7 +1231,6 @@ export function WidgetSettingsPanel({
               </label>
             </>
           )}
-          {widget.type === "secret-manager" && fileInput("folder", "Secrets")}
           {PluginConfig && (
             <PluginConfig
               config={widget.config}

@@ -2833,17 +2833,22 @@ export function SecretManagerDashboardWidget(
               )
               : (
                 <label>
-                  File<select
-                    autoFocus
-                    required
-                    value={selectedFile}
-                    onChange={(event) => setSelectedFile(event.target.value)}
-                  >
-                    <option value="">Select a Workspace file…</option>
-                    {fileChoices.map((path) => (
-                      <option key={path} value={path}>{path}</option>
-                    ))}
-                  </select>
+                  File
+                  <div className="secret-file-select">
+                    <FileText size={16} />
+                    <select
+                      autoFocus
+                      required
+                      value={selectedFile}
+                      onChange={(event) => setSelectedFile(event.target.value)}
+                    >
+                      <option value="">Select a Workspace file…</option>
+                      {fileChoices.map((path) => (
+                        <option key={path} value={path}>{path}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={15} />
+                  </div>
                   <small>
                     The source is replaced with a self-contained .encrypted
                     file.

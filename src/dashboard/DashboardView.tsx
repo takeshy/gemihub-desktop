@@ -144,6 +144,13 @@ interface WidgetNavigationHistory {
   forward: string[];
 }
 
+function workspaceDashboardPath(path: string): string | null {
+  if (/^(?:files):\/\//i.test(path)) return null;
+  const workspacePath = path.replace(/^workspace:\/\//i, "");
+  if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(workspacePath)) return null;
+  return /\.dashboard$/i.test(workspacePath) ? workspacePath : null;
+}
+
 function clampLayout(pos: LayoutPos, cols = DEFAULT_COLS): LayoutPos {
   const minWidth = Math.min(2, cols);
   const w = Math.max(minWidth, Math.min(cols, pos.w));
@@ -617,6 +624,9 @@ export function DashboardView({
   externalEditorPath,
   memoDirPath,
   memoSyncTimeline,
+  encryptionDirectory,
+  secretManagerId,
+  onOpenDashboard,
   onOpenSettings,
   openPathRequest,
   onHistoryCheckpoint,
@@ -659,6 +669,9 @@ export function DashboardView({
   externalEditorPath: string;
   memoDirPath: string;
   memoSyncTimeline: string;
+  encryptionDirectory: string;
+  secretManagerId: string;
+  onOpenDashboard: (path: string) => Promise<boolean>;
   onOpenSettings: () => void;
   openPathRequest: {
     id: number;
@@ -1692,6 +1705,11 @@ export function DashboardView({
 
   const openPathAsWidget = useCallback(
     async (path: string) => {
+      const dashboardTarget = workspaceDashboardPath(path);
+      if (dashboardTarget) {
+        await onOpenDashboard(dashboardTarget);
+        return undefined;
+      }
       const pluginWidgetId = openPluginWidgetForPath(path);
       if (pluginWidgetId) return pluginWidgetId;
       const result = await readKnownPath(path);
@@ -1709,6 +1727,7 @@ export function DashboardView({
     [
       activeLayoutDirection,
       createFileWidget,
+      onOpenDashboard,
       openPluginWidgetForPath,
       readKnownPath,
       resolveOpenedFile,
@@ -1839,6 +1858,11 @@ export function DashboardView({
 
   const openKnownPathInLastActiveWidget = useCallback(
     async (path: string) => {
+      const dashboardTarget = workspaceDashboardPath(path);
+      if (dashboardTarget) {
+        await onOpenDashboard(dashboardTarget);
+        return undefined;
+      }
       const pluginWidgetId = openPluginWidgetForPath(path);
       if (pluginWidgetId) return pluginWidgetId;
       if (
@@ -1889,6 +1913,7 @@ export function DashboardView({
       createFileWidget,
       data.widgets,
       navigationFor,
+      onOpenDashboard,
       openDirectoryPathInLastActiveWidget,
       openFileInWidget,
       openPluginWidgetForPath,
@@ -2004,6 +2029,11 @@ export function DashboardView({
 
   const navigateWidgetToPath = useCallback(
     async (widgetId: string, path: string) => {
+      const dashboardTarget = workspaceDashboardPath(path);
+      if (dashboardTarget) {
+        await onOpenDashboard(dashboardTarget);
+        return;
+      }
       const widget = data.widgets.find((item) => item.id === widgetId);
       const currentPath = widget ? filePathFromConfig(widget.config) : "";
       if (currentPath === path) return;
@@ -2015,7 +2045,7 @@ export function DashboardView({
       history.forward = [];
       setNavigationVersion((value) => value + 1);
     },
-    [data.widgets, navigationFor, openPathInWidget],
+    [data.widgets, navigationFor, onOpenDashboard, openPathInWidget],
   );
 
   const navigateWidgetHistory = useCallback(
@@ -3258,8 +3288,8 @@ export function DashboardView({
                     )}
                     {widget.type === "secret-manager" && (
                       <SecretManagerDashboardWidget
-                        config={widget.config}
-                        managerId={`${dashboardPath || "local"}:${widget.id}`}
+                        config={{ folder: encryptionDirectory }}
+                        managerId={secretManagerId}
                       />
                     )}
                     {pluginRender?.(widget.config, {

@@ -8136,7 +8136,8 @@ body.resizing-side-pane * {
   min-height: 44px;
 }
 .kanban-column-drop-zone:hover {
-  border-color: color-mix(in srgb, var(--kanban-column-accent) 55%, transparent);
+  border-color: color-mix(in srgb, var(--kanban-column-accent) 55%,
+    transparent);
   background: color-mix(in srgb, var(--kanban-column-accent) 8%, transparent);
 }
 .kanban-columns > section.kanban-accent-1 {
@@ -8791,6 +8792,49 @@ body.resizing-side-pane * {
   color: var(--text);
   padding: 9px;
   font-size: 14px;
+}
+.secret-file-select {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  padding: 0 10px;
+  transition: border-color .15s ease, box-shadow .15s ease,
+    background .15s ease;
+}
+.secret-file-select:focus-within {
+  border-color: var(--accent);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.secret-file-select select {
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 0;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.secret-file-select select:invalid {
+  color: var(--text-muted);
+}
+.secret-file-select select option {
+  background: var(--panel);
+  color: var(--text);
+}
+.secret-file-select > svg:last-child {
+  pointer-events: none;
 }
 .secret-dialog-form textarea,
 .secret-dialog-view textarea {
@@ -10929,6 +10973,196 @@ body.resizing-modal {
   line-height: 1.55;
 }
 
+.encryption-settings {
+  display: grid;
+  gap: 14px;
+}
+.encryption-settings-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 2px 8px;
+}
+.encryption-settings-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+  color: var(--accent);
+}
+.encryption-settings-hero > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+.encryption-settings-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.encryption-settings-title-row strong {
+  font-size: 1rem;
+}
+.encryption-settings-title-row i {
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: .68rem;
+  font-style: normal;
+  font-weight: 600;
+}
+.encryption-settings-title-row i.configured {
+  background: color-mix(in srgb, #22a06b 14%, var(--panel));
+  color: #39ad7d;
+}
+.encryption-settings-title-row i.not-configured {
+  background: var(--panel-subtle);
+  color: var(--muted);
+}
+.encryption-settings-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.5;
+}
+.encryption-settings-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-subtle);
+}
+.encryption-settings-card > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px 10px;
+}
+.encryption-settings-card > header > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.encryption-settings-card > header > div {
+  display: grid;
+  gap: 3px;
+}
+.encryption-settings-card > header small,
+.encryption-disabled-hint {
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.45;
+}
+.encryption-password-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.encryption-password-row input {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 11px;
+}
+.encryption-password-row input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.encryption-password-row button {
+  min-width: 94px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+  padding: 0 14px;
+  font-weight: 600;
+}
+.encryption-password-row button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+.encryption-settings-feedback {
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--text-muted);
+  padding: 9px 14px;
+  font-size: .75rem;
+}
+.encryption-target-list {
+  display: grid;
+  gap: 7px;
+  padding: 0 10px 10px;
+}
+.encryption-target-list label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
+  padding: 10px 11px;
+}
+.encryption-target-list label:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.encryption-target-list label > svg {
+  color: var(--muted);
+}
+.encryption-target-list label > span {
+  display: grid;
+  gap: 2px;
+}
+.encryption-target-list label small {
+  color: var(--muted);
+  font-size: .7rem;
+}
+.encryption-target-list input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+.encryption-target-list input:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+.encryption-disabled-hint {
+  display: block;
+  padding: 0 14px 12px;
+}
+.encryption-settings-warning {
+  border: 1px solid color-mix(in srgb, #d99a2b 42%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, #d99a2b 8%, var(--panel));
+  padding: 11px 13px;
+}
+.encryption-settings-warning strong {
+  color: #c58b25;
+  font-size: .82rem;
+}
+.encryption-settings-warning p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+@media (max-width: 620px) {
+  .encryption-password-row {
+    grid-template-columns: 1fr;
+  }
+  .encryption-password-row button {
+    min-height: 38px;
+  }
+}
+
 .third-party-notices {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -11136,6 +11370,17 @@ body.resizing-modal {
   background: var(--surface);
   color: var(--text);
   padding: 7px;
+}
+
+.model-provider-fixed-type {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  padding: 0 10px;
 }
 .model-provider-actions {
   justify-content: space-between;
@@ -12987,6 +13232,43 @@ body.resizing-modal {
 
 .app-secret-manager-body .secret-group > button > span {
   font-size: 10px;
+}
+
+.encryption-directory-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  margin: 0 14px 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.encryption-directory-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.encryption-directory-field > span {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.encryption-directory-field > input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
 }
 
 .app-timeline-body > .dashboard-timeline-widget,

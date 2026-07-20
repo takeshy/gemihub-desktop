@@ -135,7 +135,7 @@ export function CalendarDashboardWidget({ config, isDark, onOpenPath }: {
     post.isEvent && post.eventDate === selected
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const selectedPosts = posts.filter((post) =>
-    !post.isEvent && localDayKey(new Date(post.createdAt)) === selected
+    localDayKey(new Date(post.createdAt)) === selected
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const days = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1),

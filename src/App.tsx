@@ -198,6 +198,7 @@ const STORAGE_KEY = "gemihub-desktop:document";
 const NAME_KEY = "gemihub-desktop:fileName";
 const EXTERNAL_EDITOR_KEY = "gemihub-desktop:externalEditorPath";
 const MEMO_SYNC_TIMELINE_KEY = "gemihub-desktop:memoSyncTimeline";
+const ENCRYPTION_DIRECTORY_KEY = "gemihub-desktop:encryptionDirectory";
 const MEMO_SYNC_TIMELINE_DEFAULT_MIGRATION_KEY =
   "gemihub-desktop:memoSyncTimelineDefaultV1";
 const AI_ENABLED_KEY = "llm-hub:aiEnabled";
@@ -1050,6 +1051,9 @@ export default function App() {
   const [historyEncryptionReady, setHistoryEncryptionReady] = useState(
     historyEncryptionConfigured,
   );
+  const [encryptionDirectory, setEncryptionDirectory] = useState(() =>
+    readStored(ENCRYPTION_DIRECTORY_KEY, "Secrets")
+  );
   const [cliStatus, setCLIStatus] = useState("");
   const [mcpStatus, setMCPStatus] = useState<Record<string, string>>({});
   const [ragStatus, setRAGStatus] = useState("");
@@ -1312,18 +1316,19 @@ export default function App() {
   }, []);
 
   const openDashboardFile = useCallback(async (path: string) => {
-    const loaded = await loadDashboard(path);
+    const dashboardPath = path.replace(/^workspace:\/\//i, "");
+    const loaded = await loadDashboard(dashboardPath);
     if (!loaded) {
-      setDashboardError(`Cannot parse dashboard: ${path}`);
+      setDashboardError(`Cannot parse dashboard: ${dashboardPath}`);
       return false;
     }
-    replaceDashboard(loaded, path);
+    replaceDashboard(loaded, dashboardPath);
     if (workspaceState.activeWorkspaceId) {
       localStorage.setItem(
         `gemihub-desktop:last-dashboard:${
           encodeURIComponent(workspaceState.activeWorkspaceId)
         }`,
-        path,
+        dashboardPath,
       );
     }
     return true;
@@ -1510,6 +1515,17 @@ export default function App() {
       console.warn("Could not persist memo Timeline sync setting.", error);
     }
   }, [memoSyncTimeline]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ENCRYPTION_DIRECTORY_KEY,
+        encryptionDirectory.trim().replace(/^\/+|\/+$/g, "") || "Secrets",
+      );
+    } catch (error) {
+      console.warn("Could not persist encryption directory.", error);
+    }
+  }, [encryptionDirectory]);
 
   useEffect(() => {
     localStorage.setItem(AI_ENABLED_KEY, String(aiEnabled));
@@ -2425,6 +2441,15 @@ export default function App() {
                   externalEditorPath={externalEditorPath}
                   memoDirPath={memoDirPath}
                   memoSyncTimeline={memoSyncTimeline}
+                  encryptionDirectory={encryptionDirectory.trim().replace(
+                    /^\/+|\/+$/g,
+                    "",
+                  ) ||
+                    "Secrets"}
+                  secretManagerId={`workspace:${
+                    workspaceState.activeWorkspaceId || "local"
+                  }`}
+                  onOpenDashboard={openDashboardFile}
                   onOpenSettings={() => setSettingsOpen(true)}
                   openPathRequest={openPathRequest}
                   onHistoryCheckpoint={requestHistoryCheckpoint}
@@ -2777,8 +2802,13 @@ export default function App() {
               </header>
               <div className="app-secret-manager-body">
                 <SecretManagerDashboardWidget
-                  config={{ folder: "" }}
-                  managerId={`header:${
+                  config={{
+                    folder: encryptionDirectory.trim().replace(
+                      /^\/+|\/+$/g,
+                      "",
+                    ) || "Secrets",
+                  }}
+                  managerId={`workspace:${
                     workspaceState.activeWorkspaceId || "local"
                   }`}
                 />
@@ -2996,33 +3026,96 @@ export default function App() {
                     </>
                   )}
                   {settingsSection === "encryption" && (
-                    <>
-                      <section className="settings-info-card">
-                        <LockKeyhole size={20} />
+                    <div className="encryption-settings">
+                      <section className="encryption-settings-hero">
+                        <div className="encryption-settings-icon">
+                          <LockKeyhole size={22} />
+                        </div>
                         <div>
-                          <strong>History encryption</strong>
+                          <span className="encryption-settings-title-row">
+                            <strong>History encryption</strong>
+                            <i
+                              className={historyEncryptionReady
+                                ? "configured"
+                                : "not-configured"}
+                            >
+                              {historyEncryptionReady
+                                ? "Key configured"
+                                : "Not configured"}
+                            </i>
+                          </span>
                           <p>
-                            The private key is password-protected. The password
-                            is retained in memory only until the app closes.
+                            Protect locally stored conversations and workflow
+                            logs with a password-protected encryption key.
                           </p>
                         </div>
                       </section>
-                      <label className="settings-field">
-                        <span>
-                          {historyEncryptionReady
-                            ? "Unlock password"
-                            : "Create encryption password"}
-                        </span>
-                        <div className="settings-path-row">
+                      <section className="encryption-settings-card">
+                        <header>
+                          <FolderOpen size={17} />
+                          <div>
+                            <strong>Encrypted files directory</strong>
+                            <small>
+                              The shared Secret Manager stores encrypted files
+                              in this workspace directory.
+                            </small>
+                          </div>
+                        </header>
+                        <label className="encryption-directory-field">
+                          <span>Workspace /</span>
+                          <input
+                            value={encryptionDirectory}
+                            placeholder="Secrets"
+                            onChange={(event) =>
+                              setEncryptionDirectory(event.target.value)}
+                            onBlur={() =>
+                              setEncryptionDirectory((value) =>
+                                value.trim().replace(/^\/+|\/+$/g, "") ||
+                                "Secrets"
+                              )}
+                          />
+                        </label>
+                      </section>
+                      <section className="encryption-settings-card">
+                        <header>
+                          <KeyRound size={17} />
+                          <div>
+                            <strong>
+                              {historyEncryptionReady
+                                ? "Unlock this session"
+                                : "Create encryption key"}
+                            </strong>
+                            <small>
+                              {historyEncryptionReady
+                                ? "Enter your password after restarting the app to read encrypted history."
+                                : "Choose the password that will protect your history encryption key."}
+                            </small>
+                          </div>
+                        </header>
+                        <div className="encryption-password-row">
                           <input
                             type="password"
+                            aria-label={historyEncryptionReady
+                              ? "Encryption password"
+                              : "New encryption password"}
+                            placeholder={historyEncryptionReady
+                              ? "Enter encryption password"
+                              : "Create a strong password"}
                             value={historyEncryptionPassword}
                             onChange={(event) =>
                               setHistoryEncryptionPassword(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.currentTarget.nextElementSibling
+                                  ?.dispatchEvent(
+                                    new MouseEvent("click", { bubbles: true }),
+                                  );
+                              }
+                            }}
                           />
                           <button
                             type="button"
-                            className="settings-browse"
+                            className="primary"
                             disabled={!historyEncryptionPassword}
                             onClick={async () => {
                               try {
@@ -3043,56 +3136,93 @@ export default function App() {
                               }
                             }}
                           >
-                            {historyEncryptionReady ? "Unlock" : "Create"}
+                            {historyEncryptionReady ? "Unlock" : "Create key"}
                           </button>
                         </div>
                         {historyEncryptionStatus && (
-                          <small className="settings-hint">
+                          <div className="encryption-settings-feedback">
                             {historyEncryptionStatus}
+                          </div>
+                        )}
+                      </section>
+                      <section className="encryption-settings-card">
+                        <header>
+                          <Check size={17} />
+                          <div>
+                            <strong>Choose what to encrypt</strong>
+                            <small>
+                              New history is encrypted before it is written to
+                              local storage.
+                            </small>
+                          </div>
+                        </header>
+                        <div className="encryption-target-list">
+                          <label>
+                            <MessageSquare size={17} />
+                            <span>
+                              <strong>Chat history</strong>
+                              <small>Saved conversations and messages</small>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={historyEncryption.chat}
+                              disabled={!historyEncryptionReady}
+                              onChange={(event) => {
+                                const next = {
+                                  ...historyEncryption,
+                                  chat: event.target.checked,
+                                };
+                                setHistoryEncryption(next);
+                                setHistoryEncryptionPreferences(next);
+                              }}
+                            />
+                          </label>
+                          <label>
+                            <Workflow size={17} />
+                            <span>
+                              <strong>Workflow logs</strong>
+                              <small>Execution and request history</small>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={historyEncryption.workflow}
+                              disabled={!historyEncryptionReady}
+                              onChange={(event) => {
+                                const next = {
+                                  ...historyEncryption,
+                                  workflow: event.target.checked,
+                                };
+                                setHistoryEncryption(next);
+                                setHistoryEncryptionPreferences(next);
+                                void migrateWorkflowHistoryStorage(
+                                  next.workflow,
+                                )
+                                  .catch((error) =>
+                                    setHistoryEncryptionStatus(
+                                      error instanceof Error
+                                        ? error.message
+                                        : String(error),
+                                    )
+                                  );
+                              }}
+                            />
+                          </label>
+                        </div>
+                        {!historyEncryptionReady && (
+                          <small className="encryption-disabled-hint">
+                            Create an encryption key to enable these options.
                           </small>
                         )}
-                      </label>
-                      <label className="settings-field settings-switch-row">
-                        <span>Encrypt Chat history</span>
-                        <input
-                          type="checkbox"
-                          checked={historyEncryption.chat}
-                          disabled={!historyEncryptionReady}
-                          onChange={(event) => {
-                            const next = {
-                              ...historyEncryption,
-                              chat: event.target.checked,
-                            };
-                            setHistoryEncryption(next);
-                            setHistoryEncryptionPreferences(next);
-                          }}
-                        />
-                      </label>
-                      <label className="settings-field settings-switch-row">
-                        <span>Encrypt Workflow logs</span>
-                        <input
-                          type="checkbox"
-                          checked={historyEncryption.workflow}
-                          disabled={!historyEncryptionReady}
-                          onChange={(event) => {
-                            const next = {
-                              ...historyEncryption,
-                              workflow: event.target.checked,
-                            };
-                            setHistoryEncryption(next);
-                            setHistoryEncryptionPreferences(next);
-                            void migrateWorkflowHistoryStorage(next.workflow)
-                              .catch((error) =>
-                                setHistoryEncryptionStatus(
-                                  error instanceof Error
-                                    ? error.message
-                                    : String(error),
-                                )
-                              );
-                          }}
-                        />
-                      </label>
-                    </>
+                      </section>
+                      <section className="encryption-settings-warning">
+                        <strong>Keep your password safe</strong>
+                        <p>
+                          Your password is never stored and remains in memory
+                          only until the app closes. If you lose it, encrypted
+                          history cannot be recovered.
+                        </p>
+                      </section>
+                    </div>
                   )}
                   {settingsSection === "ai" && (
                     <>
