@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -73,21 +71,11 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 	if request.CLIType == "codex" {
 		return a.chatCodexAppServer(request)
 	}
-	prompt := formatCLIHistory(request.Messages, request.SystemPrompt)
-	latestPrompt := latestUserMessage(request.Messages)
-	var args []string
-	switch request.CLIType {
-	case "claude":
-		if request.CLISessionID != "" {
-			args = []string{"--resume", request.CLISessionID, "-p", latestPrompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
-		} else {
-			args = []string{"-p", prompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
-		}
-	case "antigravity":
-		args = []string{"--print", prompt}
-	default:
+	if request.CLIType != "antigravity" {
 		return nil, fmt.Errorf("unknown CLI provider: %s", request.CLIType)
 	}
+	prompt := formatCLIHistory(request.Messages, request.SystemPrompt)
+	args := []string{"--print", prompt}
 	invocation, err := resolveCLI(request.CLIType, request.CLIPath, args)
 	if err != nil {
 		return nil, err
@@ -102,15 +90,7 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 	configureCLIProcess(cmd)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	var stdoutPipe io.ReadCloser
-	if request.CLIType == "claude" && request.StreamID != "" {
-		stdoutPipe, err = cmd.StdoutPipe()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		cmd.Stdout = &limitedWriter{writer: &stdout, remaining: 16 * 1024 * 1024}
-	}
+	cmd.Stdout = &limitedWriter{writer: &stdout, remaining: 16 * 1024 * 1024}
 	cmd.Stderr = &limitedWriter{writer: &stderr, remaining: 4 * 1024 * 1024}
 
 	a.cliMu.Lock()
@@ -121,52 +101,7 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 	a.cliCmd = cmd
 	a.cliMu.Unlock()
 
-	if stdoutPipe != nil {
-		err = cmd.Start()
-		if err == nil {
-			waited := false
-			scanner := bufio.NewScanner(stdoutPipe)
-			scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-			for scanner.Scan() {
-				line := append([]byte(nil), scanner.Bytes()...)
-				_, _ = stdout.Write(line)
-				_ = stdout.WriteByte('\n')
-				var event struct {
-					Type  string `json:"type"`
-					Event struct {
-						Type  string `json:"type"`
-						Delta struct {
-							Type     string `json:"type"`
-							Text     string `json:"text"`
-							Thinking string `json:"thinking"`
-						} `json:"delta"`
-					} `json:"event"`
-				}
-				if json.Unmarshal(line, &event) == nil && event.Type == "stream_event" && event.Event.Type == "content_block_delta" {
-					if event.Event.Delta.Type == "text_delta" {
-						a.emitChatStream(request, "text", event.Event.Delta.Text, "")
-					}
-					if event.Event.Delta.Type == "thinking_delta" {
-						a.emitChatStream(request, "thinking", event.Event.Delta.Thinking, "")
-					}
-				}
-			}
-			if scanErr := scanner.Err(); scanErr != nil {
-				err = scanErr
-				if cmd.Process != nil {
-					_ = cmd.Process.Kill()
-				}
-			} else {
-				err = cmd.Wait()
-				waited = true
-			}
-			if !waited {
-				_ = cmd.Wait()
-			}
-		}
-	} else {
-		err = cmd.Run()
-	}
+	err = cmd.Run()
 	a.cliMu.Lock()
 	if a.cliCmd == cmd {
 		a.cliCmd = nil
@@ -175,17 +110,14 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s", cliError(request.CLIType, err, stderr.String()))
 	}
-	content, sessionID, toolsUsed, thinking := parseCLIResponseDetailed(request.CLIType, stdout.String())
+	content := strings.TrimSpace(stdout.String())
 	if strings.TrimSpace(content) == "" {
 		if diagnostic := strings.TrimSpace(stderr.String()); diagnostic != "" {
 			return nil, fmt.Errorf("CLI returned no response: %s", diagnostic)
 		}
 		return nil, fmt.Errorf("CLI returned no response")
 	}
-	if sessionID == "" {
-		sessionID = request.CLISessionID
-	}
-	return &ChatResult{Content: content, CLISessionID: sessionID, ToolsUsed: toolsUsed, Thinking: thinking}, nil
+	return &ChatResult{Content: content}, nil
 }
 
 func (a *App) shutdown(_ context.Context) {
@@ -277,14 +209,6 @@ func resolveCLI(kind, customPath string, args []string) (*cliInvocation, error) 
 				return &cliInvocation{Command: node, Args: append([]string{script}, args...)}, nil
 			}
 		}
-		if kind == "claude" {
-			if local := os.Getenv("LOCALAPPDATA"); local != "" {
-				candidate := filepath.Join(local, "Programs", "claude", "claude.exe")
-				if fileExists(candidate) {
-					return &cliInvocation{Command: candidate, Args: args}, nil
-				}
-			}
-		}
 		if kind == "antigravity" {
 			if local := os.Getenv("LOCALAPPDATA"); local != "" {
 				candidate := filepath.Join(local, "agy", "bin", "agy.exe")
@@ -294,7 +218,7 @@ func resolveCLI(kind, customPath string, args []string) (*cliInvocation, error) 
 			}
 		}
 	}
-	commandName := map[string]string{"antigravity": "agy", "claude": "claude", "codex": "codex"}[kind]
+	commandName := map[string]string{"antigravity": "agy", "codex": "codex"}[kind]
 	if commandName == "" {
 		return nil, fmt.Errorf("unknown CLI provider: %s", kind)
 	}
@@ -317,8 +241,7 @@ func windowsNPMCLIScript(kind string) string {
 		return ""
 	}
 	relative := map[string]string{
-		"claude": filepath.Join("@anthropic-ai", "claude-code", "cli.js"),
-		"codex":  filepath.Join("@openai", "codex", "bin", "codex.js"),
+		"codex": filepath.Join("@openai", "codex", "bin", "codex.js"),
 	}[kind]
 	if relative == "" {
 		return ""
@@ -372,67 +295,6 @@ func buildCLIEnvironment() []string {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
-}
-
-func parseCLIResponse(kind, output string) (string, string) {
-	content, sessionID, _, _ := parseCLIResponseDetailed(kind, output)
-	return content, sessionID
-}
-
-func parseCLIResponseDetailed(kind, output string) (string, string, []string, string) {
-	if kind == "antigravity" {
-		return strings.TrimSpace(output), "", nil, ""
-	}
-	var result strings.Builder
-	var sessionID string
-	toolsUsed := []string{}
-	toolSet := map[string]bool{}
-	var thinking strings.Builder
-	scanner := bufio.NewScanner(strings.NewReader(output))
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		var event map[string]any
-		if json.Unmarshal(scanner.Bytes(), &event) != nil {
-			continue
-		}
-		if kind == "claude" {
-			if value, ok := event["session_id"].(string); ok {
-				sessionID = value
-			}
-			if data, ok := event["data"].(map[string]any); ok {
-				if value, ok := data["session_id"].(string); ok {
-					sessionID = value
-				}
-			}
-			if event["type"] == "assistant" {
-				if message, ok := event["message"].(map[string]any); ok {
-					if blocks, ok := message["content"].([]any); ok {
-						for _, raw := range blocks {
-							if block, ok := raw.(map[string]any); ok {
-								if block["type"] == "text" {
-									if text, ok := block["text"].(string); ok {
-										result.WriteString(text)
-									}
-								}
-								if block["type"] == "tool_use" {
-									if name, ok := block["name"].(string); ok && name != "" && !toolSet[name] {
-										toolSet[name] = true
-										toolsUsed = append(toolsUsed, name)
-									}
-								}
-								if block["type"] == "thinking" {
-									if value, ok := block["thinking"].(string); ok {
-										thinking.WriteString(value)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	return strings.TrimSpace(result.String()), sessionID, toolsUsed, strings.TrimSpace(thinking.String())
 }
 
 func cliError(kind string, runErr error, diagnostic string) string {

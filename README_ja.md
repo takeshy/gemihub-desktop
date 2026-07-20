@@ -29,7 +29,7 @@ Desktopは、これまで自作してきた3つのプロジェクトの発想を
 amd64 buildは20 MB未満です。
 
 ファイルは通常のローカルファイルのままです。AIを使わなくても、閲覧・編集、引用付きメモ、Dashboard、Canvas、Base、Kanban、履歴、Trashを利用できます。必要なときだけ、OpenAI互換server（ローカルserverを含む）、Gemini、Vertex
-AI、Anthropic、Codex、Claude、Antigravity CLIへ同じWorkspaceから接続します。
+AI、Anthropic、Codex、Antigravity CLIへ同じWorkspaceから接続します。
 
 CodexはGemiHubの開発に使うだけではありません。設定したCodex
 CLIをChat、Workflowの作成・修正、Workflow内のLLM stepにも利用できます。MCP

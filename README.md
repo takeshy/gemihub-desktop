@@ -35,7 +35,7 @@ build is under 20 MB.
 Files remain ordinary local files. Reading, editing, memos, Dashboards, Canvas,
 Base, Kanban, history, and Trash work without AI. When needed, the same
 workspace can connect to OpenAI-compatible servers—including local
-servers—Gemini, Vertex AI, Anthropic, Codex, Claude, or Antigravity CLI.
+servers—Gemini, Vertex AI, Anthropic, Codex, or Antigravity CLI.
 
 Codex is not limited to developing GemiHub. A configured Codex CLI can power
 Chat, draft and revise Workflows, and run LLM steps inside a Workflow. MCP

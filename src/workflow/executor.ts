@@ -73,7 +73,7 @@ export interface WorkflowExecutionServices {
   startNodeId?: string;
   interactionMode?: "panel" | "hotkey" | "event" | "headless";
   runtime?: {
-    cliSessionIds: Partial<Record<"codex" | "claude" | "antigravity", string>>;
+    cliSessionIds: Partial<Record<"codex" | "antigravity", string>>;
     lastCommand?: {
       nodeId: string;
       originalPrompt: string;
@@ -302,15 +302,13 @@ function workflowProviderForModel(
       : "vertex";
   } else if (/^claude-/i.test(model)) target = "anthropic";
   else if (/^(?:gpt-|o\d)/i.test(model)) target = "openai";
-  else if (/\b(?:codex|claude-cli|antigravity)\b/i.test(model)) target = "cli";
+  else if (/\b(?:codex|antigravity)\b/i.test(model)) target = "cli";
   if (!target || !configured.includes(target)) return settings;
   const resolved = target === settings.provider
     ? settings
     : switchChatProvider(settings, target);
   if (target === "cli") {
-    const cliType = /claude/i.test(model)
-      ? "claude"
-      : /antigravity/i.test(model)
+    const cliType = /antigravity/i.test(model)
       ? "antigravity"
       : "codex";
     return { ...resolved, cliType };

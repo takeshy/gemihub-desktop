@@ -101,6 +101,19 @@ func TestReadFileReturnsNilForMissingFile(t *testing.T) {
 	}
 }
 
+func TestReadWorkspaceFileReturnsNilForMissingFile(t *testing.T) {
+	workspace := t.TempDir()
+	app := NewApp()
+	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	result, err := app.ReadWorkspaceFile("Dashboards/Timeline/Timeline/2026-07-20.md")
+	if err != nil {
+		t.Fatalf("ReadWorkspaceFile returned an error for a missing file: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("ReadWorkspaceFile returned %#v for a missing file, want nil", result)
+	}
+}
+
 func TestWriteFileCannotReplaceBinaryWithDataURLText(t *testing.T) {
 	app, dir := testDirectoryApp(t)
 	target := filepath.Join(dir, "document.pdf")

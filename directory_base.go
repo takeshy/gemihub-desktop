@@ -282,7 +282,9 @@ func (a *App) ListWorkspaceFiles() ([]DirectoryFileEntry, error) {
 }
 
 func (a *App) ReadWorkspaceFile(path string) (*LocalFileResult, error) {
-	target, err := a.workspacePath(path, false)
+	// Missing files are a valid empty starting point for Timeline entries and
+	// other Workspace data that is created on first write.
+	target, err := a.workspacePath(path, true)
 	if err != nil {
 		return nil, err
 	}

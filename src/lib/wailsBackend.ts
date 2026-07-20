@@ -244,7 +244,7 @@ export interface ChatRequest {
   messages: ChatMessage[];
   enableFileTools: boolean;
   fileToolMode: "all" | "noSearch" | "none";
-  cliType: "codex" | "claude" | "antigravity";
+  cliType: "codex" | "antigravity";
   cliPath: string;
   cliSessionId: string;
   streamId?: string;

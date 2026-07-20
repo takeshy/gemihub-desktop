@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -1029,6 +1030,7 @@ export function KanbanDashboardWidget(
     [rows, setRows] = useState<DashboardDataRow[]>([]),
     [tagFilter, setTagFilter] = useState(""),
     [error, setError] = useState(""),
+    [moveError, setMoveError] = useState(""),
     [previewPath, setPreviewPath] = useState("");
   const [showNewCard, setShowNewCard] = useState(false),
     [newTitle, setNewTitle] = useState(""),
@@ -1037,9 +1039,13 @@ export function KanbanDashboardWidget(
     [dropTarget, setDropTarget] = useState<
       { path: string; position: "before" | "after" } | null
     >(null);
+  const draggingPathRef = useRef("");
+  const dragColumnRef = useRef<string | null>(null);
+  const dropHandledRef = useRef(false);
+  const hasLoadedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const path = configText(config, "kanban");
       const parsed = path
@@ -1075,6 +1081,7 @@ export function KanbanDashboardWidget(
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [config]);
@@ -1108,35 +1115,17 @@ export function KanbanDashboardWidget(
     const oldStatus = String(row.frontmatter[statusKey] ?? ""),
       parsed = parseFrontmatter(row.content),
       frontmatter = { ...parsed.frontmatter, [statusKey]: status };
-    const writeBoardFile = definition.workspaceOnly === true
-      ? writeWorkspaceFile
-      : writeFile;
-    await writeBoardFile(
-      row.path,
-      `---\n${
-        yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd()
-      }\n---\n${parsed.body.replace(/^\s+/, "")}`,
-    );
-    const timelineName = configText(definition, "timelineName");
-    if (timelineName && oldStatus !== status) {
-      const oldLabel = boardColumns.find((column) =>
-        column.value === oldStatus
-      )?.label || oldStatus || "Unspecified";
-      const nextLabel = boardColumns.find((column) =>
-        column.value === status
-      )?.label || status || "Unspecified";
-      const kanbanName = configText(
-        definition,
-        "title",
-        baseName(configText(config, "kanban")).replace(/\.kanban$/i, "") ||
-          "Kanban",
-      );
-      const title = String(row.frontmatter[titleKey] || row.name);
-      await appendTimelineEntry(
-        timelineName,
-        `> [!info] Kanban · ${kanbanName}\n> [[${row.path}|${title}]]\n> \`${oldLabel}\` → \`${nextLabel}\``,
-      );
-    }
+    const previousRows = rows;
+    setMoveError("");
+    setRows((current) => current.map((item) =>
+      item.path === row.path
+        ? {
+          ...item,
+          frontmatter: { ...item.frontmatter, [statusKey]: status },
+          cells: { ...item.cells, [statusKey]: status },
+        }
+        : item
+    ));
     const currentOrder = Array.isArray(config.cardOrder)
         ? config.cardOrder.filter((item): item is string =>
           typeof item === "string"
@@ -1159,15 +1148,53 @@ export function KanbanDashboardWidget(
       ? nextOrder.indexOf(lastTarget) + 1
       : nextOrder.length;
     nextOrder.splice(insertAt, 0, row.id);
-    onChange({ ...config, cardOrder: nextOrder });
-    setDraggingPath("");
-    setDropTarget(null);
-    window.dispatchEvent(
-      new CustomEvent("llm-hub:dashboard-data-changed", {
-        detail: { path: row.path },
-      }),
-    );
-    await load();
+    try {
+      const writeBoardFile = definition.workspaceOnly === true
+        ? writeWorkspaceFile
+        : writeFile;
+      await writeBoardFile(
+        row.path,
+        `---\n${
+          yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd()
+        }\n---\n${parsed.body.replace(/^\s+/, "")}`,
+      );
+      const timelineName = configText(definition, "timelineName");
+      if (timelineName && oldStatus !== status) {
+        const oldLabel = boardColumns.find((column) =>
+          column.value === oldStatus
+        )?.label || oldStatus || "Unspecified";
+        const nextLabel = boardColumns.find((column) =>
+          column.value === status
+        )?.label || status || "Unspecified";
+        const kanbanName = configText(
+          definition,
+          "title",
+          baseName(configText(config, "kanban")).replace(/\.kanban$/i, "") ||
+            "Kanban",
+        );
+        const title = String(row.frontmatter[titleKey] || row.name);
+        await appendTimelineEntry(
+          timelineName,
+          `> [!info] Kanban · ${kanbanName}\n> [[${row.path}|${title}]]\n> \`${oldLabel}\` → \`${nextLabel}\``,
+        );
+      }
+      onChange({ ...config, cardOrder: nextOrder });
+      window.dispatchEvent(
+        new CustomEvent("llm-hub:dashboard-data-changed", {
+          detail: { path: row.path },
+        }),
+      );
+      await load();
+    } catch (caught) {
+      setRows(previousRows);
+      setMoveError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      draggingPathRef.current = "";
+      dragColumnRef.current = null;
+      dropHandledRef.current = false;
+      setDraggingPath("");
+      setDropTarget(null);
+    }
   };
   useEffect(() => {
     if (!boardColumns.some((column) => column.value === newStatus)) {
@@ -1275,6 +1302,9 @@ export function KanbanDashboardWidget(
           )}
         </strong>
         {error && <span className="dashboard-inline-error">{error}</span>}
+        {moveError && (
+          <span className="dashboard-inline-error">{moveError}</span>
+        )}
         {tags.length > 0 && (
           <select
             value={tagFilter}
@@ -1288,22 +1318,55 @@ export function KanbanDashboardWidget(
           <Plus size={13} />New Card
         </button>
       </header>
-      <div className="kanban-columns">
+      <div
+        className="kanban-columns"
+        onDragEnterCapture={(event) => {
+          event.preventDefault();
+        }}
+        onDragOverCapture={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          const section = (event.target as HTMLElement).closest<HTMLElement>(
+            "[data-kanban-column-index]",
+          );
+          if (section) {
+            const index = Number(section.dataset.kanbanColumnIndex);
+            dragColumnRef.current = boardColumns[index]?.value ?? null;
+          }
+        }}
+      >
         {boardColumns.map((column, index) => (
           <section
             key={column.value || "__unspecified"}
+            data-kanban-column-index={index}
             className={`kanban-accent-${index % 8}`}
-            onDragOver={(event) => event.preventDefault()}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              dragColumnRef.current = column.value;
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              dragColumnRef.current = column.value;
+            }}
             onDragLeave={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                if (dragColumnRef.current === column.value) {
+                  dragColumnRef.current = null;
+                }
                 setDropTarget(null);
               }
             }}
             onDrop={(event) => {
               event.preventDefault();
-              const path = event.dataTransfer.getData("text/dashboard-card");
+              const path = event.dataTransfer.getData("text/dashboard-card") ||
+                event.dataTransfer.getData("text/plain") ||
+                draggingPathRef.current;
               const row = rows.find((item) => item.path === path);
-              if (row) void move(row, column.value);
+              if (row) {
+                dropHandledRef.current = true;
+                void move(row, column.value);
+              }
             }}
           >
             <header>
@@ -1327,13 +1390,29 @@ export function KanbanDashboardWidget(
                     : ""
                 }`}
                 onDragStart={(event: DragEvent) => {
-                  event.dataTransfer.setData("text/dashboard-card", row.path);
+                  draggingPathRef.current = row.path;
+                  dragColumnRef.current = null;
+                  dropHandledRef.current = false;
                   setDraggingPath(row.path);
+                  event.dataTransfer.effectAllowed = "move";
+                  try {
+                    event.dataTransfer.setData(
+                      "text/dashboard-card",
+                      row.path,
+                    );
+                    event.dataTransfer.setData("text/plain", row.path);
+                  } catch {
+                    // Some desktop WebViews reject custom drag data. The ref
+                    // above remains available for the drop operation.
+                  }
                 }}
                 onDragOver={(event) => {
-                  if (!draggingPath || draggingPath === row.path) return;
+                  const draggedPath = draggingPathRef.current || draggingPath;
+                  if (!draggedPath || draggedPath === row.path) return;
                   event.preventDefault();
                   event.stopPropagation();
+                  event.dataTransfer.dropEffect = "move";
+                  dragColumnRef.current = column.value;
                   const rect = event.currentTarget.getBoundingClientRect();
                   setDropTarget({
                     path: row.path,
@@ -1347,11 +1426,28 @@ export function KanbanDashboardWidget(
                   event.stopPropagation();
                   const path = event.dataTransfer.getData(
                     "text/dashboard-card",
-                  );
+                  ) || event.dataTransfer.getData("text/plain") ||
+                    draggingPathRef.current;
                   const dragged = rows.find((item) => item.path === path);
-                  if (dragged) void move(dragged, column.value);
+                  if (dragged) {
+                    dropHandledRef.current = true;
+                    void move(dragged, column.value);
+                  }
                 }}
                 onDragEnd={() => {
+                  const path = draggingPathRef.current;
+                  const targetColumn = dragColumnRef.current;
+                  const dragged = rows.find((item) => item.path === path);
+                  if (
+                    !dropHandledRef.current && dragged && targetColumn !== null
+                  ) {
+                    dropHandledRef.current = true;
+                    void move(dragged, targetColumn, null);
+                    return;
+                  }
+                  draggingPathRef.current = "";
+                  dragColumnRef.current = null;
+                  dropHandledRef.current = false;
                   setDraggingPath("");
                   setDropTarget(null);
                 }}
@@ -1372,6 +1468,30 @@ export function KanbanDashboardWidget(
                 })}
               </button>
             ))}
+            <div
+              className="kanban-column-drop-zone"
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = "move";
+                dragColumnRef.current = column.value;
+                setDropTarget(null);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const path = event.dataTransfer.getData(
+                  "text/dashboard-card",
+                ) || event.dataTransfer.getData("text/plain") ||
+                  draggingPathRef.current;
+                const dragged = rows.find((item) => item.path === path);
+                if (dragged) {
+                  dropHandledRef.current = true;
+                  void move(dragged, column.value, null);
+                }
+              }}
+              aria-label={`Drop card in ${column.label}`}
+            />
           </section>
         ))}
       </div>

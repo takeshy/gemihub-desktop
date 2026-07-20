@@ -8053,6 +8053,9 @@ body.resizing-side-pane * {
   font-size: 9px;
 }
 .kanban-columns > section {
+  --kanban-column-accent: #3b82f6;
+  display: flex;
+  flex-direction: column;
   width: auto;
   min-width: 220px;
   flex: 1 0 220px;
@@ -8062,7 +8065,7 @@ body.resizing-side-pane * {
   border-top: 3px solid currentColor;
   border-radius: 7px;
   background: color-mix(in srgb, var(--surface-raised) 75%, transparent);
-  color: #3b82f6;
+  color: var(--kanban-column-accent);
   padding: 5px;
 }
 .kanban-columns > section > header {
@@ -8078,7 +8081,7 @@ body.resizing-side-pane * {
 .kanban-columns > section > header span {
   min-width: 19px;
   border-radius: 999px;
-  background: currentColor;
+  background: var(--kanban-column-accent);
   color: white;
   padding: 2px 5px;
   text-align: center;
@@ -8110,26 +8113,40 @@ body.resizing-side-pane * {
 .kanban-columns > section > button.drop-after {
   box-shadow: 0 2px 0 var(--accent);
 }
-.kanban-accent-1 {
-  color: #d97706 !important;
+.kanban-column-drop-zone {
+  flex: 1 0 24px;
+  min-height: 24px;
+  margin-top: 5px;
+  border: 1px dashed transparent;
+  border-radius: 5px;
 }
-.kanban-accent-2 {
-  color: #059669 !important;
+.kanban-columns > section > header + .kanban-column-drop-zone {
+  min-height: 44px;
 }
-.kanban-accent-3 {
-  color: #7c3aed !important;
+.kanban-column-drop-zone:hover {
+  border-color: color-mix(in srgb, var(--kanban-column-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--kanban-column-accent) 8%, transparent);
 }
-.kanban-accent-4 {
-  color: #0891b2 !important;
+.kanban-columns > section.kanban-accent-1 {
+  --kanban-column-accent: #d97706;
 }
-.kanban-accent-5 {
-  color: #db2777 !important;
+.kanban-columns > section.kanban-accent-2 {
+  --kanban-column-accent: #059669;
 }
-.kanban-accent-6 {
-  color: #ca8a04 !important;
+.kanban-columns > section.kanban-accent-3 {
+  --kanban-column-accent: #7c3aed;
 }
-.kanban-accent-7 {
-  color: #dc2626 !important;
+.kanban-columns > section.kanban-accent-4 {
+  --kanban-column-accent: #0891b2;
+}
+.kanban-columns > section.kanban-accent-5 {
+  --kanban-column-accent: #db2777;
+}
+.kanban-columns > section.kanban-accent-6 {
+  --kanban-column-accent: #ca8a04;
+}
+.kanban-columns > section.kanban-accent-7 {
+  --kanban-column-accent: #dc2626;
 }
 .kanban-new-card-backdrop {
   position: absolute;

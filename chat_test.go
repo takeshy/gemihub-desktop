@@ -149,6 +149,9 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 	if err != nil || value.(*LocalFileResult).Content != "workspace needle" {
 		t.Fatalf("Workspace read failed: %#v, %v", value, err)
 	}
+	if _, _, err := app.executeFileTool("read_file", `{"path":"missing.md"}`); err == nil {
+		t.Fatal("AI read_file did not report a missing Workspace file")
+	}
 	if _, _, err := app.executeFileTool("read_file", `{"path":"files://outside.md"}`); err == nil {
 		t.Fatal("AI read_file accessed external Files")
 	}
@@ -391,9 +394,7 @@ func TestAnthropicThinkingBlocksArePreservedAcrossToolCall(t *testing.T) {
 	app := NewApp()
 	app.workspaceConfigDir = t.TempDir()
 	app.startup(context.Background())
-	if _, err := app.SetDirectoryBase(directory); err != nil {
-		t.Fatal(err)
-	}
+	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: directory}}}
 	result, err := app.chatAnthropic(ChatRequest{Endpoint: "https://anthropic.test", APIKey: "test", Model: "claude-opus-4-8", EnableThinking: true, EnableFileTools: true, FileToolMode: "noSearch", Messages: []ChatMessage{{Role: "user", Content: "read the note"}}})
 	if err != nil {
 		t.Fatal(err)

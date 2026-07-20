@@ -938,6 +938,9 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if err != nil {
 			return nil, nil, err
 		}
+		if result == nil {
+			return nil, nil, fmt.Errorf("Workspace file not found: %s", path)
+		}
 		if len(result.Content) > 200000 {
 			result.Content = result.Content[:200000] + "\n[truncated]"
 		}

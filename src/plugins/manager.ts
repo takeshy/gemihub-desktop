@@ -8,7 +8,7 @@ import {
 import type { PluginConfig, PluginManifest, PluginPermission } from "./types";
 
 export const PLUGIN_HOST_ID = "gemihub-desktop";
-export const PLUGIN_HOST_VERSION = "0.15.0";
+export const PLUGIN_HOST_VERSION = "0.15.1";
 const OFFICIAL_PLUGIN_OWNERS = new Set(["takeshy"]);
 
 export type PluginRecommendation = "official" | "custom" | "third-party";

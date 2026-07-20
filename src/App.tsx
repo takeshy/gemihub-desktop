@@ -3338,9 +3338,8 @@ export default function App() {
                           <strong>Local agent providers</strong>
                           <p>
                             Codex uses its structured App Server protocol.
-                            Claude Code and Antigravity retain their CLI
-                            integrations. Each provider uses your existing local
-                            login.
+                            Antigravity retains its CLI integration. Each
+                            provider uses your existing local login.
                           </p>
                         </div>
                       </section>
@@ -3518,8 +3517,8 @@ export default function App() {
                           Codex App Server is restricted to a workspace-write
                           sandbox for DirectoryBase, with interactive approval
                           requests denied until an approval UI is available.
-                          Claude Code and Antigravity run with their own CLI
-                          permission and sandbox settings.
+                          Antigravity runs with its own CLI permission and
+                          sandbox settings.
                         </p>
                       </section>
                     </>

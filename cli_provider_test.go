@@ -17,20 +17,6 @@ func TestFormatCLIHistory(t *testing.T) {
 	}
 }
 
-func TestParseClaudeOutput(t *testing.T) {
-	input := `{"type":"assistant","session_id":"session-456","message":{"content":[{"type":"thinking","thinking":"Consider files"},{"type":"text","text":"Hello"},{"type":"tool_use","name":"Read"}]}}`
-	content, sessionID, tools, thinking := parseCLIResponseDetailed("claude", input)
-	if content != "Hello" || sessionID != "session-456" {
-		t.Fatalf("content=%q session=%q", content, sessionID)
-	}
-	if len(tools) != 1 || tools[0] != "Read" {
-		t.Fatalf("tools=%#v", tools)
-	}
-	if thinking != "Consider files" {
-		t.Fatalf("thinking=%q", thinking)
-	}
-}
-
 func TestLatestUserMessage(t *testing.T) {
 	messages := []ChatMessage{{Role: "user", Content: "first"}, {Role: "assistant", Content: "reply"}, {Role: "user", Content: "latest"}}
 	if got := latestUserMessage(messages); got != "latest" {

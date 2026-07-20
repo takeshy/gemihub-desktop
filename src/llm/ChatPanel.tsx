@@ -483,6 +483,18 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [okfBundles, setOkfBundles] = useState<OkfBundle[]>([]);
+
+  useEffect(() => {
+    if (settings.webSearchEnabled && !supportsNativeWebSearch(settings)) {
+      onSettingsChange({ ...settings, webSearchEnabled: false });
+    }
+  }, [
+    settings.provider,
+    settings.endpoint,
+    settings.model,
+    settings.webSearchEnabled,
+    onSettingsChange,
+  ]);
   const [dismissedAutomaticPath, setDismissedAutomaticPath] = useState<
     string | null
   >(null);
@@ -1337,7 +1349,8 @@ export function ChatPanel({
     let ragSources: GroundingSource[] = [];
     const legacyWebSearch = settings.selectedRagSetting === "__websearch__";
     const ragName = legacyWebSearch ? null : settings.selectedRagSetting;
-    const webSearchEnabled = settings.webSearchEnabled || legacyWebSearch;
+    const webSearchEnabled = supportsNativeWebSearch(settings) &&
+      (settings.webSearchEnabled || legacyWebSearch);
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
     const hasExplicitRAGContext = attachedFiles.some((file) => file.rag);
     if (ragName && ragSetting && workspaceBase && !hasExplicitRAGContext) {
@@ -2440,7 +2453,8 @@ export function ChatPanel({
             >
               <input
                 type="checkbox"
-                checked={settings.webSearchEnabled}
+                checked={settings.webSearchEnabled &&
+                  supportsNativeWebSearch(settings)}
                 disabled={loading || !supportsNativeWebSearch(settings)}
                 onChange={(event) => onSettingsChange({
                   ...settings,

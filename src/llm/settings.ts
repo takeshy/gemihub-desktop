@@ -24,7 +24,7 @@ export const localLLMFrameworks: Record<
   vllm: { label: "vLLM", endpoint: "http://127.0.0.1:8000/v1" },
   opencode: { label: "OpenCode (Local)", endpoint: "http://127.0.0.1:4096" },
 };
-export type CLIType = "codex" | "claude" | "antigravity";
+export type CLIType = "codex" | "antigravity";
 export type FileToolMode = "all" | "noSearch" | "none";
 
 export interface MCPServerConfig {
@@ -202,7 +202,7 @@ export const defaultChatSettings: ChatSettings = {
   fileToolMode: "all",
   thinkingEnabledModels: [],
   cliType: "codex",
-  cliPaths: { codex: "", claude: "", antigravity: "" },
+  cliPaths: { codex: "", antigravity: "" },
   slashCommands: [{
     id: "cmd_infographic_default",
     name: "infographic",
@@ -603,7 +603,7 @@ export function loadChatSettings(): ChatSettings {
       selectedModelProfileId,
       verifiedCliTypes: Array.isArray(parsed.verifiedCliTypes)
         ? parsed.verifiedCliTypes.filter((type): type is CLIType =>
-          type === "codex" || type === "claude" || type === "antigravity"
+          type === "codex" || type === "antigravity"
         )
         : [],
       fileToolMode: parsed.fileToolMode ??
@@ -710,7 +710,6 @@ export function saveChatSettings(settings: ChatSettings): void {
 
 export const cliNames: Record<CLIType, string> = {
   codex: "Codex App Server",
-  claude: "Claude Code",
   antigravity: "Antigravity",
 };
 
