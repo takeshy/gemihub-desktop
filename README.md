@@ -1,16 +1,9 @@
 # GemiHub Desktop
 
-> **Your AI is only as good as your data.**<br> **GemiHub Desktop is the IDE for
-> ideas—an open workspace where everything becomes context for AI.**
-
-AI can generate an answer in seconds, but the knowledge behind that answer is
-usually scattered across notes, PDFs, books, boards, and half-finished ideas.
-GemiHub Desktop brings those materials into one local, visual workspace and
-turns them into usable context for AI.
-
-Instead of copying fragments between apps and repeatedly explaining your project
-to a chatbot, you can read, connect, annotate, organize, and ask questions in
-the same place. Your workspace becomes the context window.
+> **As AI gets smarter, the value of your data keeps growing.**<br> **GemiHub
+> Desktop is the IDE for ideas—an open workspace that gathers thoughts, notes,
+> reference materials, activity records, and even secret tokens on your own
+> computer, then turns them into context for AI.**
 
 [日本語 README](README_ja.md)
 
@@ -29,17 +22,18 @@ GemiHub Desktop brings together three ideas developed in earlier projects:
 
 The goal is a compact everyday Markdown application that can use AI deeply
 without making an online service mandatory. It is distributed as a single
-executable with no Go or Deno runtime dependency; the current Windows amd64
-build is under 20 MB.
+executable with no runtime dependency; the current Windows amd64 build is under
+20 MB.
 
 Files remain ordinary local files. Reading, editing, memos, Dashboards, Canvas,
 Base, Kanban, history, and Trash work without AI. When needed, the same
-workspace can connect to OpenAI-compatible servers—including local
-servers—Gemini, Vertex AI, Anthropic, Codex, or Antigravity CLI.
+Workspace can connect to OpenAI, Gemini, Vertex AI, Anthropic, Codex,
+Antigravity CLI, or a local LLM.
 
 Codex is not limited to developing GemiHub. A configured Codex CLI can power
-Chat, draft and revise Workflows, and run LLM steps inside a Workflow. MCP
-servers, Agent Skills, OKF bundles, and Plugins extend the same local workspace.
+Chat, draft and revise Workflows, and run LLM steps inside a Workflow. GemiHub
+provides a complete environment for using AI together with MCP servers, Agent
+Skills, OKF bundles, and Plugins.
 
 ## What you can do
 
@@ -51,16 +45,16 @@ servers, Agent Skills, OKF bundles, and Plugins extend the same local workspace.
   note was written.
 - **Let AI clean up the rough work.** Ask Chat to rewrite, summarize, classify,
   or reorganize notes, then review file changes before applying them.
-- **Turn reading into reusable knowledge.** Add source-linked memos while
-  reading Markdown, PDF, EPUB, HTML, or technical books, and return from a memo
-  to the original passage.
-- **Automate recurring research.** For example, a Workflow can take an English
-  technical article, translate it, and create a readable infographic note.
-- **Run daily work from one screen.** Use a Dashboard for tasks, a Timeline for
-  quick activity notes, and File widgets for frequently used documents.
-- **Bring everyday tools to the front.** The header launcher opens Memo List,
-  the system Timeline, Calendar, or Kanban above maximized widgets. Secret
-  Manager keeps its own key icon.
+- **Keep questions and impressions connected to their sources.** Add
+  source-linked memos while reading Markdown, PDF, EPUB, HTML, or technical
+  books, and return from a memo to the original passage.
+- **Automate information gathering.** For example, a Workflow can take an
+  English technical article, translate it, and create a readable infographic
+  note.
+- **Run daily work from one screen.** Use Kanban and Calendar for tasks and
+  schedules, record miscellaneous activity in Timeline, and quickly access
+  frequently used files. Password-protect account details and retrieve them
+  only when needed.
 - **Turn conversations into a daily record.** Ask Chat or the Discord bot to
   “memo this” and it can save the answer or key points directly to the Workspace
   system Timeline.
@@ -69,6 +63,25 @@ servers, Agent Skills, OKF bundles, and Plugins extend the same local workspace.
 - **Connect work systems.** Use an MCP server to turn Git history into a daily
   report, or a Plugin to back up and synchronize files with services such as
   Google Drive.
+
+## A workspace that grows with plugins
+
+GemiHub Desktop is not limited to built-in document and AI tools. Install
+plugins from **Settings → Plugins** to add complete, task-focused applications
+to the same local Workspace:
+
+- **[Audio Score](https://github.com/takeshy/hub-audio-score)** turns audio into
+  playable sheet music with ML pitch detection, source separation, MIDI import
+  and export, PDF export, and optional AI chord analysis.
+- **[Accounting](https://github.com/takeshy/hub-accounting)** adds
+  Beancount-compatible double-entry bookkeeping, transaction entry,
+  validation, and financial reports while keeping the ledger in plain text.
+- **[Ronginus](https://github.com/takeshy/hub-ronginus)** runs structured,
+  role-based debates between multiple configured AI or local models, then
+  collects conclusions and votes.
+- **[Google Drive Sync](https://github.com/takeshy/gemihub-gdrive)** connects an
+  entire Desktop Workspace to a GemiHub Google Drive root with previewable
+  pull/push operations and per-file conflict resolution.
 
 AI is optional. Without an API key, cloud account, or network connection,
 GemiHub remains a local document and knowledge workspace.

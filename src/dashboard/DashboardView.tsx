@@ -3172,7 +3172,6 @@ export function DashboardView({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!confirm("Delete this widget?")) return;
                             setMaximizedWidgetId((
                               id,
                             ) => (id === widget.id ? null : id));
@@ -3456,7 +3455,6 @@ export function DashboardView({
               onTypeChange={(type, config) =>
                 updateWidget({ ...widget, type, config })}
               onDelete={() => {
-                if (!confirm("Delete this widget?")) return;
                 onChange({
                   ...data,
                   widgets: data.widgets.filter((item) => item.id !== widget.id),

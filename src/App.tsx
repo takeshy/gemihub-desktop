@@ -1278,7 +1278,8 @@ export default function App() {
         const next = typeof action === "function" ? action(current) : action;
         if (JSON.stringify(next) === JSON.stringify(current)) return current;
         const now = Date.now();
-        if (now - dashboardLastChangeRef.current > 700) {
+        const removedWidget = next.widgets.length < current.widgets.length;
+        if (removedWidget || now - dashboardLastChangeRef.current > 700) {
           dashboardPastRef.current = [
             ...dashboardPastRef.current.slice(-49),
             structuredClone(current),
