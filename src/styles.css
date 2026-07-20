@@ -4235,6 +4235,85 @@ body.resizing-side-pane * {
   grid-template-columns: 1fr 2fr;
   gap: 9px;
 }
+.ai-workflow-attachments {
+  position: relative;
+  display: grid;
+  gap: 5px;
+}
+.ai-workflow-attachments > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.ai-workflow-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ai-workflow-attachment-list > span,
+.ai-workflow-attachment-list > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 11px;
+}
+.ai-workflow-attachment-list > span button {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+}
+.ai-workflow-attachment-picker {
+  display: grid;
+  max-height: 230px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 10px 25px rgb(0 0 0 / 20%);
+}
+.ai-workflow-attachment-picker label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  padding: 7px;
+}
+.ai-workflow-attachment-picker label input {
+  border: 0;
+  outline: 0;
+}
+.ai-workflow-attachment-picker > div {
+  display: grid;
+  overflow: auto;
+  padding: 4px;
+}
+.ai-workflow-attachment-picker > div button {
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  padding: 6px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-workflow-attachment-picker > div button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ai-workflow-attachment-picker small {
+  color: var(--text-muted);
+  padding: 8px;
+}
 .ai-workflow-input fieldset {
   display: grid;
   gap: 5px;

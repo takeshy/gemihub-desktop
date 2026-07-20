@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, RefreshCw, Sparkles, X } from "lucide-react";
+import { Check, Paperclip, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import {
   chat,
   type ChatAttachment,
   type ChatUsage,
+  listWorkspaceFiles,
   onChatStream,
   readWorkspaceFile as readFile,
 } from "../lib/wailsBackend";
@@ -48,6 +49,33 @@ interface ReviewResult {
 function extractSkillInstructions(text: string): string {
   return text.match(/```skill-instructions\s*\r?\n([\s\S]*?)\r?\n```/i)?.[1]
     .trim() || "";
+}
+
+function externalWorkflowBlock(text: string) {
+  const direct = findWorkflowBlocks(text)[0];
+  if (direct) return direct;
+  for (
+    const match of text.matchAll(/```(?:ya?ml)?\s*\r?\n([\s\S]*?)\r?\n```/gi)
+  ) {
+    const block = findWorkflowBlocks(match[1].trim())[0];
+    if (block) return block;
+  }
+  return undefined;
+}
+
+export function parseExternalWorkflowResponse(
+  text: string,
+  artifactKind: "skill" | "workflow",
+) {
+  const block = externalWorkflowBlock(text);
+  let instructions = artifactKind === "skill"
+    ? extractSkillInstructions(text)
+    : "";
+  if (artifactKind === "skill" && !instructions && block) {
+    const fence = text.search(/^`{3,}(?:hub-workflow|workflow|ya?ml)?\s*$/im);
+    if (fence > 0) instructions = text.slice(0, fence).trim();
+  }
+  return { block, instructions };
 }
 
 export function parseReviewResponse(text: string): ReviewResult | null {
@@ -181,7 +209,12 @@ export function AIWorkflowBuilderModal({
   const [review, setReview] = useState<ReviewResult | null>(null);
   const [refineFeedback, setRefineFeedback] = useState("");
   const [externalResponse, setExternalResponse] = useState("");
-  const [attachmentPaths, setAttachmentPaths] = useState("");
+  const [externalPrompt, setExternalPrompt] = useState("");
+  const [attachmentPaths, setAttachmentPaths] = useState<string[]>([]);
+  const [attachmentPickerOpen, setAttachmentPickerOpen] = useState(false);
+  const [attachmentChoices, setAttachmentChoices] = useState<string[]>([]);
+  const [attachmentQuery, setAttachmentQuery] = useState("");
+  const [attachmentLoading, setAttachmentLoading] = useState(false);
   const [acceptReviewIssues, setAcceptReviewIssues] = useState(false);
   const [thinking, setThinking] = useState("");
   const [streamText, setStreamText] = useState("");
@@ -201,31 +234,13 @@ export function AIWorkflowBuilderModal({
         .slice(0, 10),
     [currentPath, history],
   );
-  const externalPrompt = useMemo(
-    () =>
-      `Create the ${artifactKind} named "${name}" for this request:\n${request}\n${
-        additionalInstructions
-          ? `\nAdditional requirements:\n${additionalInstructions}\n`
-          : ""
-      }\n${
-        mode === "modify"
-          ? `Current ${artifactKind}:\n${currentMarkdown}\n\n`
-          : ""
-      }${
-        artifactKind === "skill"
-          ? "Return a skill-instructions fenced Markdown block followed by "
-          : "Return "
-      }one complete hub-workflow fenced block.\n\n${workflowGenerationSpec}`,
-    [
-      additionalInstructions,
-      artifactKind,
-      currentMarkdown,
-      mode,
-      name,
-      request,
-    ],
-  );
-
+  const filteredAttachmentChoices = useMemo(() => {
+    const query = attachmentQuery.trim().toLocaleLowerCase();
+    return attachmentChoices.filter((filePath) =>
+      !attachmentPaths.includes(filePath) &&
+      (!query || filePath.toLocaleLowerCase().includes(query))
+    ).slice(0, 100);
+  }, [attachmentChoices, attachmentPaths, attachmentQuery]);
   useEffect(() =>
     onChatStream((event) => {
       if (event.streamId !== streamRef.current) return;
@@ -249,18 +264,63 @@ export function AIWorkflowBuilderModal({
       : switchChatProvider(settings, provider);
     return settingsForModel(resolved, model);
   };
-  const openExternal = () => {
+  const openAttachmentPicker = async () => {
+    setAttachmentPickerOpen((open) => !open);
+    if (attachmentChoices.length || attachmentLoading) return;
+    setAttachmentLoading(true);
+    try {
+      const entries = await listWorkspaceFiles();
+      setAttachmentChoices(entries.map((entry) => entry.path));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setAttachmentLoading(false);
+    }
+  };
+  const openExternal = async () => {
     if (!name.trim()) {
       setError("Enter a workflow name before using an external LLM.");
       return;
     }
     if (!request.trim()) {
-      setError("Describe the workflow change in Request before using an external LLM.");
+      setError(
+        "Describe the workflow change in Request before using an external LLM.",
+      );
       requestRef.current?.focus();
       return;
     }
     setError("");
-    setPhase("external");
+    try {
+      const references = await referenceInputs();
+      const historyText = historyContext();
+      const outputContract = artifactKind === "skill"
+        ? "Return exactly two fenced blocks and no other text: first a `skill-instructions` Markdown block, then one complete `hub-workflow` YAML block."
+        : "Return exactly one complete `hub-workflow` fenced YAML block and no other text.";
+      setExternalPrompt(
+        `You are a workflow author for GemiHub Desktop. Follow the complete specification below.\n\n${workflowGenerationSpec}\n\nOUTPUT CONTRACT:\n${outputContract}\n\n${
+          mode === "create" ? "Create" : "Modify"
+        } the ${artifactKind} named "${name}".\n\nUSER REQUEST:\n${request}${
+          additionalInstructions
+            ? `\n\nADDITIONAL REQUIREMENTS:\n${additionalInstructions}`
+            : ""
+        }${plan ? `\n\nAPPROVED PLAN:\n${plan}` : ""}${
+          mode === "modify"
+            ? `\n\nCURRENT ${artifactKind.toUpperCase()}:\n${currentMarkdown}`
+            : ""
+        }${references.text ? `\n\nREFERENCED FILES:\n${references.text}` : ""}${
+          references.attachments.length
+            ? `\n\nBINARY ATTACHMENTS NOT EMBEDDED IN THIS TEXT PROMPT:\n${
+              references.attachments.map((item) => `- ${item.name}`).join("\n")
+            }\nAttach these files separately if they are required.`
+            : ""
+        }${
+          historyText ? `\n\nSELECTED EXECUTION HISTORY:\n${historyText}` : ""
+        }`,
+      );
+      setPhase("external");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
   };
   const call = async (
     systemPrompt: string,
@@ -365,8 +425,7 @@ export function AIWorkflowBuilderModal({
       ),
     );
     for (
-      const path of attachmentPaths.split(",").map((value) => value.trim())
-        .filter(Boolean)
+      const path of attachmentPaths
     ) paths.add(path);
     for (const path of paths) {
       const file = await readFile(path).catch(() => null);
@@ -538,7 +597,10 @@ export function AIWorkflowBuilderModal({
   };
   const acceptExternal = () => {
     try {
-      let block = findWorkflowBlocks(externalResponse)[0];
+      let { block, instructions } = parseExternalWorkflowResponse(
+        externalResponse,
+        artifactKind,
+      );
       if (!block && artifactKind === "workflow") {
         const parsed = yaml.load(externalResponse, {
           schema: yaml.JSON_SCHEMA,
@@ -549,9 +611,6 @@ export function AIWorkflowBuilderModal({
           )[0];
         }
       }
-      const instructions = artifactKind === "skill"
-        ? extractSkillInstructions(externalResponse)
-        : "";
       if (!block || block.error) {
         throw new Error(
           block?.error || "No workflow block was found in the pasted response.",
@@ -686,18 +745,68 @@ export function AIWorkflowBuilderModal({
                 }}
               />
             </label>
-            <label>
+            <div className="ai-workflow-attachments">
               <span>Reference attachments</span>
-              <input
-                value={attachmentPaths}
-                onChange={(event) => setAttachmentPaths(event.target.value)}
-                placeholder="images/design.png, docs/spec.pdf"
-              />
+              <div className="ai-workflow-attachment-list">
+                {attachmentPaths.map((filePath) => (
+                  <span key={filePath}>
+                    {filePath}
+                    <button
+                      type="button"
+                      title={`Remove ${filePath}`}
+                      onClick={() =>
+                        setAttachmentPaths((paths) =>
+                          paths.filter((path) => path !== filePath)
+                        )}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => void openAttachmentPicker()}
+                >
+                  <Paperclip size={13} /> Add file
+                </button>
+              </div>
+              {attachmentPickerOpen && (
+                <div className="ai-workflow-attachment-picker">
+                  <label>
+                    <Search size={13} />
+                    <input
+                      autoFocus
+                      value={attachmentQuery}
+                      onChange={(event) =>
+                        setAttachmentQuery(event.target.value)}
+                      placeholder="Find a Workspace file"
+                    />
+                  </label>
+                  <div>
+                    {attachmentLoading
+                      ? <small>Loading files…</small>
+                      : filteredAttachmentChoices.length
+                      ? filteredAttachmentChoices.map((filePath) => (
+                        <button
+                          type="button"
+                          key={filePath}
+                          onClick={() => {
+                            setAttachmentPaths((paths) => [...paths, filePath]);
+                            setAttachmentQuery("");
+                          }}
+                        >
+                          {filePath}
+                        </button>
+                      ))
+                      : <small>No matching files</small>}
+                  </div>
+                </div>
+              )}
               <small>
-                Comma-separated Workspace paths. Text is embedded; images,
-                PDFs, audio, and video are sent as multimodal attachments.
+                Text is embedded; binary files must be attached separately when
+                using an external LLM.
               </small>
-            </label>
+            </div>
             {mode === "modify" && relevantHistory.length > 0 && (
               <fieldset className="ai-workflow-history-select">
                 <legend>Reference execution history</legend>
@@ -752,7 +861,7 @@ export function AIWorkflowBuilderModal({
               <button type="button" onClick={onClose}>Cancel</button>
               <button
                 type="button"
-                onClick={openExternal}
+                onClick={() => void openExternal()}
               >
                 Use external LLM
               </button>

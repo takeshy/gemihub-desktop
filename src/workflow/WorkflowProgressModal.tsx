@@ -2,13 +2,155 @@ import { MonitorUp, Square, X } from "lucide-react";
 import type { Workflow, WorkflowLog } from "./types";
 import { reopenWorkflowMcpApp } from "./executor";
 
-export function WorkflowProgressModal({ workflow, logs, thinking = {}, running, onStop, onClose }: { workflow: Workflow; logs: WorkflowLog[]; thinking?: Record<string, string>; running: boolean; onStop: () => void; onClose: () => void }) {
+export function WorkflowProgressModal({
+  workflow,
+  logs,
+  thinking = {},
+  running,
+  onStop,
+  onClose,
+}: {
+  workflow: Workflow;
+  logs: WorkflowLog[];
+  thinking?: Record<string, string>;
+  running: boolean;
+  onStop: () => void;
+  onClose: () => void;
+}) {
   const latest = new Map<string, WorkflowLog>();
   for (const log of logs) latest.set(log.nodeId, log);
-  return <div className="workflow-modal-backdrop"><section className="workflow-progress-modal">
-    <header><div><strong>{workflow.name || "Workflow"}</strong><span>{running ? "Running…" : logs.some((log) => log.status === "error") ? "Failed" : "Completed"}</span></div>{!running && <button type="button" onClick={onClose}><X size={16} /></button>}</header>
-    <div className="workflow-progress-list">{[...workflow.nodes.values()].map((node, index) => { const state = latest.get(node.id); const hasStepDetail = !!state && (state.input !== undefined || state.output !== undefined || state.usage !== undefined); return <article key={node.id} className={state?.status || "pending"}><span>{index + 1}</span><div><strong>{node.id}</strong><small>{node.type}</small></div><em>{state?.status || "pending"}</em>{state?.message && state.status === "error" && <p>{state.message}</p>}{state?.mcpAppInfo && <button type="button" className="workflow-progress-mcp" onClick={() => void reopenWorkflowMcpApp(state.mcpAppInfo!)}><MonitorUp size={11} />Open MCP App</button>}{thinking[node.id] && <details className="workflow-progress-thinking" open={running && state?.status === "info"}><summary>Thinking</summary><pre>{thinking[node.id]}</pre></details>}{hasStepDetail && <details className="workflow-progress-thinking"><summary>Step details</summary>{state.input !== undefined && <><b>Input</b><pre>{JSON.stringify(state.input, null, 2)}</pre></>}{state.output !== undefined && <><b>Output</b><pre>{typeof state.output === "string" ? state.output : JSON.stringify(state.output, null, 2)}</pre></>}{state.usage && <div className="workflow-progress-usage"><span>{state.elapsedMs !== undefined ? state.elapsedMs < 1000 ? `${state.elapsedMs}ms` : `${(state.elapsedMs / 1000).toFixed(1)}s` : ""}</span><span>{state.usage.inputTokens !== undefined && state.usage.outputTokens !== undefined ? `${state.usage.inputTokens.toLocaleString()} → ${state.usage.outputTokens.toLocaleString()} tokens` : ""}</span>{state.usage.thinkingTokens ? <span>Thinking {state.usage.thinkingTokens.toLocaleString()}</span> : null}</div>}</details>}</article>; })}</div>
-    <div className="workflow-progress-log">{logs.slice(-100).map((log, index) => <div key={`${log.nodeId}-${index}`} className={log.status}><time>{new Date(log.timestamp).toLocaleTimeString()}</time><strong>{log.nodeId}</strong><span>{log.message}</span>{log.elapsedMs !== undefined && <em>{(log.elapsedMs / 1000).toFixed(1)}s</em>}</div>)}</div>
-    <footer>{running ? <button type="button" className="danger" onClick={onStop}><Square size={12} />Stop</button> : <button type="button" onClick={onClose}>Close</button>}</footer>
-  </section></div>;
+  return (
+    <div className="workflow-modal-backdrop">
+      <section className="workflow-progress-modal">
+        <header>
+          <div>
+            <strong>{workflow.name || "Workflow"}</strong>
+            <span>
+              {running
+                ? "Running…"
+                : logs.some((log) => log.status === "error")
+                ? "Failed"
+                : "Completed"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            title={running
+              ? "Close this window and keep the workflow running"
+              : "Close"}
+          >
+            <X size={16} />
+          </button>
+        </header>
+        <div className="workflow-progress-list">
+          {[...workflow.nodes.values()].map((node, index) => {
+            const state = latest.get(node.id);
+            const hasStepDetail = !!state &&
+              (state.input !== undefined || state.output !== undefined ||
+                state.usage !== undefined);
+            return (
+              <article key={node.id} className={state?.status || "pending"}>
+                <span>{index + 1}</span>
+                <div>
+                  <strong>{node.id}</strong>
+                  <small>{node.type}</small>
+                </div>
+                <em>{state?.status || "pending"}</em>
+                {state?.message && state.status === "error" && (
+                  <p>{state.message}</p>
+                )}
+                {state?.mcpAppInfo && (
+                  <button
+                    type="button"
+                    className="workflow-progress-mcp"
+                    onClick={() => void reopenWorkflowMcpApp(state.mcpAppInfo!)}
+                  >
+                    <MonitorUp size={11} />Open MCP App
+                  </button>
+                )}
+                {thinking[node.id] && (
+                  <details
+                    className="workflow-progress-thinking"
+                    open={running && state?.status === "info"}
+                  >
+                    <summary>Thinking</summary>
+                    <pre>{thinking[node.id]}</pre>
+                  </details>
+                )}
+                {hasStepDetail && (
+                  <details className="workflow-progress-thinking">
+                    <summary>Step details</summary>
+                    {state.input !== undefined && (
+                      <>
+                        <b>Input</b>
+                        <pre>{JSON.stringify(state.input, null, 2)}</pre>
+                      </>
+                    )}
+                    {state.output !== undefined && (
+                      <>
+                        <b>Output</b>
+                        <pre>{typeof state.output === "string" ? state.output : JSON.stringify(state.output, null, 2)}</pre>
+                      </>
+                    )}
+                    {state.usage && (
+                      <div className="workflow-progress-usage">
+                        <span>
+                          {state.elapsedMs !== undefined
+                            ? state.elapsedMs < 1000
+                              ? `${state.elapsedMs}ms`
+                              : `${(state.elapsedMs / 1000).toFixed(1)}s`
+                            : ""}
+                        </span>
+                        <span>
+                          {state.usage.inputTokens !== undefined &&
+                              state.usage.outputTokens !== undefined
+                            ? `${state.usage.inputTokens.toLocaleString()} → ${state.usage.outputTokens.toLocaleString()} tokens`
+                            : ""}
+                        </span>
+                        {state.usage.thinkingTokens
+                          ? (
+                            <span>
+                              Thinking{" "}
+                              {state.usage.thinkingTokens.toLocaleString()}
+                            </span>
+                          )
+                          : null}
+                      </div>
+                    )}
+                  </details>
+                )}
+              </article>
+            );
+          })}
+        </div>
+        <div className="workflow-progress-log">
+          {logs.slice(-100).map((log, index) => (
+            <div key={`${log.nodeId}-${index}`} className={log.status}>
+              <time>{new Date(log.timestamp).toLocaleTimeString()}</time>
+              <strong>{log.nodeId}</strong>
+              <span>{log.message}</span>
+              {log.elapsedMs !== undefined && (
+                <em>{(log.elapsedMs / 1000).toFixed(1)}s</em>
+              )}
+            </div>
+          ))}
+        </div>
+        <footer>
+          {running && (
+            <button type="button" onClick={onClose}>
+              Close and keep running
+            </button>
+          )}
+          {running
+            ? (
+              <button type="button" className="danger" onClick={onStop}>
+                <Square size={12} />Stop
+              </button>
+            )
+            : <button type="button" onClick={onClose}>Close</button>}
+        </footer>
+      </section>
+    </div>
+  );
 }

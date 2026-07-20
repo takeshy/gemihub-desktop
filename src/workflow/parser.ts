@@ -331,6 +331,11 @@ export function parseWorkflowFromMarkdown(markdown: string): Workflow {
       : undefined,
   };
   const rawNodes = root.nodes as Array<Record<string, unknown>>;
+  const terminalNodeIds = new Set(
+    rawNodes.filter((raw) => raw?.type === "end").map((raw, index) =>
+      normalizeWorkflowValue(raw.id) || `node-${index + 1}`
+    ),
+  );
   rawNodes.forEach((raw, index) => {
     const normalizedType = workflowNodeTypeForDesktop(raw?.type);
     if (
@@ -357,7 +362,7 @@ export function parseWorkflowFromMarkdown(markdown: string): Workflow {
     indexes.set(normalizeWorkflowValue(raw?.id) || `node-${index + 1}`, index)
   );
   const edge = (from: string, to: string, label?: WorkflowEdge["label"]) => {
-    if (to === "end") return;
+    if (to === "end" || terminalNodeIds.has(to)) return;
     if (!ids.has(to)) {
       throw new Error(`Invalid edge reference: ${from} -> ${to}`);
     }

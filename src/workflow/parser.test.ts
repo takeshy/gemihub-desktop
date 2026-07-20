@@ -158,6 +158,26 @@ Deno.test("rejects back-references unless the target is a while node", () => {
   );
 });
 
+Deno.test("accepts external workflows with an explicit end node as a terminal alias", () => {
+  const source = serializeWorkflowData({
+    name: "external terminal",
+    nodes: [{
+      id: "save-infographic",
+      type: "file-save",
+      source: "image",
+      path: "output.png",
+      next: "end-workflow",
+    }, {
+      id: "end-workflow",
+      type: "end",
+    }],
+  });
+  const workflow = parseWorkflowFromMarkdown(source);
+  assertEquals(workflow.nodes.has("save-infographic"), true);
+  assertEquals(workflow.nodes.has("end-workflow"), false);
+  assertEquals(workflow.edges, []);
+});
+
 Deno.test("replaces nested values and evaluates conditions and arithmetic", () => {
   const variables = new Map<string, string | number>([["count", 2], [
     "payload",

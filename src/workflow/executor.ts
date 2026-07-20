@@ -318,6 +318,10 @@ function workflowProviderForModel(
   return resolved;
 }
 
+export function isWorkflowImageGenerationModel(model: string): boolean {
+  return /(?:image|imagen)/i.test(model);
+}
+
 function multipartBodyBase64(
   fields: Record<string, string>,
   boundary: string,
@@ -1165,7 +1169,16 @@ async function executeNode(
         services.chatSettings,
         requestedModel,
       );
-      const imageGenerationModel = /(?:image|imagen)/i.test(requestedModel);
+      const imageGenerationModel = isWorkflowImageGenerationModel(
+        requestedModel,
+      );
+      if (node.properties.saveImageTo && !imageGenerationModel) {
+        throw new Error(
+          `command node ${node.id} uses saveImageTo but model "${
+            requestedModel || "(none)"
+          }" is not an image-generation model. Set model to a configured image model such as gemini-3.1-flash-image-preview.`,
+        );
+      }
       let prompt = property(node, "prompt", variables);
       if (!prompt) throw new Error("command node is missing prompt.");
       const originalPrompt = prompt;

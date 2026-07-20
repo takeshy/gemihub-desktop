@@ -18,7 +18,7 @@ nodes:
 
 Top-level \`options.showProgress: false\` suppresses the hotkey execution progress window (default: true).
 
-Every node needs a unique id and type. Normal nodes use next; if/while use trueNext and falseNext. Use end to terminate explicitly.
+Every node needs a unique id and type. Normal nodes use next; if/while use trueNext and falseNext. Terminate with \`next: end\` (or a branch target of \`end\`). Never create a node with \`type: end\`; \`end\` is a reserved target, not a node type.
 
 Variable syntax:
 - {{name}}, {{object.property}}, {{array[0].name}}, and {{array[index]}} where index is another variable.
@@ -29,10 +29,10 @@ Variable syntax:
 System variables include _date, _time, _datetime, _workflowName, and _lastModel. Event runs also provide _eventType, _eventFilePath, _eventFile, _eventFileContent, and _eventOldPath. Hotkey runs provide _hotkeyContent, _hotkeySelection, _hotkeyActiveFile, and _hotkeySelectionInfo. Setting _clipboard copies text to the clipboard.
 
 Supported nodes:
-- variable: required name; optional value. Omit value for a caller-supplied input.
+- variable: required name; optional value. Omit value only for input supplied by a parent workflow, skill, hotkey, or other caller. It does not show an input dialog and becomes empty when a standalone run has no caller value.
 - set: required name and value (supports simple arithmetic; _clipboard copies the result)
 - if / while: condition using ==, !=, <, >, <=, >=, contains; required trueNext and optional falseNext
-- command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/none), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo
+- command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/none), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo. When using saveImageTo, model must explicitly name a configured image-generation model (for example gemini-3.1-flash-image-preview); a text model cannot create image data.
 - gemihub-command: command (encrypt, duplicate, convert-to-html, rename), path, optional text, metadata JSON, saveTo. PDF conversion is unavailable; publish/unpublish require Web.
 - http: url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers JSON; body; saveTo; saveStatus; throwOnError. Binary input/output uses FileExplorerData.
 - json: source (bare variable name), saveTo
@@ -43,6 +43,7 @@ Supported nodes:
 - folder-list: folder, saveTo
 - open: path
 - dialog: title, message, markdown, options, multiSelect, inputTitle, multiline, defaults JSON, button1, button2, saveTo
+- prompt-value: saveTo; optional title, message, default, multiline. Use this to ask the user for text during an interactive standalone run. Headless runs require default.
 - prompt-file: title, default, forcePrompt, saveTo (content), saveFileTo (path)
 - prompt-selection: saveTo (content), saveSelectionTo (selection metadata)
 - workflow: path; input maps child variables to values; output maps parent variables to child names; without output all child variables are copied with optional prefix; saveTo stores the complete child result
@@ -57,6 +58,10 @@ Supported nodes:
 FileExplorerData is JSON with path, basename, name, extension, mimeType, contentType (text or binary), and data (text or Base64).
 
 For skill workflows, every {{variable}} that is never initialized by variable/set or a save property becomes an input. Save meaningful outputs to named variables; the chat caller automatically receives every variable not beginning with __. Do not add a final command merely to display a value.
+
+For a standalone interactive workflow, acquire every required user value with prompt-value, prompt-file, prompt-selection, file-explorer, or dialog before using it. Do not use an uninitialized variable node as a substitute for a user prompt. Use variable without value only when the request explicitly says the workflow is called with that input, or when authoring a skill/child workflow whose caller supplies it.
+
+Interpret "infographic" as a readable, visually structured Markdown or HTML document by default. Use headings, short sections, emoji/icons, callouts, cards, tables, timelines, and restrained colors as appropriate. Do not assume it means a bitmap image. Use saveImageTo and an image-generation model only when the user explicitly asks for an image, illustration, PNG, JPEG, or other raster output. For HTML infographic output, have a command return the complete HTML to saveTo and then write it with a note node or another appropriate text-file output.
 
 Prefer Workspace file nodes (note, note-read, note-search, note-list) and never call them vault operations in names or descriptions. Use confirm: true for writes. Keep the graph connected and finite; only while nodes may be loop targets. Always specify saveTo for output-producing nodes. Use one task per command node and add a comment property when its purpose is not obvious.
 `.trim();
@@ -80,7 +85,7 @@ export const getWorkflowSpecTool: ChatToolDefinition = {
 
 const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
   variable:
-    "- variable: required name; optional value. Omit value for a caller-supplied input.",
+    "- variable: required name; optional value. Omit value only for caller-supplied input; it does not display a user prompt and is empty in a standalone run without caller input.",
   set:
     "- set: required name and value; supports one arithmetic operation. Setting _clipboard copies the result.",
   if:
@@ -88,7 +93,7 @@ const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
   while:
     "- while: required condition and trueNext; optional falseNext is the exit. Only while nodes may be loop targets.",
   command:
-    "- command: prompt; optional model, ragSetting (__websearch__/__none__/configured name), vaultTools (all/noSearch/none), mcpServers, enableThinking, attachments, saveTo, saveImageTo.",
+    "- command: prompt; optional model, ragSetting (__websearch__/__none__/configured name), vaultTools (all/noSearch/none), mcpServers, enableThinking, attachments, saveTo, saveImageTo. saveImageTo requires an explicitly selected image-generation model.",
   "gemihub-command":
     "- gemihub-command: command encrypt/duplicate/convert-to-html/rename and path; optional text, metadata JSON, saveTo. convert-to-pdf is unavailable; publish/unpublish require the Web service.",
   http:
