@@ -288,6 +288,9 @@ func (a *App) ReadWorkspaceFile(path string) (*LocalFileResult, error) {
 	}
 	result, err := readLocalFile(target)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	result.Path = filepath.ToSlash(strings.TrimSpace(path))
@@ -301,6 +304,13 @@ func (a *App) WriteWorkspaceFile(path, content string) error {
 	}
 	if isBinaryFileName(filepath.Base(target)) {
 		return fmt.Errorf("refusing text write to binary file %q", filepath.Base(target))
+	}
+	unchanged, err := fileContentMatches(target, []byte(content))
+	if err != nil {
+		return err
+	}
+	if unchanged {
+		return nil
 	}
 	if err := a.recordFileVersion(path, target); err != nil {
 		return err
@@ -336,6 +346,13 @@ func (a *App) WriteWorkspaceBinaryFile(path, contentBase64 string) error {
 	content, err := base64.StdEncoding.DecodeString(contentBase64)
 	if err != nil {
 		return fmt.Errorf("invalid base64 content: %w", err)
+	}
+	unchanged, err := fileContentMatches(target, content)
+	if err != nil {
+		return err
+	}
+	if unchanged {
+		return nil
 	}
 	if err := a.recordFileVersion(path, target); err != nil {
 		return err
@@ -478,6 +495,13 @@ func (a *App) WriteFile(path, content string) error {
 	}
 	if isBinaryFileName(filepath.Base(target)) {
 		return fmt.Errorf("refusing text write to binary file %q; use WriteBinaryFile", filepath.Base(target))
+	}
+	unchanged, err := fileContentMatches(target, []byte(content))
+	if err != nil {
+		return err
+	}
+	if unchanged {
+		return nil
 	}
 	if err := a.recordFileVersion(path, target); err != nil {
 		return err
@@ -722,6 +746,13 @@ func (a *App) WriteBinaryFile(path, contentBase64 string) error {
 	if err != nil {
 		return fmt.Errorf("invalid base64 content: %w", err)
 	}
+	unchanged, err := fileContentMatches(target, bytes)
+	if err != nil {
+		return err
+	}
+	if unchanged {
+		return nil
+	}
 	if err := a.recordFileVersion(path, target); err != nil {
 		return err
 	}
@@ -729,6 +760,17 @@ func (a *App) WriteBinaryFile(path, contentBase64 string) error {
 		return err
 	}
 	return writeUserFileAtomic(target, bytes)
+}
+
+func fileContentMatches(target string, content []byte) (bool, error) {
+	current, err := os.ReadFile(target)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(current, content), nil
 }
 
 func writeUserFileAtomic(target string, content []byte) error {

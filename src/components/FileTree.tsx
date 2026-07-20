@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { EncryptedFileModal } from "./EncryptedFileModal";
+import { useI18n } from "../i18n/context";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import { isEncryptedFile } from "../lib/hybridEncryption";
 import {
@@ -38,15 +39,16 @@ import {
 import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
 import {
   createDirectory,
-  copyLocalPathIntoWorkspace,
   duplicateFile,
   type FileHistoryEntry,
   type FileSearchResult,
   type FileTreeNode,
+  inspectLocalPath,
   listFileHistory,
   listFileTree,
   listTrash,
   listWorkspaceTree,
+  moveLocalPathIntoWorkspace,
   movePathIntoWorkspace,
   onWailsFileDrop,
   openContainingFolder,
@@ -354,6 +356,7 @@ export function FileTree({
   onDirectoryBaseUnavailable: () => void;
   onCollapse: () => void;
 }) {
+  const { t: tr } = useI18n();
   const [nodes, setNodes] = useState<FileTreeNode[]>([]);
   const [workspaceNodes, setWorkspaceNodes] = useState<FileTreeNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() =>
@@ -399,6 +402,7 @@ export function FileTree({
       items: Array<{ path: string; name: string; isDir: boolean }>;
       destination: string;
       leaveLink: boolean;
+      source: "files" | "local";
       busy: boolean;
       error: string;
     } | null
@@ -431,29 +435,38 @@ export function FileTree({
   }, [reload]);
   useEffect(() => {
     const dispose = onWailsFileDrop((x, y, paths) => {
+      if (!paths.length) return;
       const target = document.elementFromPoint(x, y)?.closest<HTMLElement>(
         "[data-workspace-drop]",
       );
-      if (!target || !paths.length) return;
-      const destination = target.dataset.workspaceDrop || "";
+      const destination = target?.dataset.workspaceDrop || "";
       void (async () => {
-        const errors: string[] = [];
+        const items: Array<{ path: string; name: string; isDir: boolean }> = [];
         for (const path of paths) {
-          const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
-          if (!name) continue;
           try {
-            await copyLocalPathIntoWorkspace(path, destination, name);
-          } catch (error) {
-            errors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
-          }
+            const info = await inspectLocalPath(path);
+            if (info) {
+              items.push({
+                path: info.path,
+                name: info.name,
+                isDir: info.isDirectory,
+              });
+            }
+          } catch { /* Invalid dropped paths are ignored. */ }
         }
-        await reload();
-        window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
-        if (errors.length) alert(errors.join("\n"));
+        if (!items.length) return;
+        setWorkspaceMove({
+          items,
+          destination,
+          leaveLink: false,
+          source: "local",
+          busy: false,
+          error: "",
+        });
       })();
     });
     return () => dispose?.();
-  }, [reload]);
+  }, []);
   useEffect(() => {
     setExternalSelection(new Set());
   }, [directoryBase]);
@@ -550,6 +563,7 @@ export function FileTree({
       })),
       destination,
       leaveLink: false,
+      source: "files",
       busy: false,
       error: "",
     });
@@ -724,7 +738,7 @@ export function FileTree({
     const selected = contextMenu;
     setContextMenu(null);
     if (!selected || selected.node.isDir) return;
-    const password = prompt("暗号化パスワードを入力してください") || "";
+    const password = prompt(tr("files.encryptPassword")) || "";
     if (!password) return;
     try {
       await encryptWorkspaceFile(selected.path, password);
@@ -780,6 +794,7 @@ export function FileTree({
       }],
       destination: "",
       leaveLink: false,
+      source: "files",
       busy: false,
       error: "",
     });
@@ -792,8 +807,7 @@ export function FileTree({
     if (new Set(names).size !== names.length) {
       setWorkspaceMove({
         ...workspaceMove,
-        error:
-          "同名のファイルが含まれているため、まとめて同じ移動先へ移動できません。",
+        error: tr("files.duplicateNames"),
       });
       return;
     }
@@ -806,7 +820,10 @@ export function FileTree({
         )
       );
       for (const [index, item] of workspaceMove.items.entries()) {
-        await movePathIntoWorkspace(
+        const move = workspaceMove.source === "local"
+          ? moveLocalPathIntoWorkspace
+          : movePathIntoWorkspace;
+        await move(
           item.path,
           workspaceMove.destination,
           item.name,
@@ -817,9 +834,11 @@ export function FileTree({
         }
       }
       const moved = new Set(
-        workspaceMove.items.map((item) =>
-          item.path.replace(/^files:\/\//, "").replace(/^\.\//, "")
-        ),
+        workspaceMove.source === "files"
+          ? workspaceMove.items.map((item) =>
+            item.path.replace(/^files:\/\//, "").replace(/^\.\//, "")
+          )
+          : [],
       );
       const withoutMoved = (items: FileTreeNode[]): FileTreeNode[] =>
         items
@@ -1018,7 +1037,7 @@ export function FileTree({
                   );
                 }}
               >
-                {draggedExternal.length ? "Workspace直下へ移動" : ""}
+                {draggedExternal.length ? tr("files.moveToRoot") : ""}
               </div>
             </section>
             {query.trim() && visibleContentResults.some((item) =>
@@ -1044,8 +1063,8 @@ export function FileTree({
             {showExternal && (
               <section className="file-tree-block external-block">
                 <header>
-                  <span>Workspace外</span>
-                  <small>Ctrl/Cmd・Shiftで複数選択</small>
+                  <span>{tr("files.workspaceExternal")}</span>
+                  <small>{tr("files.multiSelectHint")}</small>
                 </header>
                 <TreeRow
                   key={directoryBase}
@@ -1120,12 +1139,14 @@ export function FileTree({
                       setContextMenu(null);
                     }}
                   >
-                    <LockKeyhole size={14} />暗号化ファイルを開く
+                    <LockKeyhole size={14} />
+                    {tr("files.openEncrypted")}
                   </button>
                 )
                 : (
                   <button type="button" onClick={() => void encryptFromMenu()}>
-                    <LockKeyhole size={14} />ファイルを暗号化
+                    <LockKeyhole size={14} />
+                    {tr("files.encrypt")}
                   </button>
                 )}
               <button type="button" onClick={() => void duplicateFromMenu()}>
@@ -1221,7 +1242,7 @@ export function FileTree({
         <div className="encrypted-file-modal-backdrop">
           <section className="workspace-move-dialog">
             <header>
-              <strong>Workspaceへ移動</strong>
+              <strong>{tr("files.moveTitle")}</strong>
               <button
                 type="button"
                 disabled={workspaceMove.busy}
@@ -1233,11 +1254,17 @@ export function FileTree({
             <div>
               <div className="workspace-move-warning">
                 {workspaceMove.items.length === 1
-                  ? workspaceMove.items[0].name
-                  : `${workspaceMove.items.length}個のファイル`}を別ディレクトリへ移動します。よろしいですか？
+                  ? tr("files.moveConfirmOne").replace(
+                    "{name}",
+                    workspaceMove.items[0].name,
+                  )
+                  : tr("files.moveConfirmMany").replace(
+                    "{count}",
+                    String(workspaceMove.items.length),
+                  )}
               </div>
               <label>
-                <span>移動元</span>
+                <span>{tr("files.moveSource")}</span>
                 <div className="workspace-move-sources">
                   {workspaceMove.items.map((item) => (
                     <small key={item.path}>
@@ -1247,7 +1274,7 @@ export function FileTree({
                 </div>
               </label>
               <label>
-                <span>移動先</span>
+                <span>{tr("files.moveDestination")}</span>
                 <input
                   value={workspaceMove.destination
                     ? `Workspace/${workspaceMove.destination}`
@@ -1269,12 +1296,12 @@ export function FileTree({
                           leaveLink: event.target.checked,
                         })}
                     />
-                    <span>元の場所にリンクを残す</span>
+                    <span>{tr("files.leaveLink")}</span>
                   </label>
                   <small>
                     {navigator.platform.toLowerCase().includes("win")
-                      ? "WindowsのディレクトリJunctionを作成します。"
-                      : "シンボリックリンクを作成します。"}
+                      ? tr("files.junctionHint")
+                      : tr("files.symlinkHint")}
                   </small>
                 </>
               )}
@@ -1288,7 +1315,7 @@ export function FileTree({
                 disabled={workspaceMove.busy}
                 onClick={() => setWorkspaceMove(null)}
               >
-                キャンセル
+                {tr("common.cancel")}
               </button>
               <button
                 type="button"
@@ -1296,7 +1323,9 @@ export function FileTree({
                 disabled={workspaceMove.busy}
                 onClick={() => void confirmWorkspaceMove()}
               >
-                {workspaceMove.busy ? "移動中…" : "移動する"}
+                {workspaceMove.busy
+                  ? tr("files.moving")
+                  : tr("files.moveAction")}
               </button>
             </footer>
           </section>

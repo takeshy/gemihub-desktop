@@ -19,7 +19,7 @@ function pluginManifest(overrides: Record<string, unknown> = {}): string {
     description: "Demo plugin",
     author: "Test",
     permissions: ["files"],
-    hostPatches: { "llm-hub-workspace": ["patches/workspace.patch"] },
+    hostPatches: { "gemihub-desktop": ["patches/workspace.patch"] },
     ...overrides,
   });
 }

@@ -1,10 +1,47 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
   memoTimelineBody,
+  loadTimelineCalendarPosts,
   parseTimelineCalendarPosts,
   sanitizeTimelineName,
   timelineFolder,
 } from "./timelineEvents";
+
+Deno.test("Calendar loads Timeline data without scanning DirectoryBase", async () => {
+  const runtime = globalThis as unknown as {
+    window?: { go?: { main: { App: Record<string, unknown> } } };
+  };
+  const previousWindow = runtime.window;
+  runtime.window = {
+    go: {
+      main: {
+        App: {
+          FileInventory: () => {
+            throw new Error("DirectoryBase must not be scanned");
+          },
+          ListWorkspaceFiles: () => Promise.resolve([{
+            path: "Dashboards/Timeline/Timeline/2026-07-20.md",
+            name: "2026-07-20.md",
+            size: 1,
+            modTime: 1,
+          }]),
+          ReadWorkspaceFile: () => Promise.resolve({
+            path: "Dashboards/Timeline/Timeline/2026-07-20.md",
+            fileName: "2026-07-20.md",
+            content:
+              "2026-07-20T01:02:03.000Z\nid: isolated\n\nWorkspace only\n",
+          }),
+        },
+      },
+    },
+  };
+  try {
+    const posts = await loadTimelineCalendarPosts("Timeline");
+    assertEquals(posts.map((post) => post.id), ["isolated"]);
+  } finally {
+    runtime.window = previousWindow;
+  }
+});
 
 Deno.test("timeline calendar posts parse shared timeline and event markers", () => {
   const content = `<!-- timeline-post: 2026-07-18T01:02:03.000Z -->

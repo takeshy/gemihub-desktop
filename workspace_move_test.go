@@ -153,7 +153,7 @@ func TestMovePathIntoWorkspaceRejectsTraversalAndFileLink(t *testing.T) {
 	}
 }
 
-func TestCopyLocalPathIntoWorkspaceKeepsOriginal(t *testing.T) {
+func TestMoveLocalPathIntoWorkspaceRemovesOriginal(t *testing.T) {
 	app, _, workspace := workspaceMoveTestApp(t)
 	sourceDir := t.TempDir()
 	source := filepath.Join(sourceDir, "dropped.md")
@@ -164,7 +164,7 @@ func TestCopyLocalPathIntoWorkspaceKeepsOriginal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := app.CopyLocalPathIntoWorkspace(source, "Notes", "dropped.md")
+	result, err := app.MoveLocalPathIntoWorkspace(source, "Notes", "dropped.md", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,13 +172,13 @@ func TestCopyLocalPathIntoWorkspaceKeepsOriginal(t *testing.T) {
 		t.Fatalf("unexpected workspace path: %q", result.WorkspacePath)
 	}
 	if content, err := os.ReadFile(filepath.Join(workspace, "Notes", "dropped.md")); err != nil || string(content) != "copied" {
-		t.Fatalf("unexpected copied file: %q, %v", content, err)
+		t.Fatalf("unexpected moved file: %q, %v", content, err)
 	}
-	if content, err := os.ReadFile(source); err != nil || string(content) != "copied" {
-		t.Fatalf("source should remain unchanged: %q, %v", content, err)
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("source should be removed: %v", err)
 	}
-	if _, err := app.CopyLocalPathIntoWorkspace(source, "Notes", "dropped.md"); err == nil {
-		t.Fatal("expected an existing destination to be rejected")
+	if _, err := app.MoveLocalPathIntoWorkspace("relative.md", "Notes", "relative.md", false); err == nil {
+		t.Fatal("expected a relative dropped path to be rejected")
 	}
 }
 

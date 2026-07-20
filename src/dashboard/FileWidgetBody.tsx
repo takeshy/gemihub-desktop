@@ -1,4 +1,5 @@
 import {
+  memo,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -86,6 +87,13 @@ import { memoChatDraft } from "./memoChat";
 
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
+
+const FileWidgetWysiwygEditor = memo(
+  WysiwygEditor,
+  (previous, next) =>
+    previous.value === next.value &&
+    previous.onImageChange === next.onImageChange,
+);
 
 interface ResolvedGroup {
   key: string;
@@ -442,7 +450,7 @@ export function FileWidgetBody({
       setMemoError("");
     } catch (error) {
       console.error(error);
-      setMemoError("メモファイルを読み込めませんでした。");
+      setMemoError(tr("memo.loadFailed"));
     } finally {
       setMemoLoading(false);
     }
@@ -492,10 +500,10 @@ export function FileWidgetBody({
           // The memo is already durable. Do not make a sync failure invite a
           // retry that would duplicate the source memo.
           console.warn("Could not sync memo post to Timeline.", error);
-          timelineSyncError =
-            `メモは保存されましたが、Timelineへの連携に失敗しました: ${
-              error instanceof Error ? error.message : String(error)
-            }`;
+          timelineSyncError = tr("memo.timelineSyncFailed").replace(
+            "{error}",
+            error instanceof Error ? error.message : String(error),
+          );
         }
       }
       await reloadMemo();
@@ -951,7 +959,7 @@ export function FileWidgetBody({
     };
   }, [selectionScopeFor]);
 
-  // §7.2: right-clicking a selection opens the「メモに追加」context menu.
+  // §7.2: right-clicking a selection opens the Add to memo context menu.
   // Returns true when our menu is shown (suppressing the native one).
   const handleSelectionContextMenu = useCallback(
     (
@@ -1283,7 +1291,7 @@ export function FileWidgetBody({
           <div>
             <FileArchive size={32} />
             <h3>{fileName}</h3>
-            <p>このファイル形式はアプリ内でプレビューできません。</p>
+            <p>{tr("doc.previewUnsupported")}</p>
             <button
               type="button"
               onClick={() =>
@@ -1292,7 +1300,8 @@ export function FileWidgetBody({
                 )}
               disabled={!filePath}
             >
-              <ExternalLink size={16} />外部アプリで開く
+              <ExternalLink size={16} />
+              {tr("doc.openExternal")}
             </button>
           </div>
         </div>
@@ -1364,9 +1373,7 @@ export function FileWidgetBody({
 
     if (kind === "image") {
       return documentContent
-        ? (
-          <ImageViewer src={documentContent} alt={fileName} />
-        )
+        ? <ImageViewer src={documentContent} alt={fileName} />
         : <div className="dashboard-empty">{tr("doc.openImage")}</div>;
     }
 
@@ -1478,7 +1485,7 @@ export function FileWidgetBody({
                     })}
                 />
               ))}
-          <WysiwygEditor
+          <FileWidgetWysiwygEditor
             value={markdownBody}
             onImageChange={uploadMarkdownImage}
             onChange={(next) =>
@@ -1631,7 +1638,7 @@ export function FileWidgetBody({
                 }}
               >
                 <Bot size={13} />
-                <span>AIに質問</span>
+                <span>{tr("memo.askAI")}</span>
               </button>
             )}
           </div>
@@ -1666,7 +1673,9 @@ export function FileWidgetBody({
             style={{ left: hover.x, top: hover.y }}
           >
             {hover.count > 1 && (
-              <span className="memo-hover-count">{hover.count}件のメモ</span>
+              <span className="memo-hover-count">
+                {tr("memo.hoverCount").replace("{count}", String(hover.count))}
+              </span>
             )}
             <p>{hover.preview}</p>
           </div>

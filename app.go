@@ -36,6 +36,7 @@ type App struct {
 	chatLimitCalls     map[string]chan int
 	chatCancelMu       sync.Mutex
 	chatCancels        map[string]context.CancelFunc
+	timelineMu         sync.Mutex
 	mcpStdioMu         sync.Mutex
 	mcpStdio           map[string]*mcpStdioSession
 	mcpOAuthMu         sync.Mutex

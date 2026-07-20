@@ -601,8 +601,8 @@ export function PluginHost({
         repo: preview.repo,
       });
       const permissions = preview.manifest.permissions?.join(", ") || "none";
-      const patches = (preview.manifest.hostPatches?.[PLUGIN_HOST_ID] ||
-        preview.manifest.hostPatches?.["llm-hub-workspace"])?.join(", ") ||
+      const patches =
+        preview.manifest.hostPatches?.[PLUGIN_HOST_ID]?.join(", ") ||
         "none";
       const existing = configs.find((config) =>
         config.id === preview.manifest.id

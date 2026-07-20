@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -127,6 +128,13 @@ func (a *App) RestoreFileHistory(path, id string) error {
 	}
 	content, err := base64.StdEncoding.DecodeString(stored.Content)
 	if err != nil {
+		return err
+	}
+	current, err := os.ReadFile(target)
+	if err == nil && bytes.Equal(current, content) {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	_ = a.recordFileVersion(path, target)

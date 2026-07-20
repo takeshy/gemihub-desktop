@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -91,78 +90,37 @@ func moveRegularFile(source, destination string) error {
 	return nil
 }
 
-func copyExclusiveRegularFile(source, destination string, mode fs.FileMode) (err error) {
-	input, err := os.Open(source)
+// MovePathIntoWorkspace moves an external file or directory into a Workspace
+// directory. path is resolved against Files; destinationDirectory is relative
+// to the active Workspace. Links are supported for directories only.
+func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName string, leaveLink bool) (*WorkspaceDirectoryMoveResult, error) {
+	source, err := a.directoryPath(path, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer input.Close()
-	output, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := output.Close(); err == nil {
-			err = closeErr
-		}
-		if err != nil {
-			_ = os.Remove(destination)
-		}
-	}()
-	_, err = io.Copy(output, input)
-	return err
+	return a.moveResolvedPathIntoWorkspace(source, destinationDirectory, destinationName, leaveLink)
 }
 
-// CopyLocalPathIntoWorkspace copies a file dropped by the operating system
-// into a Workspace directory without removing the original file.
-func (a *App) CopyLocalPathIntoWorkspace(path, destinationDirectory, destinationName string) (*WorkspaceDirectoryMoveResult, error) {
-	name, err := validateWorkspaceDirectoryName(destinationName)
-	if err != nil {
-		return nil, err
-	}
+// MoveLocalPathIntoWorkspace moves an absolute path dropped by the operating
+// system into a Workspace directory. It uses the same validation and optional
+// directory-link behavior as moving an item from Files.
+func (a *App) MoveLocalPathIntoWorkspace(path, destinationDirectory, destinationName string, leaveLink bool) (*WorkspaceDirectoryMoveResult, error) {
 	source := filepath.Clean(strings.TrimSpace(path))
-	info, err := os.Lstat(source)
-	if err != nil {
-		return nil, err
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("only regular files can be copied into the Workspace")
+	if !filepath.IsAbs(source) {
+		return nil, fmt.Errorf("dropped path must be absolute")
 	}
 	workspaceBase := a.GetWorkspacePath()
 	if workspaceBase == "" {
 		return nil, fmt.Errorf("active Workspace is not configured")
 	}
-	targetParent, err := a.workspacePath(destinationDirectory, true)
-	if err != nil {
-		return nil, err
+	if pathInside(workspaceBase, source) {
+		return nil, fmt.Errorf("source is already inside the active Workspace")
 	}
-	parentInfo, err := os.Stat(targetParent)
-	if err != nil || !parentInfo.IsDir() {
-		return nil, fmt.Errorf("Workspace destination is not a directory")
-	}
-	destination := filepath.Join(targetParent, name)
-	if err := requirePathInside(workspaceBase, destination); err != nil {
-		return nil, err
-	}
-	if err := copyExclusiveRegularFile(source, destination, info.Mode()); err != nil {
-		if os.IsExist(err) {
-			return nil, fmt.Errorf("destination already contains %q", name)
-		}
-		return nil, fmt.Errorf("copy file: %w", err)
-	}
-	relative, _ := filepath.Rel(workspaceBase, destination)
-	return &WorkspaceDirectoryMoveResult{WorkspacePath: filepath.ToSlash(relative), OriginalPath: source}, nil
+	return a.moveResolvedPathIntoWorkspace(source, destinationDirectory, destinationName, leaveLink)
 }
 
-// MovePathIntoWorkspace moves an external file or directory into a Workspace
-// directory. path is resolved against Files; destinationDirectory is relative
-// to the active Workspace. Links are supported for directories only.
-func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName string, leaveLink bool) (*WorkspaceDirectoryMoveResult, error) {
+func (a *App) moveResolvedPathIntoWorkspace(source, destinationDirectory, destinationName string, leaveLink bool) (*WorkspaceDirectoryMoveResult, error) {
 	name, err := validateWorkspaceDirectoryName(destinationName)
-	if err != nil {
-		return nil, err
-	}
-	source, err := a.directoryPath(path, false)
 	if err != nil {
 		return nil, err
 	}

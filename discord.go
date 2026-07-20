@@ -19,7 +19,7 @@ import (
 const (
 	discordAPIBase    = "https://discord.com/api/v10"
 	discordGatewayURL = "wss://gateway.discord.gg/?v=10&encoding=json"
-	discordUserAgent  = "DiscordBot (LLM-Hub-Workspace, 1.0)"
+	discordUserAgent  = "DiscordBot (GemiHub-Desktop, 1.0)"
 )
 
 var discordSnowflakePattern = regexp.MustCompile(`^\d{17,20}$`)
@@ -583,7 +583,7 @@ func (bot *discordBot) generate(conversation *discordConversation) (string, erro
 	if request.SystemPrompt == "" {
 		request.SystemPrompt = bot.request.Chat.SystemPrompt
 	}
-	request.SystemPrompt += "\nYou are responding through Discord. Keep messages concise. File tool proposals are automatically applied because the user explicitly enabled the Discord bot."
+	request.SystemPrompt += "\nYou are responding through Discord. Keep messages concise. File tool proposals are automatically applied because the user explicitly enabled the Discord bot. When the user asks what they did today or what happened on a date, use read_timeline before answering. When the user asks you to memo, save, remember, or record something, use append_timeline to save it to the system Timeline."
 	activeWorkflows := false
 	for _, folderPath := range conversation.ActiveSkills {
 		for _, skill := range bot.request.Skills {

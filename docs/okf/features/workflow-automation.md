@@ -6,7 +6,7 @@ tags: [workflow, automation, events, files]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-Workflow Automationは、作業ディレクトリで起きたファイルイベントをtriggerとしてWorkflowを実行します。対象イベントはfile created、modified、deleted、renamed、openedです。automation ruleには実行するWorkflowと対象パス条件などを設定します。
+Workflow Automationは、Workspaceで起きたファイルイベントをtriggerとしてWorkflowを実行します。対象イベントはfile created、modified、deleted、renamed、openedです。automation ruleには実行するWorkflowと対象パス条件などを設定します。
 
 # 利用上の注意
 

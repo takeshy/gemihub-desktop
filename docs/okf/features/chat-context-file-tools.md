@@ -3,14 +3,14 @@ type: Product Feature
 title: Chatのコンテキストとファイル操作
 description: "`@file`、現在の選択範囲、ワークスペース検索をChatへ渡し、AIのファイル変更を確認後に適用する機能。"
 tags: [chat, context, files, grounding]
-timestamp: 2026-07-15T00:00:00+09:00
+timestamp: 2026-07-20T00:00:00+09:00
 ---
 
-Chat入力で `@file` を使うと作業ディレクトリ内のローカルファイルを会話へ追加できます。Promptの `{selection}` はactive widgetで選択中の文章とファイル情報へ展開され、Raw/Textでは選択位置も含まれます。質問対象を明示すると、AIが一般論ではなく手元の文書に基づいて回答しやすくなります。
+Chat入力で `@file` を使うとWorkspace内のローカルファイルを会話へ追加できます。Promptの `{selection}` はactive widgetで選択中の文章とファイル情報へ展開され、Raw/Textでは選択位置も含まれます。質問対象を明示すると、AIが一般論ではなく手元の文書に基づいて回答しやすくなります。
 
 # File tools
 
-API providerでは、設定したfile tool modeに応じてFiles directory内のファイルを読み、検索し、作成・編集・renameできます。変更を伴う操作はpending actionとして提示され、ユーザーの確認後にだけ適用されます。Files directory外へのpath traversalやsymlink escapeは拒否されます。
+API providerでは、設定したfile tool modeに応じてWorkspace内のファイルを読み、検索し、作成・編集・renameできます。変更を伴う操作はpending actionとして提示され、ユーザーの確認後にだけ適用されます。Workspace外へのpath traversalやsymlink escapeは拒否されます。Filesタブで一時表示している外部directoryはAI file toolsの対象にはなりません。
 
 # 使い分け
 

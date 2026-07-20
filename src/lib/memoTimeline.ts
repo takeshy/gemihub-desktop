@@ -46,7 +46,10 @@ function splitFrontmatter(content: string): { source: string; rest: string } {
   return { source: sourceMatch?.[1]?.trim() ?? "", rest };
 }
 
-function splitQuoteAndBody(content: string, hasAnchor: boolean): { quote: string; body: string } {
+function splitQuoteAndBody(
+  content: string,
+  hasAnchor: boolean,
+): { quote: string; body: string } {
   // §5.2: the leading blockquote is the anchor quote only when an anchor is
   // present; otherwise it is plain body content.
   if (!hasAnchor) return { quote: "", body: content.trim() };
@@ -96,7 +99,10 @@ export function parseEntryBlock(raw: string, index: number): MemoEntry {
   if (!id) return fallback;
 
   const anchor = meta.get("anchor") ?? null;
-  const { quote, body } = splitQuoteAndBody(lines.slice(cursor).join("\n"), anchor !== null);
+  const { quote, body } = splitQuoteAndBody(
+    lines.slice(cursor).join("\n"),
+    anchor !== null,
+  );
   return {
     id,
     createdAt: lines[0].trim(),
@@ -129,13 +135,19 @@ export interface MemoFileSummary {
 
 // Memo list preview: entry count plus the newest entry's leading text.
 // Entries are appended oldest to newest (§8.1), so the last block is newest —
-// e.g. a final "読了" memo shows up as-is in the list.
-export function summarizeMemoContent(content: string, maxChars = 10): MemoFileSummary {
+// For example, a final "Finished reading" memo shows up as-is in the list.
+export function summarizeMemoContent(
+  content: string,
+  maxChars = 10,
+): MemoFileSummary {
   const { entries } = parseMemoFile(content);
   const last = entries[entries.length - 1];
-  const collapsed = (last ? last.body || last.quote : "").replace(/\s+/g, " ").trim();
+  const collapsed = (last ? last.body || last.quote : "").replace(/\s+/g, " ")
+    .trim();
   const chars = Array.from(collapsed);
-  const lastText = chars.length > maxChars ? `${chars.slice(0, maxChars).join("")}…` : collapsed;
+  const lastText = chars.length > maxChars
+    ? `${chars.slice(0, maxChars).join("")}…`
+    : collapsed;
   return { count: entries.length, lastText };
 }
 
@@ -160,12 +172,18 @@ export function buildEntryBlock(fields: MemoEntryFields): string {
   const lines = [fields.createdAt, `id: ${fields.id}`];
   if (fields.pinned) lines.push("pinned: true");
   if (fields.anchor) lines.push(`anchor: ${fields.anchor}`);
-  if (fields.quotePrefix) lines.push(`quote-prefix: ${normalizeMetaValue(fields.quotePrefix)}`);
-  if (fields.quoteSuffix) lines.push(`quote-suffix: ${normalizeMetaValue(fields.quoteSuffix)}`);
+  if (fields.quotePrefix) {
+    lines.push(`quote-prefix: ${normalizeMetaValue(fields.quotePrefix)}`);
+  }
+  if (fields.quoteSuffix) {
+    lines.push(`quote-suffix: ${normalizeMetaValue(fields.quoteSuffix)}`);
+  }
 
   const sections = [lines.join("\n")];
   if (fields.quote?.trim()) {
-    sections.push(fields.quote.trim().split("\n").map((line) => `> ${line}`).join("\n"));
+    sections.push(
+      fields.quote.trim().split("\n").map((line) => `> ${line}`).join("\n"),
+    );
   }
   if (fields.body?.trim()) sections.push(fields.body.trim());
   return sections.join("\n\n");
@@ -186,12 +204,18 @@ function entryToBlock(entry: MemoEntry): string {
 }
 
 export function serializeMemoFile(source: string, blocks: string[]): string {
-  const body = blocks.map((block) => block.trim()).filter(Boolean).join("\n\n---\n\n");
+  const body = blocks.map((block) => block.trim()).filter(Boolean).join(
+    "\n\n---\n\n",
+  );
   return `---\nsource: ${source}\n---\n\n${body}${body ? "\n" : ""}`;
 }
 
 // §8.1: posting only ever appends; existing content is left untouched.
-export function appendEntryBlock(content: string, source: string, block: string): string {
+export function appendEntryBlock(
+  content: string,
+  source: string,
+  block: string,
+): string {
   const current = normalizeNewlines(content).trimEnd();
   if (!current) return serializeMemoFile(source, [block]);
   return `${current}\n\n---\n\n${block.trim()}\n`;
@@ -224,8 +248,12 @@ export function uniqueEntryId(content: string, date: Date): string {
 }
 
 // Rewrites the file with one entry's body replaced. Returns null if the id
-// was not found. Unparsed blocks pass through verbatim (壊さない・落とさない).
-export function replaceEntryBody(content: string, entryId: string, nextBody: string): string | null {
+// was not found. Unparsed blocks pass through verbatim without loss or damage.
+export function replaceEntryBody(
+  content: string,
+  entryId: string,
+  nextBody: string,
+): string | null {
   const { source, entries } = parseMemoFile(content);
   let changed = false;
   const blocks = entries.map((entry) => {
@@ -237,7 +265,11 @@ export function replaceEntryBody(content: string, entryId: string, nextBody: str
   return changed ? serializeMemoFile(source, blocks) : null;
 }
 
-export function setEntryPinned(content: string, entryId: string, pinned: boolean): string | null {
+export function setEntryPinned(
+  content: string,
+  entryId: string,
+  pinned: boolean,
+): string | null {
   const { source, entries } = parseMemoFile(content);
   let changed = false;
   const blocks = entries.map((entry) => {

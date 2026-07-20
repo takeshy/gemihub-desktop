@@ -212,6 +212,36 @@ var fileToolDefinitions = []map[string]any{
 	{"type": "function", "function": map[string]any{"name": "propose_file_rename", "description": "Propose renaming a file. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "newPath": map[string]any{"type": "string"}}, "required": []string{"path", "newPath"}}}},
 }
 
+var timelineToolDefinitions = []map[string]any{
+	{
+		"type": "function",
+		"function": map[string]any{
+			"name":        "read_timeline",
+			"description": "Read the system Timeline for a local calendar date in the active Workspace. Use this before answering what the user did today, what happened on a date, or similar activity-history questions.",
+			"parameters": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"date": map[string]any{"type": "string", "description": "Local date in YYYY-MM-DD format. Omit for today."},
+				},
+			},
+		},
+	},
+	{
+		"type": "function",
+		"function": map[string]any{
+			"name":        "append_timeline",
+			"description": "Append a memo to the system Timeline in the active Workspace. Use this when the user explicitly asks to memo, save, remember, or record information. If the user asks to save your answer, put the useful answer itself in content, not merely the request.",
+			"parameters": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"content": map[string]any{"type": "string", "description": "Markdown content to preserve in Timeline."},
+				},
+				"required": []string{"content"},
+			},
+		},
+	},
+}
+
 func fileToolDefinitionsForMode(mode string) []map[string]any {
 	if mode == "none" {
 		return nil
@@ -231,7 +261,8 @@ func fileToolDefinitionsForMode(mode string) []map[string]any {
 }
 
 func chatToolDefinitions(request ChatRequest) []map[string]any {
-	definitions := append([]map[string]any(nil), fileToolDefinitionsForMode(requestFileToolMode(request))...)
+	definitions := append([]map[string]any(nil), timelineToolDefinitions...)
+	definitions = append(definitions, fileToolDefinitionsForMode(requestFileToolMode(request))...)
 	for _, tool := range request.CustomTools {
 		if strings.TrimSpace(tool.Name) == "" {
 			continue
@@ -265,6 +296,12 @@ func (a *App) Chat(request ChatRequest) (*ChatResult, error) {
 	}
 	ctx, cancel := context.WithCancel(baseContext)
 	request.ctx = ctx
+	timelineInstruction := "When the user asks what they did today, what happened on a date, or a similar activity-history question, call read_timeline for that local date before answering. When the user explicitly asks you to memo, save, remember, or record something, call append_timeline. If they ask to save your answer or findings, save the useful answer or a concise self-contained summary, then tell them it was recorded."
+	if strings.TrimSpace(request.SystemPrompt) == "" {
+		request.SystemPrompt = timelineInstruction
+	} else if !strings.Contains(request.SystemPrompt, "append_timeline") {
+		request.SystemPrompt = strings.TrimSpace(request.SystemPrompt) + "\n\n" + timelineInstruction
+	}
 	if request.StreamID != "" {
 		a.chatCancelMu.Lock()
 		if a.chatCancels == nil {
@@ -845,6 +882,28 @@ func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any,
 			}
 		}
 		return workflowSpecToolResult(args, request.WorkflowSpec), nil, nil
+	}
+	if name == "append_timeline" {
+		args := map[string]any{}
+		if strings.TrimSpace(arguments) != "" {
+			if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+				return nil, nil, err
+			}
+		}
+		content, _ := args["content"].(string)
+		result, err := a.appendSystemTimeline(content)
+		return result, nil, err
+	}
+	if name == "read_timeline" {
+		args := map[string]any{}
+		if strings.TrimSpace(arguments) != "" {
+			if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+				return nil, nil, err
+			}
+		}
+		date, _ := args["date"].(string)
+		result, err := a.readSystemTimeline(date)
+		return result, nil, err
 	}
 	if !customToolRegistered(request, name) {
 		return a.executeFileTool(name, arguments)

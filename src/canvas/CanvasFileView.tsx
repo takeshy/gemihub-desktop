@@ -25,6 +25,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
+import { useI18n } from "../i18n/context";
 import { safeExternalUrl } from "../lib/sanitizeHtml";
 import { readFile, readLocalFile } from "../lib/wailsBackend";
 import { pathDirName } from "../lib/wikiLinks";
@@ -111,6 +112,7 @@ function CanvasFileCard(
     isDark: boolean;
   },
 ) {
+  const { t: tr } = useI18n();
   const path = resolveFilePath(canvasPath, node.file || "");
   const [state, setState] = useState<
     { loading: boolean; content: string; fileName: string; error: string }
@@ -122,7 +124,7 @@ function CanvasFileCard(
         loading: false,
         content: "",
         fileName: "",
-        error: "ファイルが未指定です",
+        error: tr("canvas.fileMissing"),
       });
       return;
     }
@@ -136,7 +138,7 @@ function CanvasFileCard(
         loading: false,
         content: result?.content || "",
         fileName: result?.fileName || node.file || "",
-        error: result ? "" : "ファイルが見つかりません",
+        error: result ? "" : tr("canvas.fileNotFound"),
       });
     }).catch(() =>
       live &&
@@ -144,7 +146,7 @@ function CanvasFileCard(
         loading: false,
         content: "",
         fileName: node.file || "",
-        error: "ファイルを読み込めません",
+        error: tr("canvas.fileReadFailed"),
       })
     );
     return () => {
@@ -160,14 +162,16 @@ function CanvasFileCard(
         event.stopPropagation();
         onOpen(path);
       }}
-      title={`${path}\nダブルクリックで開く`}
+      title={`${path}\n${tr("canvas.openHint")}`}
     >
       <div className="canvas-card-heading">
         <FileText size={15} />
         <span>{node.file || "File"}</span>
       </div>
       <div className="canvas-card-preview">
-        {state.loading && <span className="canvas-muted">読み込み中…</span>}
+        {state.loading && (
+          <span className="canvas-muted">{tr("common.loading")}</span>
+        )}
         {state.error && <span className="canvas-error">{state.error}</span>}
         {!state.loading && !state.error &&
           /\.(?:png|jpe?g|gif|webp|svg)$/i.test(lower) && (
@@ -199,7 +203,15 @@ export function CanvasFileView(
     isDark: boolean;
   },
 ) {
-  const initial = useMemo(() => parseCanvas(content), [path]);
+  const { t: tr } = useI18n();
+  const parseMessages = useMemo(() => ({
+    invalidShape: tr("canvas.invalidShape"),
+    parseFailed: tr("canvas.parseFailed"),
+  }), [tr]);
+  const initial = useMemo(() => parseCanvas(content, parseMessages), [
+    path,
+    parseMessages,
+  ]);
   const [data, setData] = useState<CanvasData>(initial.data);
   const [parseError, setParseError] = useState(initial.error);
   const [raw, setRaw] = useState(content);
@@ -220,7 +232,7 @@ export function CanvasFileView(
   onChangeRef.current = onChange;
 
   useEffect(() => {
-    const parsed = parseCanvas(content);
+    const parsed = parseCanvas(content, parseMessages);
     setData(parsed.data);
     setRaw(content);
     setParseError(parsed.error);
@@ -229,7 +241,7 @@ export function CanvasFileView(
     undoRef.current = [];
     redoRef.current = [];
     initializedRef.current = false;
-  }, [path]);
+  }, [path, parseMessages]);
 
   useEffect(() => {
     if (!initializedRef.current) {
@@ -357,11 +369,11 @@ export function CanvasFileView(
     );
     const id = canvasId();
     const patch: Partial<CanvasNode> = type === "text"
-      ? { text: "新しいカード" }
+      ? { text: tr("canvas.textCard") }
       : type === "group"
-      ? { label: "グループ", width: 520, height: 340 }
+      ? { label: tr("canvas.group"), width: 520, height: 340 }
       : type === "file"
-      ? { file: prompt("Canvasから参照するファイルパス") || "" }
+      ? { file: prompt(tr("canvas.filePrompt")) || "" }
       : { url: prompt("URL") || "https://" };
     commit((current) => ({
       ...current,
@@ -490,7 +502,7 @@ export function CanvasFileView(
 
   const switchMode = (next: Mode) => {
     if (mode === "raw" && next !== "raw") {
-      const parsed = parseCanvas(raw);
+      const parsed = parseCanvas(raw, parseMessages);
       setParseError(parsed.error);
       if (parsed.error) return;
       setData(parsed.data);
@@ -505,8 +517,12 @@ export function CanvasFileView(
       <div className="canvas-editor">
         <div className="canvas-toolbar">
           <div className="canvas-mode-tabs">
-            <button onClick={() => switchMode("view")}>表示</button>
-            <button onClick={() => switchMode("edit")}>編集</button>
+            <button onClick={() => switchMode("view")}>
+              {tr("canvas.view")}
+            </button>
+            <button onClick={() => switchMode("edit")}>
+              {tr("common.edit")}
+            </button>
             <button className="active">JSON</button>
           </div>
           {parseError && (
@@ -518,7 +534,7 @@ export function CanvasFileView(
           value={raw}
           onChange={(event) => {
             setRaw(event.target.value);
-            setParseError(parseCanvas(event.target.value).error);
+            setParseError(parseCanvas(event.target.value, parseMessages).error);
             onChange(event.target.value);
           }}
           spellCheck={false}
@@ -535,51 +551,56 @@ export function CanvasFileView(
             className={mode === "view" ? "active" : ""}
             onClick={() => switchMode("view")}
           >
-            <MousePointer2 size={14} />表示
+            <MousePointer2 size={14} />
+            {tr("canvas.view")}
           </button>
           <button
             className={mode === "edit" ? "active" : ""}
             onClick={() => switchMode("edit")}
           >
-            <BoxSelect size={14} />編集
+            <BoxSelect size={14} />
+            {tr("common.edit")}
           </button>
           <button onClick={() => switchMode("raw")}>JSON</button>
         </div>
         {mode === "edit" && (
           <>
             <span className="canvas-toolbar-separator" />
-            <button title="テキストカード" onClick={() => addNode("text")}>
+            <button
+              title={tr("canvas.textCard")}
+              onClick={() => addNode("text")}
+            >
               <StickyNote size={16} />
-              <span>カード</span>
+              <span>{tr("canvas.textCard")}</span>
             </button>
-            <button title="ファイル" onClick={() => addNode("file")}>
+            <button title={tr("canvas.file")} onClick={() => addNode("file")}>
               <FileText size={16} />
-              <span>ファイル</span>
+              <span>{tr("canvas.file")}</span>
             </button>
-            <button title="リンク" onClick={() => addNode("link")}>
+            <button title={tr("canvas.link")} onClick={() => addNode("link")}>
               <Link2 size={16} />
-              <span>リンク</span>
+              <span>{tr("canvas.link")}</span>
             </button>
-            <button title="グループ" onClick={() => addNode("group")}>
+            <button title={tr("canvas.group")} onClick={() => addNode("group")}>
               <Plus size={16} />
-              <span>グループ</span>
+              <span>{tr("canvas.group")}</span>
             </button>
             <button
-              title="元に戻す"
+              title={tr("common.undo")}
               onClick={undo}
               disabled={!undoRef.current.length}
             >
               <Undo2 size={16} />
             </button>
             <button
-              title="やり直す"
+              title={tr("common.redo")}
               onClick={redo}
               disabled={!redoRef.current.length}
             >
               <Redo2 size={16} />
             </button>
             <button
-              title="削除"
+              title={tr("common.delete")}
               onClick={deleteSelection}
               disabled={!selectedNode && !selectedEdge}
             >
@@ -589,26 +610,28 @@ export function CanvasFileView(
         )}
         <span className="canvas-toolbar-spacer" />
         <button
-          title="縮小"
+          title={tr("canvas.zoomOut")}
           onClick={() => setZoom((value) => Math.max(.2, value - .1))}
         >
           <ZoomOut size={16} />
         </button>
         <span className="canvas-zoom-label">{Math.round(zoom * 100)}%</span>
         <button
-          title="拡大"
+          title={tr("canvas.zoomIn")}
           onClick={() => setZoom((value) => Math.min(3, value + .1))}
         >
           <ZoomIn size={16} />
         </button>
-        <button title="全体を表示" onClick={fit}>
+        <button title={tr("canvas.fit")} onClick={fit}>
           <Focus size={16} />
         </button>
       </div>
       {parseError && (
         <div className="canvas-error-banner">
           {parseError}
-          <button onClick={() => switchMode("raw")}>JSONを修正</button>
+          <button onClick={() => switchMode("raw")}>
+            {tr("canvas.fixJson")}
+          </button>
         </div>
       )}
       <div
@@ -761,7 +784,7 @@ export function CanvasFileView(
                     <input
                       className="canvas-group-label"
                       value={node.label || ""}
-                      placeholder="グループ"
+                      placeholder={tr("canvas.group")}
                       onChange={(event) =>
                         updateNode(
                           node.id,
@@ -772,7 +795,7 @@ export function CanvasFileView(
                   )
                   : (
                     <div className="canvas-group-label">
-                      {node.label || "グループ"}
+                      {node.label || tr("canvas.group")}
                     </div>
                   ))}
                 {node.type === "text" && (mode === "edit"
@@ -830,7 +853,7 @@ export function CanvasFileView(
                         )
                         : (
                           <div className="canvas-link-host">
-                            {node.url || "URLが未指定です"}
+                            {node.url || tr("canvas.urlMissing")}
                           </div>
                         )}
                     </a>
@@ -840,7 +863,7 @@ export function CanvasFileView(
                   <>
                     <div className="canvas-node-actions">
                       <button
-                        title="色"
+                        title={tr("canvas.color")}
                         onClick={(event) => {
                           event.stopPropagation();
                           const keys = Object.keys(COLORS);
@@ -857,7 +880,7 @@ export function CanvasFileView(
                           onClick={(event) => {
                             event.stopPropagation();
                             const file = prompt(
-                              "ファイルパス",
+                              tr("canvas.filePath"),
                               node.file || "",
                             );
                             if (file !== null) updateNode(node.id, { file });
@@ -891,14 +914,14 @@ export function CanvasFileView(
                           event.stopPropagation();
                           connect(node, side);
                         }}
-                        title="接続"
+                        title={tr("canvas.connect")}
                       >
                         <ArrowRight size={11} />
                       </button>
                     ))}
                     <button
                       className="canvas-resize"
-                      title="サイズ変更"
+                      title={tr("canvas.resize")}
                       onPointerDown={(event) => {
                         event.stopPropagation();
                         undoRef.current.push(clone(data));
@@ -927,20 +950,22 @@ export function CanvasFileView(
         {!data.nodes.length && !parseError && (
           <div className="canvas-empty">
             <StickyNote size={32} />
-            <strong>空のCanvas</strong>
+            <strong>{tr("canvas.empty")}</strong>
             <span>
               {mode === "edit"
-                ? "ツールバーからカードを追加できます。"
-                : "編集モードにするとカードを追加できます。"}
+                ? tr("canvas.emptyEditHint")
+                : tr("canvas.emptyViewHint")}
             </span>
             {mode === "view" && (
-              <button onClick={() => setMode("edit")}>編集を開始</button>
+              <button onClick={() => setMode("edit")}>
+                {tr("canvas.startEditing")}
+              </button>
             )}
           </div>
         )}
         {connectFrom && (
           <div className="canvas-connect-hint">
-            接続先のカードを選び、辺の●をクリックしてください。Escで中止
+            {tr("canvas.connectHint")}
           </div>
         )}
         {mode === "edit" && (selectedNodeValue || selectedEdgeValue) && (
@@ -951,16 +976,17 @@ export function CanvasFileView(
             <strong>
               {selectedNodeValue
                 ? ({
-                  text: "テキストカード",
-                  file: "ファイルカード",
-                  link: "リンクカード",
-                  group: "グループ",
+                  text: tr("canvas.textCard"),
+                  file: tr("canvas.fileCard"),
+                  link: tr("canvas.linkCard"),
+                  group: tr("canvas.group"),
                 }[selectedNodeValue.type])
-                : "接続線"}
+                : tr("canvas.edge")}
             </strong>
             {selectedNodeValue?.type === "file" && (
               <label>
-                ファイル<input
+                {tr("canvas.file")}
+                <input
                   value={selectedNodeValue.file || ""}
                   onChange={(event) =>
                     updateNode(selectedNodeValue.id, {
@@ -981,7 +1007,8 @@ export function CanvasFileView(
                   />
                 </label>
                 <label>
-                  ラベル<input
+                  {tr("canvas.label")}
+                  <input
                     value={selectedNodeValue.label || ""}
                     onChange={(event) =>
                       updateNode(selectedNodeValue.id, {
@@ -993,7 +1020,8 @@ export function CanvasFileView(
             )}
             {selectedNodeValue?.type === "group" && (
               <label>
-                ラベル<input
+                {tr("canvas.label")}
+                <input
                   value={selectedNodeValue.label || ""}
                   onChange={(event) =>
                     updateNode(selectedNodeValue.id, {
@@ -1005,7 +1033,8 @@ export function CanvasFileView(
             {selectedEdgeValue && (
               <>
                 <label>
-                  ラベル<input
+                  {tr("canvas.label")}
+                  <input
                     value={selectedEdgeValue.label || ""}
                     onChange={(event) =>
                       updateEdge(selectedEdgeValue.id, {
@@ -1022,7 +1051,8 @@ export function CanvasFileView(
                         updateEdge(selectedEdgeValue.id, {
                           fromEnd: event.target.checked ? "arrow" : "none",
                         })}
-                    />始点矢印
+                    />
+                    {tr("canvas.startArrow")}
                   </label>
                   <label>
                     <input
@@ -1032,12 +1062,13 @@ export function CanvasFileView(
                         updateEdge(selectedEdgeValue.id, {
                           toEnd: event.target.checked ? "arrow" : "none",
                         })}
-                    />終点矢印
+                    />
+                    {tr("canvas.endArrow")}
                   </label>
                 </div>
               </>
             )}
-            <span>色</span>
+            <span>{tr("canvas.color")}</span>
             <div className="canvas-color-row">
               {Object.entries(COLORS).map(([key, color]) => (
                 <button
@@ -1048,7 +1079,7 @@ export function CanvasFileView(
                     ? "active"
                     : ""}
                   style={{ background: color }}
-                  title={key || "既定"}
+                  title={key || tr("canvas.defaultColor")}
                   onClick={() =>
                     selectedNodeValue
                       ? updateNode(selectedNodeValue.id, { color: key })

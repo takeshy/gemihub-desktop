@@ -9,7 +9,7 @@
 3. `+ Add Widget` または `Ctrl/Cmd + P` でファイルを開く。
 4. AIを使う場合は `Settings > AI features` を設定する。引用メモはWorkspace内の `Memos/` へ自動保存される。
 
-DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspaceです。Filesタブは関連付けで開いたファイルのフォルダを一時表示し、AI file toolsもその範囲を使います。引用メモはWorkspaceの `Memos/` に保存されます。
+DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspaceです。Filesタブは関連付けで開いたファイルのフォルダを一時表示します。AI file toolsとChatのfile attachment pickerはWorkspaceを対象にし、引用メモはWorkspaceの `Memos/` に保存されます。
 
 ## 目的から探す
 

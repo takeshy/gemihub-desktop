@@ -645,7 +645,7 @@ function makeDateValFromParts(
     }
   } else {
     // No timezone specified — use query timezone
-    // For simplicity, use UTC. The spec says "timezone なしは query timezone"
+    // For simplicity, use UTC. The spec uses the query timezone when none is specified.
     // But for deterministic testing, the conformance tests use Asia/Tokyo.
     // We handle timezone offset in the host.
     epochMs = Date.UTC(year, month - 1, day, hour, minute, second, ms);

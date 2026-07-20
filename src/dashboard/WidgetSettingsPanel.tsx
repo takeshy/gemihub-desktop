@@ -11,7 +11,13 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { chat, fileInventory, readFile, writeFile } from "../lib/wailsBackend";
+import {
+  chat,
+  fileInventory,
+  listWorkspaceFiles,
+  readFile,
+  writeFile,
+} from "../lib/wailsBackend";
 import yaml from "js-yaml";
 import type { DashboardWidget } from "./types";
 import { dashboardWidgetDefinition } from "./widgetRegistry";
@@ -42,17 +48,35 @@ function number(
   return typeof config[key] === "number" ? config[key] as number : fallback;
 }
 
+export function displayFilePath(path: string, filesBase: string): string {
+  const value = path.trim();
+  if (/^workspace:\/\//i.test(value)) {
+    return value.replace(/^workspace:\/\//i, "");
+  }
+  if (!/^files:\/\//i.test(value)) return value;
+  const relative = value.replace(/^files:\/\//i, "");
+  if (/^(?:[a-z]:[\\/]|[/\\]{2}|\/)/i.test(relative) || !filesBase) {
+    return relative;
+  }
+  const separator = filesBase.includes("\\") ? "\\" : "/";
+  return `${filesBase.replace(/[\\/]+$/, "")}${separator}${
+    relative.replace(/[\\/]+/g, separator)
+  }`;
+}
+
 function SearchableFileSelect({
   value,
   paths,
   placeholder,
   filter,
+  displayPath,
   onChange,
 }: {
   value: string;
   paths: string[];
   placeholder: string;
   filter?: { test: (path: string) => boolean };
+  displayPath: (path: string) => string;
   onChange: (path: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -62,9 +86,12 @@ function SearchableFileSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const matching = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return paths.filter((path) => (!filter || filter.test(path)) &&
-      (!normalized || path.toLowerCase().includes(normalized))).slice(0, 100);
-  }, [filter, paths, query]);
+    return paths.filter((path) =>
+      (!filter || filter.test(path)) &&
+      (!normalized ||
+        `${path} ${displayPath(path)}`.toLowerCase().includes(normalized))
+    ).slice(0, 100);
+  }, [displayPath, filter, paths, query]);
 
   useEffect(() => {
     if (!open) return;
@@ -84,28 +111,73 @@ function SearchableFileSelect({
     setQuery("");
   };
 
-  return <div className="settings-file-picker" ref={rootRef}>
-    <button type="button" className="settings-file-picker-trigger" onClick={() => setOpen((current) => !current)} title={value || placeholder}>
-      <FileText size={15} /><span>{value || placeholder}</span>
-    </button>
-    {open && <div className="settings-file-picker-popover">
-      <div className="settings-file-picker-search"><Search size={14} /><input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-        if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((index) => Math.min(index + 1, Math.max(0, matching.length - 1))); }
-        if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((index) => Math.max(0, index - 1)); }
-        if (event.key === "Enter" && matching[activeIndex]) choose(matching[activeIndex]);
-      }} placeholder="Search by file name or folder…" /></div>
-      <div className="settings-file-picker-results">
-        {matching.length > 0 ? matching.map((path, index) => <button key={path} type="button" className={index === activeIndex || path === value ? "active" : ""} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose(path)}><FileText size={13} /><span>{path}</span></button>) : <p>No matching files</p>}
-      </div>
-    </div>}
-  </div>;
+  return (
+    <div className="settings-file-picker" ref={rootRef}>
+      <button
+        type="button"
+        className="settings-file-picker-trigger"
+        onClick={() => setOpen((current) => !current)}
+        title={value ? displayPath(value) : placeholder}
+      >
+        <FileText size={15} />
+        <span>{value ? displayPath(value) : placeholder}</span>
+      </button>
+      {open && (
+        <div className="settings-file-picker-popover">
+          <div className="settings-file-picker-search">
+            <Search size={14} />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setOpen(false);
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveIndex((index) =>
+                    Math.min(index + 1, Math.max(0, matching.length - 1))
+                  );
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveIndex((index) => Math.max(0, index - 1));
+                }
+                if (event.key === "Enter" && matching[activeIndex]) {
+                  choose(matching[activeIndex]);
+                }
+              }}
+              placeholder="Search by file name or folder…"
+            />
+          </div>
+          <div className="settings-file-picker-results">
+            {matching.length > 0
+              ? matching.map((path, index) => (
+                <button
+                  key={path}
+                  type="button"
+                  className={index === activeIndex || path === value
+                    ? "active"
+                    : ""}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => choose(path)}
+                >
+                  <FileText size={13} />
+                  <span>{displayPath(path)}</span>
+                </button>
+              ))
+              : <p>No matching files</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function WidgetSettingsPanel({
   widget,
   chatSettings,
   directoryBase,
+  filesBase,
   onChange,
   onTitleChange,
   onDelete,
@@ -116,12 +188,16 @@ export function WidgetSettingsPanel({
   widget: DashboardWidget;
   chatSettings: ChatSettings;
   directoryBase: string;
+  filesBase: string;
   onChange: (config: Record<string, unknown>) => void;
   onTitleChange: (title: string) => void;
   onDelete: () => void;
   onClose: () => void;
   dashboardFileName?: string;
-  onTypeChange?: (nextType: string, nextConfig: Record<string, unknown>) => void;
+  onTypeChange?: (
+    nextType: string,
+    nextConfig: Record<string, unknown>,
+  ) => void;
 }) {
   const definition = dashboardWidgetDefinition(widget.type);
   const PluginConfig = definition?.ConfigEditor ?? definition?.configComponent;
@@ -174,14 +250,29 @@ export function WidgetSettingsPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   useEffect(() => {
-    void fileInventory().then((items) =>
-      setFiles(items.map((item) => item.path))
+    void Promise.allSettled([listWorkspaceFiles(), fileInventory()]).then(
+      ([workspace, external]) => {
+        const paths = new Set<string>();
+        if (workspace.status === "fulfilled") {
+          workspace.value.forEach((item) =>
+            paths.add(`workspace://${item.path}`)
+          );
+        }
+        if (external.status === "fulfilled") {
+          external.value.forEach((item) => paths.add(`files://${item.path}`));
+        }
+        setFiles([...paths].sort());
+      },
     );
   }, []);
   useEffect(() => {
     let cancelled = false;
-    void loadWorkflowHistory(directoryBase).then((records) => { if (!cancelled) setWorkflowHistory(records); });
-    return () => { cancelled = true; };
+    void loadWorkflowHistory(directoryBase).then((records) => {
+      if (!cancelled) setWorkflowHistory(records);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [directoryBase]);
   useEffect(() => setJSON(JSON.stringify(widget.config, null, 2)), [
     widget.id,
@@ -225,7 +316,12 @@ export function WidgetSettingsPanel({
   const set = (key: string, value: unknown) =>
     onChange({ ...widget.config, [key]: value });
   const fileList = useMemo(
-    () => files.filter((path) => !path.startsWith(".llm-hub/")),
+    () =>
+      files.filter((path) =>
+        !path.replace(/^(?:workspace|files):\/\//i, "").startsWith(
+          ".llm-hub/",
+        )
+      ),
     [files],
   );
   const labels: Record<string, string> = {
@@ -277,6 +373,7 @@ export function WidgetSettingsPanel({
         paths={fileList}
         placeholder={placeholder}
         filter={extension}
+        displayPath={(path) => displayFilePath(path, filesBase)}
         onChange={(path) => set(key, path)}
       />
     </div>
@@ -416,7 +513,9 @@ export function WidgetSettingsPanel({
     try {
       const file = await readFile(path);
       if (!file) {
-        setActionError(`Cannot read ${path}. Select an existing workflow file and try again.`);
+        setActionError(
+          `Cannot read ${path}. Select an existing workflow file and try again.`,
+        );
         return;
       }
       setWorkflowAI({
@@ -506,7 +605,11 @@ export function WidgetSettingsPanel({
       <aside
         className={`dashboard-widget-settings${
           widget.type === "base" ? " base-widget-settings" : ""
-        }${widget.type === "file" || widget.type === "markdown" ? " file-widget-settings" : ""}`}
+        }${
+          widget.type === "file" || widget.type === "markdown"
+            ? " file-widget-settings"
+            : ""
+        }`}
         onClick={(event) => event.stopPropagation()}
       >
         <header>
@@ -546,8 +649,11 @@ export function WidgetSettingsPanel({
                     <div className="file-config-current">
                       <FileText size={13} />
                       <span>
-                        {text(widget.config, "path") ||
-                          text(widget.config, "filePath")}
+                        {displayFilePath(
+                          text(widget.config, "path") ||
+                            text(widget.config, "filePath"),
+                          filesBase,
+                        )}
                       </span>
                       <button
                         type="button"
@@ -954,11 +1060,20 @@ export function WidgetSettingsPanel({
                           <label>
                             <span>Timeline for status history</span>
                             <input
-                              value={typeof kanbanDefinition.timelineName === "string" ? kanbanDefinition.timelineName : ""}
-                              onChange={(event) => updateKanbanDefinition({ ...kanbanDefinition, timelineName: event.target.value })}
+                              value={typeof kanbanDefinition.timelineName ===
+                                  "string"
+                                ? kanbanDefinition.timelineName
+                                : ""}
+                              onChange={(event) =>
+                                updateKanbanDefinition({
+                                  ...kanbanDefinition,
+                                  timelineName: event.target.value,
+                                })}
                               placeholder="Timeline (leave blank to disable)"
                             />
-                            <small>Card moves are appended to the selected Timeline.</small>
+                            <small>
+                              Card moves are appended to the selected Timeline.
+                            </small>
                           </label>
                           <label>
                             <span>Columns (`value: Label`, one per line)</span>
@@ -1103,16 +1218,30 @@ export function WidgetSettingsPanel({
             <>
               <label>
                 <span>Timeline name</span>
-                <input value={text(widget.config, "timelineName") || "Timeline"} onChange={(event) => set("timelineName", event.target.value)} />
-                <small>Events and posts use Dashboards/Timeline/&lt;name&gt;.</small>
+                <input
+                  value={text(widget.config, "timelineName") || "Timeline"}
+                  onChange={(event) => set("timelineName", event.target.value)}
+                />
+                <small>
+                  Events and posts use Dashboards/Timeline/&lt;name&gt;.
+                </small>
               </label>
             </>
           )}
           {widget.type === "secret-manager" && fileInput("folder", "Secrets")}
           {PluginConfig && (
-            <PluginConfig config={widget.config} onChange={(next) => {
-              if (next && typeof next === "object" && !Array.isArray(next)) onChange(next as Record<string, unknown>);
-            }} widgetType={widget.type} widgetId={widget.id} dashboardFileName={dashboardFileName} onTypeChange={onTypeChange} />
+            <PluginConfig
+              config={widget.config}
+              onChange={(next) => {
+                if (next && typeof next === "object" && !Array.isArray(next)) {
+                  onChange(next as Record<string, unknown>);
+                }
+              }}
+              widgetType={widget.type}
+              widgetId={widget.id}
+              dashboardFileName={dashboardFileName}
+              onTypeChange={onTypeChange}
+            />
           )}
           {!definition && (
             <label>

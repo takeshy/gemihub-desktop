@@ -180,13 +180,72 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 
 func TestGeminiFunctionDeclarationsNoSearch(t *testing.T) {
 	declarations := geminiFunctionDeclarations("noSearch")
-	if len(declarations) != 5 {
-		t.Fatalf("noSearch mode returned %d Gemini declarations, want 5", len(declarations))
+	if len(declarations) != 7 {
+		t.Fatalf("noSearch mode returned %d Gemini declarations, want 7", len(declarations))
 	}
 	for _, declaration := range declarations {
 		if _, wrapped := declaration["function"]; wrapped {
 			t.Fatal("Gemini declaration retained the OpenAI function wrapper")
 		}
+	}
+}
+
+func TestAppendTimelineToolWritesSystemTimeline(t *testing.T) {
+	workspace := t.TempDir()
+	app := &App{
+		workspaceState: WorkspaceState{
+			ActiveWorkspaceID: "workspace",
+			Workspaces:        []Workspace{{ID: "workspace", Path: workspace}},
+		},
+	}
+	value, pending, err := app.executeChatTool(ChatRequest{}, "append_timeline", `{"content":"回答の要点\n\n- 保存する"}`)
+	if err != nil || pending != nil {
+		t.Fatalf("append_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
+	}
+	result := value.(*timelineAppendResult)
+	if !strings.HasPrefix(result.Path, "Dashboards/Timeline/Timeline/") {
+		t.Fatalf("unexpected Timeline path: %q", result.Path)
+	}
+	content, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(result.Path)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	if !strings.Contains(text, "source: timeline:Timeline") ||
+		!strings.Contains(text, "id: "+result.ID) ||
+		!strings.Contains(text, "回答の要点") {
+		t.Fatalf("unexpected Timeline content: %q", text)
+	}
+}
+
+func TestTimelineToolRemainsAvailableWithoutGeneralFileTools(t *testing.T) {
+	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "none"})
+	if len(definitions) != 2 {
+		t.Fatalf("got %d tools, want Timeline read and append", len(definitions))
+	}
+	function := definitions[0]["function"].(map[string]any)
+	if function["name"] != "read_timeline" {
+		t.Fatalf("unexpected tool: %#v", function["name"])
+	}
+}
+
+func TestReadTimelineToolReadsRequestedDay(t *testing.T) {
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, "Dashboards", "Timeline", "Timeline", "2026-07-20.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("worked on launcher"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{workspaceState: WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: workspace}}}}
+	value, pending, err := app.executeChatTool(ChatRequest{}, "read_timeline", `{"date":"2026-07-20"}`)
+	if err != nil || pending != nil {
+		t.Fatalf("read_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
+	}
+	result := value.(*timelineReadResult)
+	if result.Date != "2026-07-20" || result.Content != "worked on launcher" {
+		t.Fatalf("unexpected Timeline result: %#v", result)
 	}
 }
 
@@ -368,10 +427,10 @@ func TestChatToolDefinitionsIncludeRegisteredFrontendTool(t *testing.T) {
 	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "none", CustomTools: []ChatToolDefinition{{
 		Name: "run_skill_workflow", Description: "Run an active skill workflow", Parameters: map[string]any{"type": "object"},
 	}}})
-	if len(definitions) != 1 {
-		t.Fatalf("expected one custom definition, got %#v", definitions)
+	if len(definitions) != 3 {
+		t.Fatalf("expected Timeline tools and one custom definition, got %#v", definitions)
 	}
-	function, _ := definitions[0]["function"].(map[string]any)
+	function, _ := definitions[2]["function"].(map[string]any)
 	if function["name"] != "run_skill_workflow" {
 		t.Fatalf("unexpected custom tool definition: %#v", function)
 	}

@@ -6,15 +6,35 @@ tags: [timeline, markdown, journal, dashboard]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-Timeline widgetは、短い記録を時系列で残す個人用Markdownマイクロブログです。Dashboardに追加し、Timeline名、表示する最新件数、composer modeなどを設定します。データはWorkspace内の通常のMarkdown資産として扱えます。
+Timeline
+widgetは、短い記録を時系列で残す個人用Markdownマイクロブログです。Dashboardに追加し、Timeline名、表示する最新件数、composer
+modeなどを設定します。データはWorkspace内の通常のMarkdown資産として扱えます。
 
-Timelineは日々のログや進捗メモのように「投稿時刻順で記録を積む」用途に向きます。特定ドキュメントの引用位置と紐づけたい場合は、別機能の[引用付きメモ](/features/document-memos.md)を使います。複数の文書メモを横断して確認する場合はMemo List widgetを使います。
+Timelineは日々のログや進捗メモのように「投稿時刻順で記録を積む」用途に向きます。特定ドキュメントの引用位置と紐づけたい場合は、別機能の[引用付きメモ](/features/document-memos.md)を使います。複数の文書メモを横断して確認する場合はMemo
+List widgetを使います。
 
 # Calendar・Kanbanとの同期
 
-TimelineはCalendarとKanbanの同期先でもあります。Calendarの予定とKanbanのステータス変更履歴は通常の投稿と同じ `Dashboards/Timeline/<name>/YYYY-MM-DD.md` に保存され、GemiHubのObsidian版とDesktop版から同じデータを利用できます。
+TimelineはCalendarとKanbanの記録先でもあります。Calendarの予定とKanbanのステータス変更履歴は通常の投稿と同じ
+`Dashboards/Timeline/<name>/YYYY-MM-DD.md` に保存されます。
 
-Calendar widgetでは月表示から日付を選び、Timeline投稿と予定をまとめて確認できます。予定は追加後に別の日付へ移動できます。widget settingsの `timelineName` で参照先を指定します。ファイルの作成日・更新日による一覧は、Base widgetで `file.ctime` または `file.mtime` に日付フィルターを設定して作成できます。
+トップバーのランチャーから、最大化中のfile widgetより前面に標準の
+`Timeline`、その月表示Calendar、Workspaceの `Tasks`
+を使うKanban、メモ一覧を開けます。Calendarで日付を選ぶとTimeline投稿と予定をまとめて確認でき、予定の追加や別の日付への移動も行えます。DashboardへTimeline・Calendar・Kanban
+widgetを配置し、widget
+settingsで別の参照先を指定することもできます。ファイルの作成日・更新日による一覧は、Base
+widgetで `file.ctime` または `file.mtime`
+に日付フィルターを設定して作成できます。
+
+ChatまたはDiscord
+Botで明示的に「メモして」「記録して」などと頼むと、`append_timeline` application
+toolが回答または要点を標準Timelineへ直接追記します。一般のfile
+toolを無効にしていても、この明示的なTimeline保存は利用できます。
+
+「今日なにをやった？」「この日に何があった？」のように活動履歴を尋ねると、`read_timeline`
+application
+toolが回答前に該当日の標準Timelineを読みます。日付を省略した場合は、端末のlocal
+dateを今日として扱います。
 
 # 保存の仕組みとタグ
 
@@ -26,7 +46,8 @@ Calendar widgetでは月表示から日付を選び、Timeline投稿と予定を
 
 # rename時の注意
 
-Timeline widgetの名前を変更すると、参照するfolderが変わるため、既存の投稿は自動的には表示されなくなります（ファイル自体は元のfolderに残ります）。過去の投稿を引き継ぎたい場合は、旧folder名を使い続けるか、投稿ファイルを新folderへ移してください。
+Timeline
+widgetの名前を変更すると、参照するfolderが変わるため、既存の投稿は自動的には表示されなくなります（ファイル自体は元のfolderに残ります）。過去の投稿を引き継ぎたい場合は、旧folder名を使い続けるか、投稿ファイルを新folderへ移してください。
 
 # 関連機能
 

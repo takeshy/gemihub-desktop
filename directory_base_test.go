@@ -203,6 +203,9 @@ func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
 	if err := app.WriteFile("notes/item.md", "two"); err != nil {
 		t.Fatal(err)
 	}
+	if err := app.WriteFile("notes/item.md", "two"); err != nil {
+		t.Fatal(err)
+	}
 	history, err := app.ListFileHistory("notes/item.md")
 	if err != nil || len(history) != 1 {
 		t.Fatalf("unexpected history: %#v %v", history, err)

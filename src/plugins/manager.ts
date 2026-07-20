@@ -9,7 +9,6 @@ import type { PluginConfig, PluginManifest, PluginPermission } from "./types";
 
 export const PLUGIN_HOST_ID = "gemihub-desktop";
 export const PLUGIN_HOST_VERSION = "0.13.3";
-const LEGACY_PLUGIN_HOST_ID = "llm-hub-workspace";
 const OFFICIAL_PLUGIN_OWNERS = new Set(["takeshy"]);
 
 export type PluginRecommendation = "official" | "custom" | "third-party";
@@ -324,12 +323,7 @@ export async function installPluginRelease(
       ? ["styles.css"]
       : []),
   ];
-  const patchHostID = manifest.hostPatches?.[PLUGIN_HOST_ID]
-    ? PLUGIN_HOST_ID
-    : manifest.hostPatches?.[LEGACY_PLUGIN_HOST_ID]
-    ? LEGACY_PLUGIN_HOST_ID
-    : PLUGIN_HOST_ID;
-  const patchNames = manifest.hostPatches?.[patchHostID] ?? [];
+  const patchNames = manifest.hostPatches?.[PLUGIN_HOST_ID] ?? [];
   const uniqueNames = [...new Set([...requiredNames, ...patchNames])];
   const downloaded = await Promise.all(uniqueNames.map(async (name) => {
     const assetName = releaseAssetFileName(name);
@@ -351,7 +345,7 @@ export async function installPluginRelease(
     manifest.id,
     sourceFiles,
     manifest,
-    patchHostID,
+    PLUGIN_HOST_ID,
     { protectedPaths: ["manifest.json"] },
   );
   if (patched.error) throw new Error(`Host patch failed: ${patched.error}`);

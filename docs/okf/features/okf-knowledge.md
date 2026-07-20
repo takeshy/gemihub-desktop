@@ -3,7 +3,7 @@ type: Product Feature
 title: OKF知識ソース
 description: YAML frontmatter付きMarkdownのknowledge bundleを選択し、curatedな定義・関係・手順をChatのsystem contextへ追加する機能。
 tags: [okf, knowledge, chat, context]
-timestamp: 2026-07-15T00:00:00+09:00
+timestamp: 2026-07-20T00:00:00+09:00
 ---
 
 Open Knowledge Format（OKF）は、1ファイルを1概念として整理するvendor-neutralなMarkdown knowledge bundleです。各concept fileはYAML frontmatterに `type` を持ち、推奨fieldとして `title`、`description`、`tags` を使います。bundle rootの `index.md` は概念一覧です。
@@ -12,7 +12,7 @@ Open Knowledge Format（OKF）は、1ファイルを1概念として整理する
 
 製品機能ガイドは `GemiHub Desktop Help` built-in bundleとして常にselectorへ表示され、外部OKF rootを設定せず利用できます。他の知識を追加する場合は次の手順で外部bundleを登録します。
 
-1. OKF bundleをFiles directory内に用意する。既定の検索rootは `Knowledge`。
+1. OKF bundleをWorkspace内に用意する。既定の検索rootは `Knowledge`。
 2. OKF settingsで検索rootを設定する。
 3. `index.md` を持つbundleを検出する。
 4. ChatのOKF selectorで参照したいbundleをactiveにする。

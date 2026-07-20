@@ -1,4 +1,8 @@
-import { fileInventory, readFile, writeFile } from "../lib/wailsBackend";
+import {
+  listWorkspaceFiles,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+} from "../lib/wailsBackend";
 import {
   appendEntryBlock,
   buildEntryBlock,
@@ -87,12 +91,12 @@ export async function loadTimelineCalendarPosts(
   name: string,
 ): Promise<TimelineCalendarPost[]> {
   const folder = timelineFolder(name);
-  const paths = (await fileInventory()).filter((entry) =>
+  const paths = (await listWorkspaceFiles()).filter((entry) =>
     entry.path.startsWith(`${folder}/`) &&
     /^\d{4}-\d{2}-\d{2}\.md$/i.test(entry.path.slice(folder.length + 1))
   ).map((entry) => entry.path).sort();
   const loaded = await Promise.all(
-    paths.map(async (path) => ({ path, file: await readFile(path) })),
+    paths.map(async (path) => ({ path, file: await readWorkspaceFile(path) })),
   );
   return loaded.flatMap(({ path, file }) =>
     file ? parseTimelineCalendarPosts(path, file.content) : []
@@ -106,10 +110,10 @@ export async function appendTimelineEntry(
 ): Promise<string> {
   const folder = timelineFolder(name);
   const path = `${folder}/${localDayKey(date)}.md`;
-  const current = (await readFile(path))?.content || "";
+  const current = (await readWorkspaceFile(path))?.content || "";
   const now = new Date();
   const id = uniqueEntryId(current, now);
-  await writeFile(
+  await writeWorkspaceFile(
     path,
     appendEntryBlock(
       current,
@@ -153,7 +157,7 @@ export async function moveCalendarEvent(
   const posts = await loadTimelineCalendarPosts(name);
   const post = posts.find((item) => item.id === postId && item.isEvent);
   if (!post) return false;
-  const source = await readFile(post.path);
+  const source = await readWorkspaceFile(post.path);
   if (!source) return false;
   const normalized = source.content.replace(
     /^<!--\s*timeline-post:\s*[^>]+?\s*-->\s*\r?\n/gm,
@@ -167,10 +171,10 @@ export async function moveCalendarEvent(
     .replace(/(> \[!calendar\][^\n]*?·\s*)\d{4}-\d{2}-\d{2}/, `$1${nextDate}`);
   const remaining = deleteEntry(normalized, postId);
   if (remaining === null) return false;
-  await writeFile(post.path, remaining);
+  await writeWorkspaceFile(post.path, remaining);
   const targetPath = `${timelineFolder(name)}/${nextDate}.md`;
-  const target = (await readFile(targetPath))?.content || "";
-  await writeFile(
+  const target = (await readWorkspaceFile(targetPath))?.content || "";
+  await writeWorkspaceFile(
     targetPath,
     appendEntryBlock(target, `timeline:${sanitizeTimelineName(name)}`, moved),
   );

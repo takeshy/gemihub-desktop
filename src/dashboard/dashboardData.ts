@@ -1,6 +1,11 @@
 import yaml from "js-yaml";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
-import { fileInventory, readFile } from "../lib/wailsBackend";
+import {
+  fileInventory,
+  listWorkspaceFiles,
+  readFile,
+  readWorkspaceFile,
+} from "../lib/wailsBackend";
 
 export interface DashboardDataRow {
   id: string;
@@ -74,14 +79,19 @@ function tags(frontmatter: Record<string, unknown>, content: string): string[] {
 
 export async function loadDashboardRows(
   folder = "",
+  workspaceOnly = false,
 ): Promise<DashboardDataRow[]> {
-  const entries = (await fileInventory()).filter((entry) =>
-    !entry.binary && /\.md(?:own)?$/i.test(entry.path) &&
-    inFolder(entry.path, folder)
-  ).slice(0, 1000);
+  const entries =
+    (workspaceOnly ? await listWorkspaceFiles() : await fileInventory()).filter(
+      (entry) =>
+        !entry.binary && /\.md(?:own)?$/i.test(entry.path) &&
+        inFolder(entry.path, folder),
+    ).slice(0, 1000);
   const rows: Array<DashboardDataRow | null> = await Promise.all(
     entries.map(async (entry): Promise<DashboardDataRow | null> => {
-      const file = await readFile(entry.path);
+      const file = workspaceOnly
+        ? await readWorkspaceFile(entry.path)
+        : await readFile(entry.path);
       if (!file) return null;
       const parsed = parseFrontmatter(file.content);
       const name = entry.path.split("/").pop()?.replace(/\.md(?:own)?$/i, "") ||

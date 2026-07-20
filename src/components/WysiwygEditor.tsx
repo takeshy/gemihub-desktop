@@ -20,6 +20,18 @@ export function WysiwygEditor({
 }) {
   const editor = useEditor();
   const patchedRef = useRef(false);
+  const editingRef = useRef(false);
+  const editorValueRef = useRef(value || "\n");
+  const receivedValueRef = useRef(value);
+
+  // Editable reparses a changed `value` and moves the Slate selection to the
+  // document start. Dashboard state can rerender while the user only moves
+  // the caret, so keep the editor-owned value authoritative while focused.
+  // Changes originating here update the ref before notifying the parent.
+  if (!editingRef.current && value !== receivedValueRef.current) {
+    editorValueRef.current = value || "\n";
+  }
+  receivedValueRef.current = value;
 
   if (!patchedRef.current) {
     patchedRef.current = true;
@@ -38,11 +50,25 @@ export function WysiwygEditor({
   }
 
   return (
-    <div className="wysiwyg-host">
+    <div
+      className="wysiwyg-host"
+      onFocusCapture={() => {
+        editingRef.current = true;
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          editingRef.current = false;
+        }
+      }}
+    >
       <Editable
         editor={editor}
-        value={value || "\n"}
-        onChange={onChange}
+        value={editingRef.current ? editorValueRef.current : value || "\n"}
+        onChange={(next: string) => {
+          editorValueRef.current = next;
+          receivedValueRef.current = next;
+          onChange(next);
+        }}
         onImageChange={onImageChange}
         placeholder="Write Markdown..."
       />

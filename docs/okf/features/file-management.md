@@ -3,7 +3,7 @@ type: Product Feature
 title: ファイル管理
 description: ローカルファイルの選択、検索、ドラッグ＆ドロップ、保存、再読み込み、外部エディタ連携を提供する機能。
 tags: [files, filetree, editor, export]
-timestamp: 2026-07-15T00:00:00+09:00
+timestamp: 2026-07-20T00:00:00+09:00
 ---
 
 ローカルファイルはwidgetとして開き、複数並べて扱えます。`+ Add Widget`、File picker、ウィンドウへのdrag & drop、OSの「プログラムから開く」、起動引数のいずれからでも開けます。File pickerでは作業ディレクトリ内のファイルと最近使ったファイルを検索できます。
@@ -17,8 +17,11 @@ timestamp: 2026-07-15T00:00:00+09:00
 * widget toolbarのReload: ディスク上の変更を再読込する。
 * External editor: `Settings > General`で実行ファイルを指定し、ローカルファイルを外部エディタで開く。
 * widgetは移動、リサイズ、最大化、クローズが可能。`Ctrl/Cmd + O`で最大化、`Ctrl/Cmd + M`で戻します。
+* Explorer/FinderまたはFilesツリーからWorkspaceへdragすると、確認後に移動する。
 
 関連付けや「プログラムから開く」でファイルを開くと、FileTreeのFilesタブとファイルAPIはそのファイルのフォルダを一時的なルートにします。削除や過去版の復元については[履歴・複製・Trash](/features/file-history-trash.md)を参照してください。
+
+OSからのdropとアプリ内dragは、どちらも元を取り除いてWorkspaceへ移動します。詳細と制約は[WorkspaceとFilesタブ](/features/workspace-files.md)を参照してください。
 
 # 基本的な流れ
 

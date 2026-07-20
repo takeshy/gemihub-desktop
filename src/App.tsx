@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   Bot,
+  CalendarDays,
   Check,
   ChevronDown,
   ChevronsLeft,
@@ -17,9 +18,12 @@ import {
   Command,
   Database,
   Eye,
+  FileText,
   FolderOpen,
   Home,
+  KeyRound,
   LayoutDashboard,
+  LayoutGrid,
   Library,
   LockKeyhole,
   MessageSquare,
@@ -30,6 +34,7 @@ import {
   Plus,
   Redo2,
   Rows2,
+  Search,
   Server,
   Settings,
   Sun,
@@ -44,6 +49,12 @@ import { FileTree } from "./components/FileTree";
 import { PluginHost } from "./plugins/PluginHost";
 import { DashboardView } from "./dashboard/DashboardView";
 import { DashboardToolbar } from "./dashboard/DashboardToolbar";
+import {
+  KanbanDashboardWidget,
+  SecretManagerDashboardWidget,
+  TimelineDashboardWidget,
+} from "./dashboard/DashboardWidgets";
+import { CalendarDashboardWidget } from "./dashboard/CalendarDashboardWidget";
 import {
   DASHBOARD_STORAGE_KEY,
   type DashboardData,
@@ -204,7 +215,7 @@ function readStoredWidth(key: string, fallback: number): number {
 
 const initialMarkdown = `# GemiHub Desktop
 
-DirectoryBase のファイル、LLM chat、dashboard、plugin をひとつにした desktop workspace です。
+Bring DirectoryBase files, LLM chat, dashboards, and plugins together in one desktop workspace.
 
 > [!note] Preview
 > GFM, tables, task lists, code highlight, callouts, and Mermaid diagrams are supported.
@@ -356,6 +367,33 @@ function persistenceDashboard(dashboard: DashboardData): DashboardData {
   };
 }
 
+// History needs text contents for a useful diff, while normal Dashboard
+// persistence intentionally omits File widget contents. Keep only text here;
+// binary data URLs remain excluded.
+function historyDashboard(dashboard: DashboardData): DashboardData {
+  const persisted = persistenceDashboard(dashboard);
+  return {
+    ...persisted,
+    widgets: persisted.widgets.map((widget, index) => {
+      const source = dashboard.widgets[index];
+      if (!source || (widget.type !== "file" && widget.type !== "markdown")) {
+        return widget;
+      }
+      const fileName = typeof source.config.fileName === "string"
+        ? source.config.fileName
+        : "";
+      const content = typeof source.config.content === "string"
+        ? source.config.content
+        : "";
+      if (!fileName || isBinaryDocumentFileName(fileName)) return widget;
+      return {
+        ...widget,
+        config: { ...widget.config, fileName, content },
+      };
+    }),
+  };
+}
+
 function persistLocalState(
   fileName: string,
   content: string,
@@ -392,10 +430,22 @@ function checkpointHash(
   content: string,
   dashboard: DashboardData,
 ): string {
+  const snapshot = historyDashboard(dashboard);
   return JSON.stringify({
     fileName,
     content: persistenceContent(fileName, content),
-    dashboard: persistenceDashboard(dashboard),
+    documents: snapshot.widgets.flatMap((widget) => {
+      const widgetContent = dashboardWidgetContent(widget);
+      if (widgetContent === null) return [];
+      return [{
+        id: widget.id,
+        fileName: typeof widget.config.fileName === "string"
+          ? widget.config.fileName
+          : "",
+        path: typeof widget.config.path === "string" ? widget.config.path : "",
+        content: widgetContent,
+      }];
+    }),
   });
 }
 
@@ -441,6 +491,17 @@ function uniqueCheckpoints(items: HistoryCheckpoint[]): HistoryCheckpoint[] {
   for (const item of items) {
     const hash = checkpointHash(item.fileName, item.content, item.dashboard);
     if (hash === previousHash) continue;
+    const previous = result.at(-1);
+    if (
+      previous && previous.fileName === item.fileName &&
+      checkpointDiffTargets(previous, item).length === 0
+    ) {
+      // Keep the latest restorable Dashboard baseline, but do not show
+      // layout/config-only checkpoints whose diff panel would be empty.
+      result[result.length - 1] = item;
+      previousHash = hash;
+      continue;
+    }
     previousHash = hash;
     result.push(item);
   }
@@ -638,6 +699,86 @@ function DiffModeToggle(
       >
         {tr("history.split")}
       </button>
+    </div>
+  );
+}
+
+function ComparisonFilePicker({
+  files,
+  placeholder,
+  searchPlaceholder,
+  emptyLabel,
+  onSelect,
+}: {
+  files: DirectoryFileEntry[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyLabel: string;
+  onSelect: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedPath, setSelectedPath] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matching = files.filter((entry) =>
+    !normalizedQuery || entry.path.toLocaleLowerCase().includes(normalizedQuery)
+  ).slice(0, 200);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [open]);
+
+  return (
+    <div className="diff-file-picker" ref={rootRef}>
+      <button
+        type="button"
+        className="diff-file-picker-trigger"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+      >
+        <FileText size={15} />
+        <span>{selectedPath || placeholder}</span>
+        <ChevronDown size={15} />
+      </button>
+      {open && (
+        <div className="diff-file-picker-popover">
+          <label>
+            <Search size={14} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={searchPlaceholder}
+            />
+          </label>
+          <div>
+            {matching.length > 0
+              ? matching.map((entry) => (
+                <button
+                  key={entry.path}
+                  type="button"
+                  className={entry.path === selectedPath ? "selected" : ""}
+                  onClick={() => {
+                    setSelectedPath(entry.path);
+                    setQuery("");
+                    setOpen(false);
+                    onSelect(entry.path);
+                  }}
+                >
+                  <FileText size={14} />
+                  <span>{entry.path}</span>
+                </button>
+              ))
+              : <p>{emptyLabel}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -850,6 +991,9 @@ export default function App() {
   );
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyMode, setHistoryMode] = useState<"history" | "compare">(
+    "history",
+  );
   const [addWidgetRequest, setAddWidgetRequest] = useState<
     { id: number; direction: EqualizeLayoutDirection; type: string }
   >({ id: 0, direction: "horizontal", type: "file" });
@@ -932,6 +1076,12 @@ export default function App() {
   const [comparisonTarget, setComparisonTarget] = useState<DiffTarget | null>(
     null,
   );
+  const [comparisonSource, setComparisonSource] = useState<
+    {
+      path: string;
+      content: string;
+    } | null
+  >(null);
   const [externalEditorPath, setExternalEditorPath] = useState(() =>
     readStored(EXTERNAL_EDITOR_KEY, "")
   );
@@ -958,11 +1108,29 @@ export default function App() {
     language,
   ]);
   const [memoListOpen, setMemoListOpen] = useState(false);
+  const [secretManagerOpen, setSecretManagerOpen] = useState(false);
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [kanbanOpen, setKanbanOpen] = useState(false);
+  useEffect(() => {
+    if (!secretManagerOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !document.querySelector(".widget-dialog-backdrop")
+      ) {
+        setSecretManagerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [secretManagerOpen]);
   const [openPathRequest, setOpenPathRequest] = useState<
     {
       id: number;
       path: string;
-      source?: "local" | "directory" | "filetree" | "startup";
+      source?: "local" | "directory" | "filetree" | "memo-list" | "startup";
     }
   >({ id: 0, path: "" });
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>({
@@ -1714,7 +1882,7 @@ export default function App() {
       reason,
       fileName: latest.fileName,
       content: persistenceContent(latest.fileName, latest.content),
-      dashboard: persistenceDashboard(latest.dashboard),
+      dashboard: historyDashboard(latest.dashboard),
     };
 
     setCheckpoints((items) => {
@@ -1926,12 +2094,23 @@ export default function App() {
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMemoListOpen(true);
+                    setLauncherOpen(true);
                     setAppMenuOpen(false);
                   }}
                 >
-                  <NotebookText size={16} />
-                  <span>{tr("topbar.memoList")}</span>
+                  <LayoutGrid size={16} />
+                  <span>{tr("topbar.launcher")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setSecretManagerOpen(true);
+                    setAppMenuOpen(false);
+                  }}
+                >
+                  <KeyRound size={16} />
+                  <span>{tr("topbar.secretManager")}</span>
                 </button>
                 <button
                   type="button"
@@ -1974,12 +2153,18 @@ export default function App() {
             <button
               type="button"
               className="icon-button"
-              onClick={() => {
-                setMemoListOpen(true);
-              }}
-              title={tr("topbar.memoList")}
+              onClick={() => setLauncherOpen(true)}
+              title={tr("topbar.launcher")}
             >
-              <NotebookText size={18} />
+              <LayoutGrid size={18} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setSecretManagerOpen(true)}
+              title={tr("topbar.secretManager")}
+            >
+              <KeyRound size={18} />
             </button>
             <button
               type="button"
@@ -2200,9 +2385,23 @@ export default function App() {
                   fileName={fileName}
                   onFileNameChange={setFileName}
                   onNewDocument={newDocument}
-                  onSaveDocument={saveDocument}
                   onExportDocument={exportDocument}
-                  onHistoryClick={() => setHistoryOpen(true)}
+                  onHistoryClick={(source) => {
+                    setHistoryMode("history");
+                    setComparisonSource(source ?? null);
+                    setComparisonTarget(null);
+                    setHistoryOpen(true);
+                  }}
+                  onDiffClick={(source) => {
+                    setHistoryMode("compare");
+                    setComparisonSource(source);
+                    setComparisonTarget(null);
+                    setComparisonFiles([]);
+                    setHistoryOpen(true);
+                    void listWorkspaceFiles().then((files) =>
+                      setComparisonFiles(files.filter((entry) => !entry.binary))
+                    );
+                  }}
                   isDark={isDark}
                   aiEnabled={aiEnabled}
                   addWidgetRequest={addWidgetRequest}
@@ -2332,6 +2531,70 @@ export default function App() {
             : null}
         </section>
 
+        {launcherOpen && (
+          <div
+            className="app-tool-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setLauncherOpen(false);
+            }}
+          >
+            <section className="app-launcher-modal">
+              <header>
+                <strong>{tr("topbar.launcher")}</strong>
+                <button
+                  type="button"
+                  onClick={() => setLauncherOpen(false)}
+                  title={tr("common.close")}
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLauncherOpen(false);
+                    setMemoListOpen(true);
+                  }}
+                >
+                  <NotebookText size={24} />
+                  <strong>{tr("topbar.memoList")}</strong>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLauncherOpen(false);
+                    setTimelineOpen(true);
+                  }}
+                >
+                  <Rows2 size={24} />
+                  <strong>{tr("topbar.timeline")}</strong>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLauncherOpen(false);
+                    setCalendarOpen(true);
+                  }}
+                >
+                  <CalendarDays size={24} />
+                  <strong>{tr("topbar.calendar")}</strong>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLauncherOpen(false);
+                    setKanbanOpen(true);
+                  }}
+                >
+                  <Columns2 size={24} />
+                  <strong>{tr("topbar.kanban")}</strong>
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
         {memoListOpen && (
           <MemoListModal
             memoDirPath={memoDirPath}
@@ -2339,12 +2602,164 @@ export default function App() {
               setOpenPathRequest((value) => ({
                 id: value.id + 1,
                 path,
-                source: "local",
+                source: "memo-list",
               }));
               setMemoListOpen(false);
             }}
             onClose={() => setMemoListOpen(false)}
           />
+        )}
+
+        {timelineOpen && (
+          <div
+            className="app-tool-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setTimelineOpen(false);
+            }}
+          >
+            <section className="app-timeline-modal">
+              <header className="memo-list-header">
+                <strong>{tr("topbar.timeline")}</strong>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setTimelineOpen(false)}
+                  title={tr("common.close")}
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <div className="app-timeline-body">
+                <TimelineDashboardWidget
+                  config={{
+                    name: "Timeline",
+                    latestCount: 20,
+                    composerMode: "raw",
+                  }}
+                  isDark={isDark}
+                  settings={chatSettings}
+                  onChange={() => {}}
+                  onOpenPath={(path) =>
+                    setOpenPathRequest((value) => ({
+                      id: value.id + 1,
+                      path,
+                      source: "filetree",
+                    }))}
+                  onExternalPathOpened={handleExternalPathOpened}
+                />
+              </div>
+            </section>
+          </div>
+        )}
+
+        {calendarOpen && (
+          <div
+            className="app-tool-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setCalendarOpen(false);
+            }}
+          >
+            <section className="app-calendar-modal">
+              <header className="memo-list-header">
+                <strong>{tr("topbar.calendar")}</strong>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setCalendarOpen(false)}
+                  title={tr("common.close")}
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <div className="app-calendar-body">
+                <CalendarDashboardWidget
+                  config={{ timelineName: "Timeline" }}
+                  isDark={isDark}
+                />
+              </div>
+            </section>
+          </div>
+        )}
+
+        {kanbanOpen && (
+          <div
+            className="app-tool-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setKanbanOpen(false);
+            }}
+          >
+            <section className="app-kanban-modal">
+              <header className="memo-list-header">
+                <strong>{tr("topbar.kanban")}</strong>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setKanbanOpen(false)}
+                  title={tr("common.close")}
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <div className="app-kanban-body">
+                <KanbanDashboardWidget
+                  config={{
+                    title: "Kanban",
+                    folder: "Tasks",
+                    statusProperty: "status",
+                    titleProperty: "title",
+                    timelineName: "Timeline",
+                    workspaceOnly: true,
+                    columns: [
+                      { value: "todo", label: "To do" },
+                      { value: "doing", label: "Doing" },
+                      { value: "done", label: "Done" },
+                    ],
+                  }}
+                  isDark={isDark}
+                  onChange={() => {}}
+                  onOpenPath={(path) =>
+                    setOpenPathRequest((value) => ({
+                      id: value.id + 1,
+                      path,
+                      source: "filetree",
+                    }))}
+                />
+              </div>
+            </section>
+          </div>
+        )}
+
+        {secretManagerOpen && (
+          <div
+            className="app-tool-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setSecretManagerOpen(false);
+              }
+            }}
+          >
+            <section className="app-secret-manager-modal">
+              <header className="memo-list-header">
+                <strong>{tr("topbar.secretManager")}</strong>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setSecretManagerOpen(false)}
+                  title={tr("common.close")}
+                >
+                  <X size={18} />
+                </button>
+              </header>
+              <div className="app-secret-manager-body">
+                <SecretManagerDashboardWidget
+                  config={{ folder: "" }}
+                  managerId={`header:${
+                    workspaceState.activeWorkspaceId || "local"
+                  }`}
+                />
+              </div>
+            </section>
+          </div>
         )}
 
         {settingsOpen && (
@@ -2530,7 +2945,9 @@ export default function App() {
                             {tr("settings.languageSystem")}
                           </option>
                           <option value="en">English</option>
-                          <option value="ja">日本語</option>
+                          <option value="ja">
+                            {tr("settings.languageJapanese")}
+                          </option>
                         </select>
                       </label>
                       <label className="settings-field">
@@ -5325,45 +5742,38 @@ export default function App() {
             >
               <header className="history-header">
                 <div>
-                  <strong>{tr("history.title")}</strong>
-                  <span>
-                    {visibleCheckpoints.length}{" "}
-                    {tr("history.checkpointsSuffix")}
-                  </span>
+                  <strong>
+                    {historyMode === "compare"
+                      ? tr("history.compareFile")
+                      : tr("history.title")}
+                  </strong>
+                  {historyMode === "history" && (
+                    <span>
+                      {visibleCheckpoints.length}{" "}
+                      {tr("history.checkpointsSuffix")}
+                    </span>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void listWorkspaceFiles().then((files) =>
-                      setComparisonFiles(files.filter((entry) => !entry.binary))
-                    )}
-                >
-                  Compare file
-                </button>
-                {comparisonFiles.length > 0 && (
-                  <select
-                    defaultValue=""
-                    aria-label="Compare with file"
-                    onChange={(event) => {
-                      const path = event.target.value;
-                      if (!path) return;
+                {historyMode === "compare" && (
+                  <ComparisonFilePicker
+                    files={comparisonFiles}
+                    placeholder={tr("history.chooseFile")}
+                    searchPlaceholder={tr("picker.searchFiles")}
+                    emptyLabel={tr("picker.noFiles")}
+                    onSelect={(path) => {
                       void readWorkspaceFile(path).then((file) => {
                         if (!file) return;
                         setComparisonTarget({
-                          label: `${fileName || "Current document"} ↔ ${path}`,
-                          before: content,
+                          label: `${
+                            comparisonSource?.path || fileName ||
+                            "Current document"
+                          } ↔ ${path}`,
+                          before: comparisonSource?.content ?? content,
                           after: file.content,
                         });
                       });
                     }}
-                  >
-                    <option value="">Choose a file…</option>
-                    {comparisonFiles.map((entry) => (
-                      <option key={entry.path} value={entry.path}>
-                        {entry.path}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 )}
                 <button
                   type="button"
@@ -5375,82 +5785,102 @@ export default function App() {
                 </button>
               </header>
 
-              <div className="history-body">
-                <div className="history-list">
-                  {[...visibleCheckpoints].reverse().map(
-                    (checkpoint, index) => {
-                      const previous = visibleCheckpoints[
-                        visibleCheckpoints.findIndex((item) =>
-                          item.id === checkpoint.id
-                        ) - 1
-                      ];
-                      const isCurrent = index === 0 &&
-                        checkpointHash(fileName, content, dashboard) ===
-                          checkpointHash(
-                            checkpoint.fileName,
-                            checkpoint.content,
-                            checkpoint.dashboard,
-                          );
-                      const isSelected =
-                        selectedHistoryCheckpoint?.id === checkpoint.id;
-                      const stats = checkpointDiffStats(previous, checkpoint);
-                      return (
-                        <article
-                          key={checkpoint.id}
-                          className={`history-item ${
-                            isSelected ? "selected" : ""
-                          }`}
-                          onClick={() => {
-                            setComparisonTarget(null);
-                            setSelectedHistoryId(checkpoint.id);
-                          }}
-                        >
-                          <div className="history-item-main">
-                            <strong>
-                              {reasonLabel(tr, checkpoint.reason)}
-                            </strong>
-                            <span>{checkpoint.timestamp.toLocaleString()}</span>
-                            <small>
-                              {changedSummary(tr, checkpoint, previous)}
-                              {previous
-                                ? `  +${stats.additions} / -${stats.deletions}`
-                                : ""}
-                            </small>
-                          </div>
-                          <button
-                            type="button"
-                            className="history-restore"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              restoreCheckpoint(checkpoint);
+              <div
+                className={`history-body ${
+                  historyMode === "compare" ? "compare" : ""
+                }`}
+              >
+                {historyMode === "history" && (
+                  <div className="history-list">
+                    {[...visibleCheckpoints].reverse().map(
+                      (checkpoint, index) => {
+                        const previous = visibleCheckpoints[
+                          visibleCheckpoints.findIndex((item) =>
+                            item.id === checkpoint.id
+                          ) - 1
+                        ];
+                        const isCurrent = index === 0 &&
+                          checkpointHash(fileName, content, dashboard) ===
+                            checkpointHash(
+                              checkpoint.fileName,
+                              checkpoint.content,
+                              checkpoint.dashboard,
+                            );
+                        const isSelected =
+                          selectedHistoryCheckpoint?.id === checkpoint.id;
+                        const stats = checkpointDiffStats(previous, checkpoint);
+                        return (
+                          <article
+                            key={checkpoint.id}
+                            className={`history-item ${
+                              isSelected ? "selected" : ""
+                            }`}
+                            onClick={() => {
+                              setComparisonTarget(null);
+                              setSelectedHistoryId(checkpoint.id);
                             }}
-                            disabled={isCurrent}
-                            title={isCurrent
-                              ? tr("history.currentState")
-                              : tr("history.restoreTooltip")}
                           >
-                            {isCurrent ? <Check size={16} /> : null}
-                            <span>
-                              {isCurrent
-                                ? tr("history.current")
-                                : tr("history.restore")}
-                            </span>
-                          </button>
-                        </article>
-                      );
-                    },
+                            <div className="history-item-main">
+                              <strong>
+                                {reasonLabel(tr, checkpoint.reason)}
+                              </strong>
+                              <span>
+                                {checkpoint.timestamp.toLocaleString()}
+                              </span>
+                              <small>
+                                {changedSummary(tr, checkpoint, previous)}
+                                {previous
+                                  ? `  +${stats.additions} / -${stats.deletions}`
+                                  : ""}
+                              </small>
+                            </div>
+                            <button
+                              type="button"
+                              className="history-restore"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                restoreCheckpoint(checkpoint);
+                              }}
+                              disabled={isCurrent}
+                              title={isCurrent
+                                ? tr("history.currentState")
+                                : tr("history.restoreTooltip")}
+                            >
+                              {isCurrent ? <Check size={16} /> : null}
+                              <span>
+                                {isCurrent
+                                  ? tr("history.current")
+                                  : tr("history.restore")}
+                              </span>
+                            </button>
+                          </article>
+                        );
+                      },
+                    )}
+                    {visibleCheckpoints.length === 0 && (
+                      <div className="history-empty">{tr("history.empty")}</div>
+                    )}
+                  </div>
+                )}
+                {historyMode === "history" || comparisonTarget
+                  ? (
+                    <HistoryDiffPanel
+                      checkpoint={historyMode === "history"
+                        ? selectedHistoryCheckpoint
+                        : undefined}
+                      previous={historyMode === "history"
+                        ? selectedHistoryPrevious
+                        : undefined}
+                      comparisonTarget={comparisonTarget}
+                      viewMode={historyDiffViewMode}
+                      onViewModeChange={setHistoryDiffViewMode}
+                    />
+                  )
+                  : (
+                    <div className="history-diff-empty">
+                      {tr("history.chooseFile")}
+                    </div>
                   )}
-                  {visibleCheckpoints.length === 0 && (
-                    <div className="history-empty">{tr("history.empty")}</div>
-                  )}
-                </div>
-                <HistoryDiffPanel
-                  checkpoint={selectedHistoryCheckpoint}
-                  previous={selectedHistoryPrevious}
-                  comparisonTarget={comparisonTarget}
-                  viewMode={historyDiffViewMode}
-                  onViewModeChange={setHistoryDiffViewMode}
-                />
               </div>
             </section>
           </div>

@@ -60,14 +60,16 @@ import {
   chat,
   checkWebEmbeddable,
   deleteFile,
+  deleteWorkspaceFile,
   fileInventory,
-  listWorkspaceFiles,
   listMemoFiles,
+  listWorkspaceFiles,
   readFile,
   readMemoFile,
   readWorkspaceFile,
   writeBinaryFile,
   writeFile,
+  writeWorkspaceBinaryFile,
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
@@ -439,11 +441,14 @@ export function TimelineDashboardWidget(
     );
   const load = useCallback(async () => {
     try {
-      const paths = (await fileInventory()).filter((entry) =>
+      const paths = (await listWorkspaceFiles()).filter((entry) =>
         entry.path.startsWith(`${folder}/`) && /\.md$/i.test(entry.path)
       ).map((entry) => entry.path).sort();
       const loaded = await Promise.all(
-        paths.map(async (path) => ({ path, file: await readFile(path) })),
+        paths.map(async (path) => ({
+          path,
+          file: await readWorkspaceFile(path),
+        })),
       );
       const next = loaded.flatMap(({ path, file }) =>
         file
@@ -497,7 +502,7 @@ export function TimelineDashboardWidget(
     if (!draft.trim()) return;
     const now = new Date(),
       path = `${folder}/${now.toISOString().slice(0, 10)}.md`,
-      current = (await readFile(path))?.content || "",
+      current = (await readWorkspaceFile(path))?.content || "",
       id = uniqueEntryId(current, now);
     const embeds: string[] = [];
     for (const [index, file] of attachments.entries()) {
@@ -509,10 +514,10 @@ export function TimelineDashboardWidget(
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
-      await writeBinaryFile(target, btoa(binary));
+      await writeWorkspaceBinaryFile(target, btoa(binary));
       embeds.push(`![[${target}]]`);
     }
-    await writeFile(
+    await writeWorkspaceFile(
       path,
       appendEntryBlock(
         current,
@@ -531,24 +536,24 @@ export function TimelineDashboardWidget(
     await load();
   };
   const mutate = async (item: TimelineItem, kind: "pin" | "delete") => {
-    const file = await readFile(item.path);
+    const file = await readWorkspaceFile(item.path);
     if (!file) return;
     if (kind === "delete" && !confirm("Delete this timeline post?")) return;
     const next = kind === "pin"
       ? setEntryPinned(file.content, item.id, !item.pinned)
       : deleteEntry(file.content, item.id);
     if (next !== null) {
-      await writeFile(item.path, next);
+      await writeWorkspaceFile(item.path, next);
       await load();
     }
   };
   const saveEdit = async () => {
     if (!editing || !editDraft.trim()) return;
-    const file = await readFile(editing.path);
+    const file = await readWorkspaceFile(editing.path);
     if (!file) return;
     const next = replaceEntryBody(file.content, editing.id, editDraft);
     if (next !== null) {
-      await writeFile(editing.path, next);
+      await writeWorkspaceFile(editing.path, next);
       setEditing(null);
       await load();
     }
@@ -1049,7 +1054,10 @@ export function KanbanDashboardWidget(
       };
       setDefinition(next);
       let loaded = filterBaseRows(
-        await loadDashboardRows(configText(next, "folder")),
+        await loadDashboardRows(
+          configText(next, "folder"),
+          next.workspaceOnly === true,
+        ),
         next.filter,
       );
       const order = storedOrder,
@@ -1097,7 +1105,10 @@ export function KanbanDashboardWidget(
     const oldStatus = String(row.frontmatter[statusKey] ?? ""),
       parsed = parseFrontmatter(row.content),
       frontmatter = { ...parsed.frontmatter, [statusKey]: status };
-    await writeFile(
+    const writeBoardFile = definition.workspaceOnly === true
+      ? writeWorkspaceFile
+      : writeFile;
+    await writeBoardFile(
       row.path,
       `---\n${
         yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd()
@@ -1207,13 +1218,18 @@ export function KanbanDashboardWidget(
       file = title.replace(/[\\/:*?"<>|#^[\]]/g, "").trim() ||
         `card-${Date.now()}`;
     const existing = new Set(
-      (await fileInventory()).map((entry) => entry.path),
+      (definition.workspaceOnly === true
+        ? await listWorkspaceFiles()
+        : await fileInventory()).map((entry) => entry.path),
     );
     let path = `${folder ? `${folder}/` : ""}${file}.md`, suffix = 2;
     while (existing.has(path)) {
       path = `${folder ? `${folder}/` : ""}${file} ${suffix++}.md`;
     }
-    await writeFile(
+    const writeBoardFile = definition.workspaceOnly === true
+      ? writeWorkspaceFile
+      : writeFile;
+    await writeBoardFile(
       path,
       `---\n${
         yaml.dump({ [titleKey]: title, [statusKey]: status }, {
@@ -1412,6 +1428,9 @@ export function KanbanDashboardWidget(
       {previewPath && (
         <KanbanCardModal
           path={previewPath}
+          fileScope={definition.workspaceOnly === true
+            ? "workspace"
+            : "directory"}
           isDark={isDark}
           onNavigate={() => {
             setPreviewPath("");
@@ -2062,22 +2081,27 @@ export function SecretManagerDashboardWidget(
     {},
   );
   const load = useCallback(async () => {
-    const paths = (await fileInventory()).filter((entry) =>
-      entry.path.toLowerCase().endsWith(".encrypted") &&
-      (!folder || entry.path.startsWith(`${folder}/`))
-    ).map((entry) => entry.path);
-    const values = await Promise.all(paths.map(async (path) => {
-      const content = (await readFile(path))?.content || "",
-        metadata = getEncryptedFileMetadata(content);
-      return {
-        path,
-        content,
-        description: metadata.description || "",
-        publicMetadata: metadata.publicMetadata || {},
-      };
-    }));
-    setEntries(values);
-    setError("");
+    try {
+      const paths = (await listWorkspaceFiles()).filter((entry) =>
+        entry.path.toLowerCase().endsWith(".encrypted") &&
+        (!folder || entry.path.startsWith(`${folder}/`))
+      ).map((entry) => entry.path);
+      const values = await Promise.all(paths.map(async (path) => {
+        const content = (await readWorkspaceFile(path))?.content || "",
+          metadata = getEncryptedFileMetadata(content);
+        return {
+          path,
+          content,
+          description: metadata.description || "",
+          publicMetadata: metadata.publicMetadata || {},
+        };
+      }));
+      setEntries(values);
+      setError("");
+    } catch (caught) {
+      setEntries([]);
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
   }, [folder]);
   useEffect(() => {
     void load();
@@ -2107,7 +2131,7 @@ export function SecretManagerDashboardWidget(
       setError("");
       try {
         await encryptWorkspaceFile(
-          selectedFile,
+          `workspace://${selectedFile}`,
           password,
           metadataRecord(metadataFields),
         );
@@ -2143,7 +2167,7 @@ export function SecretManagerDashboardWidget(
           protectedKey.salt,
           { description, publicMetadata: metadataRecord(metadataFields) },
         );
-      await writeFile(path, content);
+      await writeWorkspaceFile(path, content);
       setSecretManagerSessionPassword(managerId, password);
       await load();
       setCreateOpen(false);
@@ -2156,7 +2180,7 @@ export function SecretManagerDashboardWidget(
   };
   const openSecret = async (entry: SecretEntry) => {
     if (entry.publicMetadata.sourceKind === "workspace-file") {
-      setFileViewing(entry.path);
+      setFileViewing(`workspace://${entry.path}`);
       return;
     }
     const savedPassword = getSecretManagerSessionPassword(managerId);
@@ -2220,7 +2244,7 @@ export function SecretManagerDashboardWidget(
         description,
         publicMetadata: metadataRecord(metadataFields),
       });
-      await writeFile(viewing.path, nextContent);
+      await writeWorkspaceFile(viewing.path, nextContent);
       await load();
       setViewing({
         ...viewing,
@@ -2238,7 +2262,7 @@ export function SecretManagerDashboardWidget(
   };
   const remove = async (entry: SecretEntry) => {
     if (!confirm(`Delete ${entry.path}?`)) return;
-    await deleteFile(entry.path);
+    await deleteWorkspaceFile(entry.path);
     window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
     if (viewing?.path === entry.path) setViewing(null);
     await load();
@@ -2399,7 +2423,7 @@ export function SecretManagerDashboardWidget(
           className="primary"
           onClick={() => {
             resetCreate();
-            void fileInventory().then((items) =>
+            void listWorkspaceFiles().then((items) =>
               setFileChoices(
                 items.map((item) => item.path).filter((path) =>
                   !path.toLowerCase().endsWith(".encrypted")

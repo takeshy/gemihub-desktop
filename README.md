@@ -1,91 +1,89 @@
 # GemiHub
 
-> **Your AI is only as good as your data.**<br>
-> **GemiHub is the IDE for ideas—an open workspace where everything becomes context for AI.**
+> **Your AI is only as good as your data.**<br> **GemiHub is the IDE for
+> ideas—an open workspace where everything becomes context for AI.**
 
-AI can generate an answer in seconds, but the knowledge behind that answer is usually scattered across notes, PDFs, books, boards, and half-finished ideas. GemiHub brings those materials into one local, visual workspace and turns them into usable context for AI.
+AI can generate an answer in seconds, but the knowledge behind that answer is
+usually scattered across notes, PDFs, books, boards, and half-finished ideas.
+GemiHub brings those materials into one local, visual workspace and turns them
+into usable context for AI.
 
-Instead of copying fragments between apps and repeatedly explaining your project to a chatbot, you can read, connect, annotate, organize, and ask questions in the same place. Your workspace becomes the context window.
+Instead of copying fragments between apps and repeatedly explaining your project
+to a chatbot, you can read, connect, annotate, organize, and ask questions in
+the same place. Your workspace becomes the context window.
 
 [日本語 README](README_ja.md)
 
 ![GemiHub workspace with Markdown, PDF, and EPUB side by side](docs/images/col.png)
 
-## The problem
+## Why this app exists
 
-AI does not know what you know.
+GemiHub Desktop brings together three ideas developed in earlier projects:
 
-The source material for our best ideas lives in different formats and tools: a quote in a PDF, research in an EPUB, decisions in Markdown, tasks on a Kanban board, and relationships sketched on a canvas. Chat interfaces make us manually gather that context every time, while closed knowledge platforms make our own data difficult to inspect, move, or reuse.
+- the fast document viewing, editing, and source-linked memo experience of
+  **mdwys**;
+- the RAG, OKF, AI Chat, Dashboard, and Workflow features of **GemiHub**;
+- the LLM CLI and local-model integrations explored in **obsidian-llm-hub**.
 
-The result is an AI that is powerful, but under-informed.
+The goal is a compact everyday Markdown application that can use AI deeply
+without making an online service mandatory. It is distributed as a single
+executable with no Go or Deno runtime dependency; the current Windows amd64
+build is under 20 MB.
 
-## The solution
+Files remain ordinary local files. Reading, editing, memos, Dashboards, Canvas,
+Base, Kanban, history, and Trash work without AI. When needed, the same
+workspace can connect to OpenAI-compatible servers—including local
+servers—Gemini, Vertex AI, Anthropic, Codex, Claude, or Antigravity CLI.
 
-GemiHub treats context as a workspace, not a prompt.
+Codex is not limited to developing GemiHub. A configured Codex CLI can power
+Chat, draft and revise Workflows, and run LLM steps inside a Workflow. MCP
+servers, Agent Skills, OKF bundles, and Plugins extend the same local workspace.
 
-- **Bring everything together.** Open Markdown, text, HTML, PDF, EPUB, and images side by side.
-- **Turn reading into knowledge.** Highlight a passage, attach a memo, and jump between the idea and its source.
-- **Give AI the right context.** Attach local files with `@file`, pass selected content with `{selection}`, or search the workspace with local RAG.
-- **Move from thinking to doing.** Combine documents with dashboards, Kanban boards, JSON Canvas, Bases, and reusable AI workflows.
-- **Keep ownership of your work.** Files remain local, portable, and readable without GemiHub or an AI subscription.
+## What you can do
 
-AI is optional. When it is disabled, GemiHub remains a complete document and knowledge workspace with no API key or cloud account required.
+- **Use it as your default Markdown app.** Associate `.md` files with GemiHub,
+  open them quickly from Explorer or Finder, and switch between Preview,
+  WYSIWYG, and Raw editing.
+- **Find notes by meaning.** Build a local RAG index over Markdown, text, PDF,
+  and supported media instead of relying on filenames or remembering where a
+  note was written.
+- **Let AI clean up the rough work.** Ask Chat to rewrite, summarize, classify,
+  or reorganize notes, then review file changes before applying them.
+- **Turn reading into reusable knowledge.** Add source-linked memos while
+  reading Markdown, PDF, EPUB, HTML, or technical books, and return from a memo
+  to the original passage.
+- **Automate recurring research.** For example, a Workflow can take an English
+  technical article, translate it, and create a readable infographic note.
+- **Run daily work from one screen.** Use a Dashboard for tasks, a Timeline for
+  quick activity notes, and File widgets for frequently used documents.
+- **Bring everyday tools to the front.** The header launcher opens Memo List,
+  the system Timeline, Calendar, or Kanban above maximized widgets. Secret
+  Manager keeps its own key icon.
+- **Turn conversations into a daily record.** Ask Chat or the Discord bot to
+  “memo this” and it can save the answer or key points directly to the Workspace
+  system Timeline.
+- **Give AI accurate product knowledge.** Publish your own app documentation as
+  an OKF bundle so Chat can answer quickly from a curated LLM wiki.
+- **Connect work systems.** Use an MCP server to turn Git history into a daily
+  report, or a Plugin to back up and synchronize files with services such as
+  Google Drive.
 
-## Demo: from scattered sources to grounded output
-
-1. Open a research paper, an EPUB, and a Markdown draft in one workspace.
-2. Highlight evidence and save linked memos without losing the original source location.
-3. Add the relevant files or selected passages to Chat as explicit context.
-4. Ask AI to compare sources, challenge an assumption, or draft the next section.
-5. Review proposed file edits before they are applied.
-6. Turn the result into a reusable workflow or track the next steps on a Dashboard.
-
-The same workspace supports the full loop: **collect → connect → understand → create → automate**.
-
-## Why GemiHub is different
-
-### Context is visible
-
-You can see the documents, selections, memos, and tools contributing to the work. AI is part of the workspace rather than a separate black-box chat tab.
-
-### Knowledge stays connected to evidence
-
-Memos retain their quoted text and source location. You can move from a claim back to the passage that inspired it—even after an EPUB reflows.
-
-### Local-first by design
-
-Your workspace directory is the source of truth. GemiHub includes version history, recoverable Trash, optional file encryption, and password-protected Chat and Workflow logs.
-
-### Open and extensible
-
-Use OpenAI-compatible APIs, Gemini, Vertex AI, Anthropic, or local CLIs. Extend the workspace through Agent Skills, HTTP/stdio MCP, MCP Apps, declarative workflows, and plugins. Official and locally developed plugins are recommended, while other third-party plugins are marked not recommended.
-
-## What is already built
-
-- Multi-pane document workspace with row and column layouts
-- Markdown Preview, WYSIWYG, and Raw editing modes
-- Anchored memos for Markdown, PDF, EPUB, HTML, and text
-- Dashboards with File, Base, Kanban, Timeline, Calendar, Workflow, Web Embed, Secret Manager, and Memo List widgets
-- Shared Calendar, Timeline, and Kanban status history compatible with the GemiHub Obsidian workspace format
-- Optional memo-to-Timeline history with source links and quoted evidence
-- AI Chat with file context, selection context, local RAG, and confirmed file operations
-- YAML-based workflows with automation and execution history
-- JSON Canvas, portable Bases, and Markdown-backed Kanban boards
-- File history, Trash, encryption, and workspace-bound file access
-- Plugin, Agent Skill, MCP server, and MCP App support
-- Compatible workspace formats across GemiHub web and desktop
+AI is optional. Without an API key, cloud account, or network connection,
+GemiHub remains a local document and knowledge workspace.
 
 ## Screenshots
 
 ### Ideas stay linked to their sources
 
-Select text in Markdown, PDF, or EPUB and create an anchored memo. Highlights navigate to memos, and memo quotes navigate back to the source.
+Select text in Markdown, PDF, or EPUB and create an anchored memo. Highlights
+navigate to memos, and memo quotes navigate back to the source.
 
 ![Memo timeline with source-linked notes](docs/images/memo_timeline.png)
 
 ### A workspace shaped around the project
 
-Arrange documents and tools in rows or columns, then save dashboards as portable YAML files.
+Arrange documents and tools in rows or columns, then save dashboards as portable
+YAML files.
 
 ![GemiHub row layout](docs/images/row.png)
 
@@ -97,27 +95,39 @@ Browse every document with memos, ordered by recent activity.
 
 ## Architecture
 
-GemiHub Desktop is built with Go, Wails, Deno, Vite, React, Wysimark-lite, and pdf.js.
+GemiHub Desktop is built with Go, Wails, Deno, Vite, React, Wysimark-lite, and
+pdf.js.
 
-The desktop shell provides local filesystem access within a user-selected workspace. The React frontend renders documents and workspace tools, while AI providers, local CLIs, MCP servers, skills, plugins, and YAML workflows form an extensible intelligence layer.
+The desktop shell provides local filesystem access within a user-selected
+workspace. The React frontend renders documents and workspace tools, while AI
+providers, local CLIs, MCP servers, skills, plugins, and YAML workflows form an
+extensible intelligence layer.
 
 ### Supported formats
 
 - Documents: Markdown, plain text, HTML, PDF, EPUB, and images
 - Workspace files: Dashboard, Base, Kanban, JSON Canvas, and Workflow YAML
-- Encrypted files: self-contained `.encrypted` files that retain the original format
+- Encrypted files: self-contained `.encrypted` files that retain the original
+  format
 
 ### Safety model
 
-- The selected workspace directory is the root of all file operations; traversal through `..` or symlinks is rejected.
-- Up to 50 versions are saved before a file is overwritten, and deleted files can be restored from Trash.
+- Workspace APIs and AI file tools are limited to the selected Workspace
+  directory. Files opened from elsewhere are limited to their explicitly opened
+  Files directory; traversal through `..` or symlinks is rejected in both
+  scopes.
+- Up to 50 versions are saved before a file is overwritten, and deleted files
+  can be restored from Trash.
 - AI-proposed edits and renames require confirmation.
 - Plugins declare permissions such as `files`, `storage`, `network`, and `llm`.
-- Plaintext from encrypted files is only re-encrypted when the user explicitly saves.
+- File Widget text auto-saves after editing pauses. Encrypted text is
+  re-encrypted with the session password and auto-saved; binary previews remain
+  read-only.
 
 ## Install
 
-Download a binary from the GitHub Releases page. Deno and Go are not required at runtime.
+Download a binary from the GitHub Releases page. Deno and Go are not required at
+runtime.
 
 Available release artifacts:
 
@@ -127,7 +137,8 @@ Available release artifacts:
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
 
-Each release also includes `THIRD_PARTY_NOTICES.md`. The same notices are available in the app under **Settings → General → Third-party notices**.
+Each release also includes `THIRD_PARTY_NOTICES.md`. The same notices are
+available in the app under **Settings → General → Third-party notices**.
 
 On Linux and macOS, make the downloaded file executable:
 
@@ -135,7 +146,8 @@ On Linux and macOS, make the downloaded file executable:
 chmod +x gemihub-desktop-linux-amd64
 ```
 
-The macOS binary is currently unsigned, so clear its quarantine attribute before first launch:
+The macOS binary is currently unsigned, so clear its quarantine attribute before
+first launch:
 
 ```bash
 xattr -d com.apple.quarantine gemihub-desktop-darwin-arm64
@@ -147,9 +159,11 @@ xattr -d com.apple.quarantine gemihub-desktop-darwin-arm64
 2. Click `+ Add Widget` or drag files into the window.
 3. Arrange sources in rows or columns.
 4. Enable AI in Settings and configure a provider if you want AI features.
-5. Add a file with `@file` or select text and use `{selection}` to give Chat grounded context.
+5. Add a file with `@file` or select text and use `{selection}` to give Chat
+   grounded context.
 
-Files can also be opened through the operating system's **Open with** action or as startup arguments:
+Files can also be opened through the operating system's **Open with** action or
+as startup arguments:
 
 ```bash
 gemihub-desktop note.md research.pdf book.epub
@@ -184,22 +198,32 @@ deno task build
 deno task desktop:build
 ```
 
-Developer Tools are enabled in desktop builds. Press `Ctrl+Shift+I` (`Cmd+Option+I` on macOS) to open the WebView inspector.
+Developer Tools are enabled in desktop builds. Press `Ctrl+Shift+I`
+(`Cmd+Option+I` on macOS) to open the WebView inspector.
 
 ## Acknowledgments
 
-GemiHub's built-in Markdown, Base, and Canvas Agent Skills include documentation adapted from [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills). The corresponding file-format support in GemiHub was independently implemented from the publicly described formats and behavior; it does not incorporate Obsidian source code. Canvas support follows the open [JSON Canvas specification](https://jsoncanvas.org/).
+GemiHub's built-in Markdown, Base, and Canvas Agent Skills include documentation
+adapted from
+[kepano/obsidian-skills](https://github.com/kepano/obsidian-skills). The
+corresponding file-format support in GemiHub was independently implemented from
+the publicly described formats and behavior; it does not incorporate Obsidian
+source code. Canvas support follows the open
+[JSON Canvas specification](https://jsoncanvas.org/).
 
-We are grateful to Steph Ango (@kepano), the project contributors, and the maintainers of JSON Canvas for making their work available to the community. See [Third-Party Notices](THIRD_PARTY_NOTICES.md) for copyright and license details.
+We are grateful to Steph Ango (@kepano), the project contributors, and the
+maintainers of JSON Canvas for making their work available to the community. See
+[Third-Party Notices](THIRD_PARTY_NOTICES.md) for copyright and license details.
 
-GemiHub's WYSIWYG Markdown editor uses [takeshy/wysimark-lite](https://github.com/takeshy/wysimark-lite), a lightweight fork of [portive/wysimark](https://github.com/portive/wysimark). We thank the Wysimark authors and contributors for the foundation they made available under the MIT License.
+GemiHub's WYSIWYG Markdown editor uses
+[takeshy/wysimark-lite](https://github.com/takeshy/wysimark-lite), a lightweight
+fork of [portive/wysimark](https://github.com/portive/wysimark). We thank the
+Wysimark authors and contributors for the foundation they made available under
+the MIT License.
 
-GemiHub Desktop is built with [Wails](https://wails.io/) ([wailsapp/wails](https://github.com/wailsapp/wails)). We thank Lea Anthony and the Wails contributors for making the framework available under the MIT License.
+GemiHub Desktop is built with [Wails](https://wails.io/)
+([wailsapp/wails](https://github.com/wailsapp/wails)). We thank Lea Anthony and
+the Wails contributors for making the framework available under the MIT License.
 
-GemiHub is an independent project and is not affiliated with, endorsed by, or sponsored by Obsidian.
-
-## Vision
-
-The future of AI is not just a better model. It is better context: personal, inspectable, connected, and owned by the person doing the work.
-
-GemiHub is building the open workspace for that future—**an IDE for ideas where everything can become context for AI.**
+GemiHub is an independent project and is not affiliated with, endorsed by, or
+sponsored by Obsidian.
