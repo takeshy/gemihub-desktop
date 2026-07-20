@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GripVertical, Plus, X } from "lucide-react";
 import yaml from "js-yaml";
-import { fileInventory, readFile } from "../lib/wailsBackend";
+import {
+  listWorkspaceFiles,
+  readWorkspaceFile,
+} from "../lib/wailsBackend";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 
 type BaseRoot = Record<string, unknown> & {
@@ -40,12 +43,12 @@ export function BaseConfigEditor(
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const entries = (await fileInventory()).filter((entry) =>
+      const entries = (await listWorkspaceFiles()).filter((entry) =>
         !entry.binary && /\.md(?:own)?$/i.test(entry.path) &&
         (!sourceFolder || entry.path.startsWith(`${sourceFolder}/`))
       ).slice(0, 1000);
       const files = await Promise.all(
-        entries.map((entry) => readFile(entry.path)),
+        entries.map((entry) => readWorkspaceFile(entry.path)),
       );
       const fields = new Set<string>([
         "file.name",

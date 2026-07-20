@@ -284,7 +284,11 @@ func (a *App) OpenExternalEditor(editorPath string, filePath string) error {
 	if filePath == "" {
 		return fmt.Errorf("file path is empty")
 	}
-	return startExternalEditor(editorPath, filePath)
+	resolved, err := a.resolveExistingLocalFile(filePath)
+	if err != nil {
+		return err
+	}
+	return startExternalEditor(editorPath, resolved)
 }
 
 func readLocalFile(path string) (*LocalFileResult, error) {
@@ -332,27 +336,16 @@ func isBinaryFileName(fileName string) bool {
 // OpenLocalFileDefault opens a file with the OS default associated app without
 // transporting its binary contents through the WebView/JSON bridge.
 func (a *App) OpenLocalFileDefault(path string) error {
-	var source string
-	var err error
-	if filepath.IsAbs(strings.TrimSpace(path)) {
-		source = strings.TrimSpace(path)
-	} else {
-		source, err = a.directoryPath(path, false)
-		if err != nil {
-			return err
-		}
-	}
-	info, err := os.Stat(source)
+	source, err := a.resolveExistingLocalFile(path)
 	if err != nil {
 		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("only regular files can be opened")
 	}
 	var command *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		command = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", source)
+		// `start` delegates to the Windows file association and works for native
+		// ARM64 applications as well as paths containing spaces.
+		command = exec.Command("cmd.exe", "/C", "start", "", source)
 	case "darwin":
 		command = exec.Command("open", source)
 	default:
@@ -362,6 +355,48 @@ func (a *App) OpenLocalFileDefault(path string) error {
 		return err
 	}
 	return command.Process.Release()
+}
+
+// resolveExistingLocalFile translates Files/Workspace resource paths to a
+// native path before handing them to another process. Older dashboards did
+// not persist fileScope, so an unscoped relative path falls back to Workspace
+// when Directory base is unavailable or does not contain the file.
+func (a *App) resolveExistingLocalFile(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", fmt.Errorf("file path is empty")
+	}
+	var source string
+	var err error
+	if filepath.IsAbs(trimmed) {
+		source = trimmed
+	} else {
+		source, err = a.directoryPath(trimmed, false)
+		if err != nil {
+			if strings.HasPrefix(strings.ToLower(trimmed), "files://") {
+				return "", err
+			}
+			source, err = a.workspacePath(trimmed, false)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	info, err := os.Stat(source)
+	if err != nil && !filepath.IsAbs(trimmed) && !strings.HasPrefix(strings.ToLower(trimmed), "files://") {
+		if workspaceSource, workspaceErr := a.workspacePath(trimmed, false); workspaceErr == nil {
+			if workspaceInfo, statErr := os.Stat(workspaceSource); statErr == nil {
+				source, info, err = workspaceSource, workspaceInfo, nil
+			}
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("only regular files can be opened")
+	}
+	return source, nil
 }
 
 func shouldReadAsDataURL(fileName string) bool {

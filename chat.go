@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -413,6 +414,16 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 	if endpoint == "" {
 		endpoint = "https://api.openai.com/v1"
 	}
+	if request.EnableWebSearch {
+		lowerModel := strings.ToLower(request.Model)
+		if strings.HasPrefix(lowerModel, "dall-e") || strings.HasPrefix(lowerModel, "gpt-image") || strings.HasPrefix(lowerModel, "grok-imagine-image") || strings.HasPrefix(lowerModel, "grok-imagine-video") {
+			return nil, fmt.Errorf("native web search is unavailable for media-generation models")
+		}
+		if host := providerEndpointHost(endpoint); host == "api.openai.com" || host == "api.x.ai" {
+			return a.chatOpenAIResponses(request, endpoint)
+		}
+		return nil, fmt.Errorf("native web search requires the official OpenAI or xAI endpoint")
+	}
 	if !strings.HasSuffix(endpoint, "/chat/completions") {
 		endpoint += "/chat/completions"
 	}
@@ -533,6 +544,171 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 		}
 	}
 	return nil, fmt.Errorf("tool iteration limit exceeded")
+}
+
+func providerEndpointHost(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+}
+
+func responsesEndpoint(endpoint string) string {
+	endpoint = strings.TrimRight(endpoint, "/")
+	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/responses")
+	return endpoint + "/responses"
+}
+
+// chatOpenAIResponses uses the official Responses API for OpenAI and xAI
+// because provider-native web search is not available through Chat Completions.
+func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatResult, error) {
+	input := make([]any, 0, len(request.Messages)+16)
+	for _, message := range request.Messages {
+		content := any(message.Content)
+		if len(message.Attachments) > 0 && message.Role == "user" {
+			parts := []map[string]any{{"type": "input_text", "text": message.Content}}
+			for _, attachment := range message.Attachments {
+				dataURL := "data:" + attachment.MimeType + ";base64," + attachment.Data
+				if strings.HasPrefix(attachment.MimeType, "image/") {
+					parts = append(parts, map[string]any{"type": "input_image", "image_url": dataURL, "detail": "auto"})
+				} else if attachment.MimeType == "application/pdf" {
+					parts = append(parts, map[string]any{"type": "input_file", "filename": attachment.Name, "file_data": dataURL})
+				}
+			}
+			content = parts
+		}
+		input = append(input, map[string]any{"role": message.Role, "content": content})
+	}
+	tools := []map[string]any{{"type": "web_search"}}
+	for _, definition := range chatToolDefinitions(request) {
+		function, _ := definition["function"].(map[string]any)
+		if function == nil {
+			continue
+		}
+		tools = append(tools, map[string]any{
+			"type": "function", "name": function["name"],
+			"description": function["description"], "parameters": function["parameters"],
+		})
+	}
+	headers := map[string]string{"Authorization": "Bearer " + request.APIKey}
+	toolsUsed := []string{"web_search"}
+	usage := &ChatUsage{}
+	for iteration := 0; iteration < 20; iteration++ {
+		payload := map[string]any{
+			"model": request.Model, "input": input, "tools": tools,
+			"tool_choice": "auto", "include": []string{"reasoning.encrypted_content"},
+		}
+		if request.SystemPrompt != "" {
+			payload["instructions"] = request.SystemPrompt
+		}
+		if request.EnableThinking {
+			payload["reasoning"] = map[string]any{"effort": "high", "summary": "detailed"}
+		}
+		var response struct {
+			Output []json.RawMessage `json:"output"`
+			Usage  struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+				TotalTokens  int `json:"total_tokens"`
+				InputDetails struct {
+					CachedTokens int `json:"cached_tokens"`
+				} `json:"input_tokens_details"`
+				OutputDetails struct {
+					ReasoningTokens int `json:"reasoning_tokens"`
+				} `json:"output_tokens_details"`
+			} `json:"usage"`
+		}
+		if err := httpJSON(request.context(a.ctx), http.MethodPost, responsesEndpoint(endpoint), headers, payload, &response); err != nil {
+			return nil, err
+		}
+		addChatUsage(usage, ChatUsage{InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens, TotalTokens: response.Usage.TotalTokens, CachedTokens: response.Usage.InputDetails.CachedTokens, ThinkingTokens: response.Usage.OutputDetails.ReasoningTokens})
+		a.emitChatUsage(request, *usage)
+		var text strings.Builder
+		var thinking strings.Builder
+		calls := []struct{ CallID, Name, Arguments string }{}
+		sources := map[string]string{}
+		for _, raw := range response.Output {
+			var item struct {
+				Type      string `json:"type"`
+				CallID    string `json:"call_id"`
+				Name      string `json:"name"`
+				Arguments string `json:"arguments"`
+				Summary   []struct {
+					Text string `json:"text"`
+				} `json:"summary"`
+				Content []struct {
+					Type        string                              `json:"type"`
+					Text        string                              `json:"text"`
+					Annotations []struct{ Type, URL, Title string } `json:"annotations"`
+				} `json:"content"`
+			}
+			if err := json.Unmarshal(raw, &item); err != nil {
+				continue
+			}
+			if item.Type == "function_call" {
+				calls = append(calls, struct{ CallID, Name, Arguments string }{item.CallID, item.Name, item.Arguments})
+			}
+			if item.Type == "reasoning" {
+				for _, summary := range item.Summary {
+					thinking.WriteString(summary.Text)
+				}
+			}
+			for _, part := range item.Content {
+				if part.Type == "output_text" {
+					text.WriteString(part.Text)
+				}
+				for _, annotation := range part.Annotations {
+					if annotation.URL != "" {
+						sources[annotation.URL] = annotation.Title
+					}
+				}
+			}
+			var replay any
+			if json.Unmarshal(raw, &replay) == nil {
+				input = append(input, replay)
+			}
+		}
+		if calls == nil || len(calls) == 0 {
+			content := text.String()
+			if len(sources) > 0 {
+				links := make([]string, 0, len(sources))
+				for sourceURL, title := range sources {
+					if title == "" {
+						title = sourceURL
+					}
+					links = append(links, fmt.Sprintf("[%s](%s)", title, sourceURL))
+				}
+				sort.Strings(links)
+				content += "\n\nSources: " + strings.Join(links, " · ")
+			}
+			a.emitChatStream(request, "text", content, "")
+			if thinking.Len() > 0 {
+				a.emitChatStream(request, "thinking", thinking.String(), "")
+			}
+			return &ChatResult{Content: content, Thinking: thinking.String(), ToolsUsed: toolsUsed, Usage: usage}, nil
+		}
+		for _, call := range calls {
+			arguments := map[string]any{}
+			if err := json.Unmarshal([]byte(call.Arguments), &arguments); err != nil {
+				arguments = map[string]any{"_raw": call.Arguments}
+			}
+			result, pending, err := a.executeChatTool(request, call.Name, call.Arguments)
+			toolsUsed = append(toolsUsed, call.Name)
+			a.emitChatStream(request, "tool", "", call.Name)
+			if pending != nil {
+				return &ChatResult{Content: text.String(), PendingAction: pending, ToolsUsed: toolsUsed, Usage: usage}, nil
+			}
+			if err != nil {
+				result = map[string]any{"success": false, "error": err.Error()}
+			}
+			encoded, _ := json.Marshal(result)
+			input = append(input, map[string]any{"type": "function_call_output", "call_id": call.CallID, "output": string(encoded)})
+			_ = arguments
+		}
+	}
+	return nil, fmt.Errorf("Responses tool iteration limit exceeded")
 }
 
 func openAIMessageContent(message ChatMessage) any {
@@ -1103,6 +1279,9 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 	} else if !strings.HasSuffix(endpoint, "/messages") {
 		endpoint += "/messages"
 	}
+	if request.EnableWebSearch && providerEndpointHost(endpoint) != "api.anthropic.com" {
+		return nil, fmt.Errorf("native web search requires the official Anthropic endpoint")
+	}
 	headers := map[string]string{"anthropic-version": "2023-06-01", "x-api-key": request.APIKey}
 	thinkingConfig := anthropicThinkingConfig(request.Model, request.EnableThinking)
 	messages := make([]any, 0, len(request.Messages)+8)
@@ -1117,9 +1296,16 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 		}
 		tools = append(tools, map[string]any{"name": function["name"], "description": function["description"], "input_schema": function["parameters"]})
 	}
+	if request.EnableWebSearch {
+		tools = append(tools, map[string]any{"type": "web_search_20250305", "name": "web_search"})
+	}
 	toolsUsed := []string{}
+	if request.EnableWebSearch {
+		toolsUsed = append(toolsUsed, "web_search")
+	}
 	thinkingUsed := []string{}
 	usage := &ChatUsage{}
+	webSources := map[string]string{}
 	for iteration := 0; iteration < 8; iteration++ {
 		maxTokens := 4096
 		if thinkingConfig != nil {
@@ -1176,6 +1362,10 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 					Thinking    string `json:"thinking"`
 					PartialJSON string `json:"partial_json"`
 					Signature   string `json:"signature"`
+					Citation    struct {
+						URL   string `json:"url"`
+						Title string `json:"title"`
+					} `json:"citation"`
 				} `json:"delta"`
 				Error struct {
 					Message string `json:"message"`
@@ -1250,6 +1440,9 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 				}
 				a.emitChatStream(request, "thinking", event.Delta.Thinking, "")
 			}
+			if event.Delta.Type == "citations_delta" && event.Delta.Citation.URL != "" {
+				webSources[event.Delta.Citation.URL] = event.Delta.Citation.Title
+			}
 			if event.Delta.Type == "signature_delta" && event.Delta.Signature != "" {
 				if block := thoughtBlocks[event.Index]; block != nil {
 					block.Signature.WriteString(event.Delta.Signature)
@@ -1264,7 +1457,21 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 		}
 		if len(calls) == 0 {
 			usage.TotalTokens = usage.InputTokens + usage.OutputTokens
-			return &ChatResult{Content: text.String(), Thinking: strings.Join(thinkingUsed, "\n\n"), ToolsUsed: toolsUsed, Usage: usage}, nil
+			content := text.String()
+			if len(webSources) > 0 {
+				links := make([]string, 0, len(webSources))
+				for sourceURL, title := range webSources {
+					if title == "" {
+						title = sourceURL
+					}
+					links = append(links, fmt.Sprintf("[%s](%s)", title, sourceURL))
+				}
+				sort.Strings(links)
+				suffix := "\n\nSources: " + strings.Join(links, " · ")
+				content += suffix
+				a.emitChatStream(request, "text", suffix, "")
+			}
+			return &ChatResult{Content: content, Thinking: strings.Join(thinkingUsed, "\n\n"), ToolsUsed: toolsUsed, Usage: usage}, nil
 		}
 		assistantContent := []map[string]any{}
 		thoughtIndexes := make([]int, 0, len(thoughtBlocks))

@@ -7,7 +7,10 @@ import {
   RefreshCw,
   TableProperties,
 } from "lucide-react";
-import { fileInventory, readFile } from "../lib/wailsBackend";
+import {
+  listWorkspaceFiles,
+  readWorkspaceFile,
+} from "../lib/wailsBackend";
 import type { BaseQueryData } from "./baseEngine";
 import { queryBaseFiles } from "./baseEngine";
 import type { BaseDefinition } from "./dashboardData";
@@ -39,10 +42,10 @@ export function BaseFileView({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const inventory = await fileInventory();
+      const inventory = await listWorkspaceFiles();
       const files = await Promise.all(inventory.map(async (entry) => {
         const markdown = !entry.binary && /\.md(?:own)?$/i.test(entry.path);
-        const source = markdown ? await readFile(entry.path) : null;
+        const source = markdown ? await readWorkspaceFile(entry.path) : null;
         return {
           id: entry.path,
           name: entry.path,
@@ -78,7 +81,7 @@ export function BaseFileView({
       <header>
         <span title={path}>
           <Database size={13} />
-          {path || "Base"}
+          {(path.split(/[\\/]/).pop() || "Base").replace(/\.base$/i, "")}
         </span>
         {data && data.compiled.config.views.length > 1 && (
           <select
@@ -164,11 +167,12 @@ export function BaseFileView({
       {previewPath && (
         <KanbanCardModal
           path={previewPath}
+          fileScope="workspace"
           isDark={isDark}
           onNavigate={() => {
             const target = previewPath;
             setPreviewPath("");
-            onOpenPath(target);
+            onOpenPath(`workspace://${target}`);
           }}
           onSaved={() => setRefreshKey((value) => value + 1)}
           onClose={() => setPreviewPath("")}

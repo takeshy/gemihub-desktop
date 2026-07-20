@@ -88,6 +88,9 @@ Deno.test("base rows support configured sorting, view search, and display names"
     }, "status"),
     "State",
   );
+  assertEquals(basePropertyLabel(null, "file.name"), "name");
+  assertEquals(basePropertyLabel(null, "note.status"), "status");
+  assertEquals(basePropertyLabel(null, "formula.total"), "total");
 });
 
 Deno.test("Base filesystem timestamps render as localized date and time", () => {

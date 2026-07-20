@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
+import type { BaseEntry } from "../bases/types";
 import type { Value } from "../bases/types";
 import { valueToString } from "../bases/values";
+import { readWorkspaceFile } from "../lib/wailsBackend";
 import type { BaseQueryData } from "./baseEngine";
 import {
   basePropertyLabel,
@@ -32,6 +35,14 @@ export function BaseViewRenderer({ data, definition, onOpenPath }: {
     return <div className="base-renderer-empty">No results</div>;
   }
   if (data.view.type === "cards") {
+    const imageProperty = typeof data.view.image === "string"
+      ? data.view.image
+      : typeof data.view.imageProperty === "string"
+      ? data.view.imageProperty
+      : "";
+    const entriesByPath = new Map(
+      data.result.data.map((entry) => [entry.file.path, entry]),
+    );
     return (
       <div className="gemihub-base-groups">
         {groups.map((group, index) => (
@@ -39,13 +50,15 @@ export function BaseViewRenderer({ data, definition, onOpenPath }: {
             <GroupHeader label={group.label} count={group.rows.length} summaries={group.summaries} definition={definition} />
             <div className={`gemihub-base-cards size-${String(data.view.cardSize || "medium").toLowerCase()}`}>
               {group.rows.map((row) => (
-                <button type="button" key={row.path} onClick={() => onOpenPath(row.path)}>
-                  <strong>{formatBaseCellValue(row, "file.name") || row.name}</strong>
-                  {order.filter((property) => property !== "file.name").slice(0, 5).map((property) => {
-                    const text = formatBaseCellValue(row, property);
-                    return text ? <small key={property}>{text}</small> : null;
-                  })}
-                </button>
+                <BaseCard
+                  key={row.path}
+                  row={row}
+                  entry={entriesByPath.get(row.path)}
+                  order={order}
+                  imageProperty={imageProperty}
+                  imageFit={String(data.view.imageFit || "cover")}
+                  onOpenPath={onOpenPath}
+                />
               ))}
             </div>
           </section>
@@ -112,6 +125,92 @@ export function BaseViewRenderer({ data, definition, onOpenPath }: {
       ))}
     </div>
   );
+}
+
+function BaseCard({ row, entry, order, imageProperty, imageFit, onOpenPath }: {
+  row: DashboardDataRow;
+  entry?: BaseEntry;
+  order: string[];
+  imageProperty: string;
+  imageFit: string;
+  onOpenPath: (path: string) => void;
+}) {
+  const cover = entry && imageProperty
+    ? entryProperty(entry, imageProperty)
+    : null;
+  const target = cover ? imageTarget(cover) : "";
+  const [coverSrc, setCoverSrc] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!target) {
+      setCoverSrc("");
+      return;
+    }
+    if (/^(?:data:image\/|https?:\/\/)/i.test(target)) {
+      setCoverSrc(target);
+      return;
+    }
+    void readWorkspaceFile(target).then((file) => {
+      if (!cancelled) setCoverSrc(file?.content.startsWith("data:image/") ? file.content : "");
+    }).catch(() => {
+      if (!cancelled) setCoverSrc("");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [target]);
+
+  return (
+    <button type="button" onClick={() => onOpenPath(row.path)}>
+      {coverSrc && (
+        <img
+          className="gemihub-base-card-image"
+          src={coverSrc}
+          alt=""
+          draggable={false}
+          style={{ objectFit: imageFit === "contain" ? "contain" : "cover" }}
+        />
+      )}
+      <strong>{formatBaseCellValue(row, "file.name") || row.name}</strong>
+      {order.filter((property) => property !== "file.name").slice(0, 5).map((property) => {
+        const text = formatBaseCellValue(row, property);
+        return text ? <small key={property}>{text}</small> : null;
+      })}
+    </button>
+  );
+}
+
+function entryProperty(entry: BaseEntry, property: string): Value {
+  const separator = property.indexOf(".");
+  if (separator < 0) {
+    return entry.rowScope.note.map.get(property) ?? { type: "null" };
+  }
+  const namespace = property.slice(0, separator);
+  const name = property.slice(separator + 1);
+  if (namespace === "note") {
+    return entry.rowScope.note.map.get(name) ?? { type: "null" };
+  }
+  if (namespace === "formula") {
+    return entry.rowScope.formula.resolve(name) ?? { type: "null" };
+  }
+  return { type: "null" };
+}
+
+function imageTarget(value: Value): string {
+  const raw = value.type === "image"
+    ? value.resolvedPath || value.source
+    : value.type === "link"
+    ? value.resolvedPath || value.target
+    : value.type === "file"
+    ? value.path
+    : value.type === "url"
+    ? value.url
+    : value.type === "string"
+    ? value.value
+    : "";
+  return raw.replace(/^!?\[\[/, "").replace(/\]\]$/, "").split("|")[0]
+    .split("#")[0].trim();
 }
 
 function GroupHeader({ label, count, summaries, definition }: {

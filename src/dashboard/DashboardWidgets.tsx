@@ -61,11 +61,14 @@ import {
   checkWebEmbeddable,
   deleteFile,
   fileInventory,
+  listWorkspaceFiles,
   listMemoFiles,
   readFile,
   readMemoFile,
+  readWorkspaceFile,
   writeBinaryFile,
   writeFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
 import {
@@ -1472,10 +1475,10 @@ export function BaseDashboardWidget({
         setError(`Cannot read ${path}`);
         return;
       }
-      const inventory = await fileInventory();
+      const inventory = await listWorkspaceFiles();
       const vaultFiles = await Promise.all(inventory.map(async (entry) => {
         const markdown = !entry.binary && /\.md(?:own)?$/i.test(entry.path);
-        const source = markdown ? await readFile(entry.path) : null;
+        const source = markdown ? await readWorkspaceFile(entry.path) : null;
         return {
           id: entry.path,
           name: entry.path,
@@ -1619,7 +1622,7 @@ export function BaseDashboardWidget({
       ? next.split(",").map((item) => item.trim()).filter(Boolean)
       : next;
     const parsed = parseFrontmatter(row.content);
-    await writeFile(
+    await writeWorkspaceFile(
       row.path,
       `---\n${
         yaml.dump({ ...parsed.frontmatter, [key]: value }, {
@@ -2000,6 +2003,7 @@ export function BaseDashboardWidget({
       {previewPath && (
         <KanbanCardModal
           path={previewPath}
+          fileScope="workspace"
           isDark={isDark}
           onNavigate={() => {
             const path = previewPath;

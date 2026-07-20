@@ -12,7 +12,13 @@ import { PdfViewer } from "../components/PdfViewer";
 import { WysiwygEditor } from "../components/WysiwygEditor";
 import { ImageViewer } from "../components/ImageViewer";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
-import { readFile, readLocalFile, writeFile } from "../lib/wailsBackend";
+import {
+  readFile,
+  readLocalFile,
+  readWorkspaceFile,
+  writeFile,
+  writeWorkspaceFile,
+} from "../lib/wailsBackend";
 import { docKindFor } from "./documentKind";
 
 type CardMode = "preview" | "wysiwyg" | "raw";
@@ -71,8 +77,9 @@ function replaceBody(content: string, body: string): string {
 }
 
 export function KanbanCardModal(
-  { path, isDark, onNavigate, onSaved, onClose }: {
+  { path, fileScope = "directory", isDark, onNavigate, onSaved, onClose }: {
     path: string;
+    fileScope?: "directory" | "workspace";
     isDark: boolean;
     onNavigate: () => void;
     onSaved: () => void;
@@ -101,7 +108,9 @@ export function KanbanCardModal(
     let cancelled = false;
     setLoading(true);
     setError("");
-    const read = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+    const read = fileScope === "workspace"
+      ? readWorkspaceFile(path)
+      : /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
       ? readLocalFile(path)
       : readFile(path);
     void read.then((file) => {
@@ -123,7 +132,7 @@ export function KanbanCardModal(
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [fileScope, path]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -215,7 +224,11 @@ export function KanbanCardModal(
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      await writeFile(path, content);
+      if (fileScope === "workspace") {
+        await writeWorkspaceFile(path, content);
+      } else {
+        await writeFile(path, content);
+      }
       setSavedContent(content);
       setError("");
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));

@@ -227,6 +227,7 @@ export function FileWidgetBody({
   memoDirPath,
   memoSyncTimeline,
   onOpenPath,
+  onOpenPathMaximized,
   onNavigatePath,
   onActivate,
   onSelectionChange,
@@ -242,6 +243,7 @@ export function FileWidgetBody({
   memoDirPath: string;
   memoSyncTimeline: string;
   onOpenPath: (path: string) => void;
+  onOpenPathMaximized: (path: string) => void;
   onNavigatePath: (path: string) => void;
   onActivate: () => void;
   onSelectionChange: (selection: ActiveSelection | null) => void;
@@ -1304,7 +1306,7 @@ export function FileWidgetBody({
           isDark={isDark}
           onChange={(content) =>
             onConfigChange({ ...widget.config, fileName, content })}
-          onOpenPath={onOpenPath}
+          onOpenPath={onOpenPathMaximized}
         />
       );
     }
@@ -1362,7 +1364,9 @@ export function FileWidgetBody({
 
     if (kind === "image") {
       return documentContent
-        ? <ImageViewer src={documentContent} alt={fileName} />
+        ? (
+          <ImageViewer src={documentContent} alt={fileName} />
+        )
         : <div className="dashboard-empty">{tr("doc.openImage")}</div>;
     }
 

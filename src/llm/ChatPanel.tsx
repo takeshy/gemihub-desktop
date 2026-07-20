@@ -105,6 +105,7 @@ import {
 import type { PluginSlashCommand } from "../plugins/types";
 
 const CHAT_HISTORY_STATE_FILE = "chat-history";
+const initializedHistoryScopes = new Set<string>();
 
 interface ChatSession {
   id: string;
@@ -196,6 +197,23 @@ function sessionID(): string {
     `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function supportsNativeWebSearch(settings: ChatSettings): boolean {
+  if (settings.provider === "gemini" || settings.provider === "vertex") {
+    return true;
+  }
+  if (settings.provider === "cli") return false;
+  if (/^(?:dall-e|gpt-image|grok-imagine-(?:image|video))/i.test(settings.model)) {
+    return false;
+  }
+  try {
+    const host = new URL(settings.endpoint).hostname.toLowerCase();
+    if (settings.provider === "anthropic") return host === "api.anthropic.com";
+    return host === "api.openai.com" || host === "api.x.ai";
+  } catch {
+    return false;
+  }
+}
+
 function newSession(messages: ChatMessage[] = []): ChatSession {
   const now = Date.now();
   return {
@@ -208,9 +226,31 @@ function newSession(messages: ChatMessage[] = []): ChatSession {
     ),
     dismissedContextSkillPaths: [],
     activeOkfBundleIds: [],
-    activeMcpServerNames: null,
+    activeMcpServerNames: [],
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+function sessionsForAppStart(
+  scope: string,
+  stored: StoredChatHistory,
+): StoredChatHistory {
+  if (initializedHistoryScopes.has(scope)) return stored;
+  initializedHistoryScopes.add(scope);
+
+  const onlySession = stored.sessions.length === 1 ? stored.sessions[0] : null;
+  if (onlySession?.messages.length === 0 && onlySession.title === "New chat") {
+    return {
+      activeSessionId: onlySession.id,
+      sessions: [{ ...onlySession, activeMcpServerNames: [] }],
+    };
+  }
+
+  const created = newSession();
+  return {
+    activeSessionId: created.id,
+    sessions: [created, ...stored.sessions],
   };
 }
 
@@ -752,8 +792,9 @@ export function ChatPanel({
     setLoadedHistoryScope(null);
     void loadStoredSessions().then((stored) => {
       if (!cancelled) {
-        setSessions(stored.sessions);
-        setActiveID(stored.activeSessionId);
+        const initial = sessionsForAppStart(scope, stored);
+        setSessions(initial.sessions);
+        setActiveID(initial.activeSessionId);
         setSessionsLocked(false);
         setLoadedHistoryScope(scope);
       }
@@ -806,8 +847,10 @@ export function ChatPanel({
     const changed = () => setSessions((current) => [...current]);
     const unlocked = () => {
       void loadStoredSessions().then((stored) => {
-        setSessions(stored.sessions);
-        setActiveID(stored.activeSessionId);
+        const scope = workspaceBase || "__session__";
+        const initial = sessionsForAppStart(scope, stored);
+        setSessions(initial.sessions);
+        setActiveID(initial.activeSessionId);
         setSessionsLocked(false);
         setError("");
       });
@@ -1287,8 +1330,9 @@ export function ChatPanel({
     setError("");
     let ragContext = "";
     let ragSources: GroundingSource[] = [];
-    const ragName = settings.selectedRagSetting;
-    const webSearchEnabled = ragName === "__websearch__";
+    const legacyWebSearch = settings.selectedRagSetting === "__websearch__";
+    const ragName = legacyWebSearch ? null : settings.selectedRagSetting;
+    const webSearchEnabled = settings.webSearchEnabled || legacyWebSearch;
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
     const hasExplicitRAGContext = attachedFiles.some((file) => file.rag);
     if (ragName && ragSetting && workspaceBase && !hasExplicitRAGContext) {
@@ -1405,7 +1449,7 @@ export function ChatPanel({
         setActiveMcpServerNames(slashMcpNames);
       }
       const enabledMcpServers =
-        webSearchEnabled || settings.provider === "cli" ||
+        settings.provider === "cli" ||
           /(?:image|imagen)/i.test(settings.model)
           ? []
           : effectiveMcpServers.filter((server) =>
@@ -1564,15 +1608,15 @@ export function ChatPanel({
             ? `MCP resource context:\n${mcpResourceContext}`
             : "",
         ].filter(Boolean).join("\n\n"),
-        enableFileTools: webSearchEnabled ? false : settings.enableFileTools,
-        fileToolMode: webSearchEnabled ? "none" : settings.fileToolMode,
+        enableFileTools: settings.enableFileTools,
+        fileToolMode: settings.fileToolMode,
         enableWebSearch: webSearchEnabled,
         cliType: settings.cliType,
         cliPath: settings.cliPaths[settings.cliType],
         cliSessionId: nativeSessionID,
         streamId,
         enableThinking: thinkingEnabled,
-        customTools: webSearchEnabled ? [] : customTools,
+        customTools,
         workflowSpecContext: {
           models: configuredModelOptions(settings).map((option) =>
             option.label
@@ -2357,9 +2401,50 @@ export function ChatPanel({
             )}
           </div>
           <span>
-            {attachedFiles.length > 0
-              ? `${attachedFiles.length} attached`
-              : null}
+            <label
+              className="chat-web-search-toggle"
+              title={supportsNativeWebSearch(settings)
+                ? "Use provider-native Web Search"
+                : "Web Search is unavailable for this provider endpoint"}
+            >
+              <input
+                type="checkbox"
+                checked={settings.webSearchEnabled}
+                disabled={loading || !supportsNativeWebSearch(settings)}
+                onChange={(event) => onSettingsChange({
+                  ...settings,
+                  webSearchEnabled: event.target.checked,
+                })}
+              />
+              Web
+            </label>
+            {thinkingAvailable && (
+              <label
+                className="chat-thinking-select"
+                title={thinkingRequired
+                  ? "Thinking is required for this model"
+                  : "Choose whether the model uses thinking"}
+              >
+                <Brain size={12} />
+                <select
+                  value={thinkingEnabled ? "on" : "off"}
+                  disabled={loading || thinkingRequired}
+                  onChange={(event) => {
+                    const enabled = new Set(settings.thinkingEnabledModels);
+                    if (event.target.value === "on") {
+                      enabled.add(thinkingModelKey);
+                    } else enabled.delete(thinkingModelKey);
+                    onSettingsChange({
+                      ...settings,
+                      thinkingEnabledModels: [...enabled],
+                    });
+                  }}
+                >
+                  <option value="off">Thinking: off</option>
+                  <option value="on">Thinking: on</option>
+                </select>
+              </label>
+            )}
           </span>
           <button
             type="button"
@@ -2412,38 +2497,10 @@ export function ChatPanel({
             title="RAG"
           >
             <option value="">Search: none</option>
-            <option value="__websearch__">Web Search</option>
             {Object.keys(settings.ragSettings).map((name) => (
               <option key={name} value={name}>RAG: {name}</option>
             ))}
           </select>
-          {thinkingAvailable && (
-            <label
-              className="chat-thinking-select"
-              title={thinkingRequired
-                ? "Thinking is required for this model"
-                : "Choose whether the model uses thinking"}
-            >
-              <Brain size={12} />
-              <select
-                value={thinkingEnabled ? "on" : "off"}
-                disabled={loading || thinkingRequired}
-                onChange={(event) => {
-                  const enabled = new Set(settings.thinkingEnabledModels);
-                  if (event.target.value === "on") {
-                    enabled.add(thinkingModelKey);
-                  } else enabled.delete(thinkingModelKey);
-                  onSettingsChange({
-                    ...settings,
-                    thinkingEnabledModels: [...enabled],
-                  });
-                }}
-              >
-                <option value="off">Thinking: off</option>
-                <option value="on">Thinking: on</option>
-              </select>
-            </label>
-          )}
         </div>
       </footer>
     </section>

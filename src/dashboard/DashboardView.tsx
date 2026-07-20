@@ -49,8 +49,10 @@ import {
   onWailsFileDrop,
   openExternalEditor,
   openHTMLInBrowser,
+  openLocalFileDefault,
   readFile,
   readLocalFile,
+  readWorkspaceFile,
   saveHTMLExport,
   selectLocalFilePath,
   writeFile,
@@ -1461,7 +1463,9 @@ export function DashboardView({
         return {
           fileName: result.fileName,
           content: await prepareOpenedContent(result.fileName, result.content),
-          filePath: result.path,
+          filePath: /^(?:workspace|files):\/\//i.test(path)
+            ? path
+            : result.path,
           extraConfig: docKindFor(result.fileName) === "external"
             ? { externalOnly: true }
             : {},
@@ -1490,10 +1494,13 @@ export function DashboardView({
   );
 
   const readKnownPath = useCallback(
-    (path: string) =>
-      /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+    (path: string) => {
+      const workspacePath = path.match(/^workspace:\/\/(.*)$/i)?.[1];
+      if (workspacePath !== undefined) return readWorkspaceFile(workspacePath);
+      return /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
         ? readLocalFile(path)
-        : readFile(path),
+        : readFile(path);
+    },
     [],
   );
 
@@ -1738,6 +1745,7 @@ export function DashboardView({
         result.fileName,
         result.content,
       );
+      const openedPath = /^workspace:\/\//i.test(path) ? path : result.path;
       const targetId = lastActiveFileWidgetIdRef.current;
       const target =
         data.widgets.find((widget) =>
@@ -1749,7 +1757,7 @@ export function DashboardView({
           content,
           readFileMode(result.fileName),
           activeLayoutDirection,
-          result.path,
+          openedPath,
         );
       }
       const currentPath = filePathFromConfig(target.config);
@@ -1758,11 +1766,11 @@ export function DashboardView({
         result.fileName,
         content,
         readFileMode(result.fileName),
-        result.path,
+        openedPath,
       );
       const history = navigationFor(target.id);
       if (
-        currentPath && currentPath !== result.path &&
+        currentPath && currentPath !== openedPath &&
         history.back.at(-1) !== currentPath
       ) history.back.push(currentPath);
       history.forward = [];
@@ -1783,7 +1791,10 @@ export function DashboardView({
     async (path: string) => {
       const pluginWidgetId = openPluginWidgetForPath(path);
       if (pluginWidgetId) return pluginWidgetId;
-      if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) {
+      if (
+        !/^workspace:\/\//i.test(path) &&
+        !/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+      ) {
         return openDirectoryPathInLastActiveWidget(path);
       }
       const result = await readKnownPath(path);
@@ -1834,6 +1845,20 @@ export function DashboardView({
       readKnownPath,
     ],
   );
+
+  const openKnownPathMaximized = useCallback(async (path: string) => {
+    try {
+      const widgetId = await openKnownPathInLastActiveWidget(path);
+      if (!widgetId) return;
+      setActiveWidgetId(widgetId);
+      setMaximizedWidgetId(widgetId);
+    } catch (error) {
+      console.error("Could not open Dashboard file.", error);
+      alert(
+        error instanceof Error ? error.message : tr("alert.openFileFailed"),
+      );
+    }
+  }, [openKnownPathInLastActiveWidget, tr]);
 
   const openMemoListPath = useCallback(async (
     memoListWidgetId: string,
@@ -2182,7 +2207,10 @@ export function DashboardView({
           ? await openDirectoryPathAsWidget(openPathRequest.path)
           : await openPathAsWidget(openPathRequest.path);
         if (!widgetId) alert(tr("alert.openFileFailed"));
-        else if (openPathRequest.source === "startup") {
+        else if (
+          openPathRequest.source === "startup" ||
+          openPathRequest.source === "filetree"
+        ) {
           setActiveWidgetId(widgetId);
           setMaximizedWidgetId(widgetId);
         }
@@ -2339,10 +2367,6 @@ export function DashboardView({
               const pluginDefinition = dashboardWidgetDefinition(widget.type);
               const pluginWidget = pluginDefinition?.component;
               const pluginRender = pluginDefinition?.render;
-              const pluginBackingPath = dashboardWidgetFilePath(widget);
-              const pluginExternalURL = pluginDefinition?.externalUrlOf?.(
-                widget.config,
-              );
               const handleAction = async (id: string) => {
                 if (id === "new") {
                   updateFileConfig({
@@ -2415,12 +2439,22 @@ export function DashboardView({
                 }
               };
               const openInExternalEditor = async () => {
-                if (!externalEditorPath || !widgetFilePath) return;
+                const targetPath = fileReadPathFromConfig(widget.config);
+                if (!targetPath) return;
                 try {
-                  await openExternalEditor(externalEditorPath, widgetFilePath);
+                  if (docKindFor(widgetFileName) === "image") {
+                    await openLocalFileDefault(targetPath);
+                  } else {
+                    if (!externalEditorPath) {
+                      throw new Error("External editor is not configured.");
+                    }
+                    await openExternalEditor(externalEditorPath, targetPath);
+                  }
                 } catch (error) {
                   console.error(error);
-                  alert(tr("alert.externalEditorFailed"));
+                  alert(`${tr("alert.externalEditorFailed")}: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`);
                 }
               };
               const openInBrowser = async () => {
@@ -2487,7 +2521,7 @@ export function DashboardView({
                 }
               };
               const beginMove = (
-                event: ReactPointerEvent<HTMLButtonElement>,
+                event: ReactPointerEvent<HTMLElement>,
               ) => {
                 if (isMaximized) return;
                 event.preventDefault();
@@ -2723,7 +2757,9 @@ export function DashboardView({
                             title={widgetFilePath
                               ? tr("widget.externalEditorOpen")
                               : tr("widget.openLocalFirst")}
-                            disabled={!externalEditorPath || !widgetFilePath}
+                            disabled={!widgetFilePath ||
+                              (docKindFor(widgetFileName) !== "image" &&
+                                !externalEditorPath)}
                           >
                             <ExternalLink size={15} />
                           </button>
@@ -2790,8 +2826,9 @@ export function DashboardView({
                                     void openInExternalEditor();
                                     setMoreOpenId(null);
                                   }}
-                                  disabled={!externalEditorPath ||
-                                    !widgetFilePath}
+                                  disabled={!widgetFilePath ||
+                                    (docKindFor(widgetFileName) !== "image" &&
+                                      !externalEditorPath)}
                                 >
                                   <ExternalLink size={15} />
                                   <span>{tr("widget.externalEditor")}</span>
@@ -3060,27 +3097,6 @@ export function DashboardView({
                             <Settings2 size={14} />
                           </button>
                         )}
-                        {(pluginBackingPath || pluginExternalURL) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (pluginExternalURL) {
-                                window.open(
-                                  pluginExternalURL,
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                );
-                              } else if (pluginBackingPath) {
-                                void openKnownPathInLastActiveWidget(
-                                  pluginBackingPath,
-                                );
-                              }
-                            }}
-                            title="Open"
-                          >
-                            <ExternalLink size={14} />
-                          </button>
-                        )}
                         {!isMaximized && (
                           <button
                             type="button"
@@ -3128,6 +3144,8 @@ export function DashboardView({
                         memoDirPath={memoDirPath}
                         memoSyncTimeline={memoSyncTimeline}
                         onOpenPath={(path) => void openPathAsWidget(path)}
+                        onOpenPathMaximized={(path) =>
+                          void openKnownPathMaximized(path)}
                         onNavigatePath={(path) =>
                           void navigateWidgetToPath(widget.id, path)}
                         onActivate={() => setActiveWidgetId(widget.id)}
@@ -3195,7 +3213,9 @@ export function DashboardView({
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
                         onOpenPath={(path) =>
-                          void openKnownPathInLastActiveWidget(path)}
+                          void openKnownPathMaximized(
+                            `workspace://${path}`,
+                          )}
                       />
                     )}
                     {widget.type === "secret-manager" && (

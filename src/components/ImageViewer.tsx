@@ -1,8 +1,20 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 
 export function ImageViewer({ src, alt }: { src: string; alt: string }) {
   const [zoom, setZoom] = useState(100);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const panRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
   useEffect(() => setZoom(100), [src]);
   return (
     <div className="dashboard-image-viewer">
@@ -10,6 +22,7 @@ export function ImageViewer({ src, alt }: { src: string; alt: string }) {
         className="dashboard-image-controls"
         role="toolbar"
         aria-label="Image zoom"
+        onPointerDown={(event) => event.stopPropagation()}
       >
         <button
           type="button"
@@ -31,9 +44,54 @@ export function ImageViewer({ src, alt }: { src: string; alt: string }) {
           <ZoomIn size={16} />
         </button>
       </div>
-      <div className="dashboard-image-frame">
-        <div className="dashboard-image-canvas" style={{ width: `${zoom}%` }}>
-          <img className="dashboard-image" src={src} alt={alt} />
+      <div
+        ref={frameRef}
+        className="dashboard-image-frame pannable"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          const frame = frameRef.current;
+          if (!frame) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          panRef.current = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            scrollLeft: frame.scrollLeft,
+            scrollTop: frame.scrollTop,
+          };
+          event.currentTarget.classList.add("panning");
+        }}
+        onPointerMove={(event) => {
+          const pan = panRef.current;
+          const frame = frameRef.current;
+          if (!pan || !frame || pan.pointerId !== event.pointerId) return;
+          frame.scrollLeft = pan.scrollLeft - (event.clientX - pan.x);
+          frame.scrollTop = pan.scrollTop - (event.clientY - pan.y);
+        }}
+        onPointerUp={(event) => {
+          if (panRef.current?.pointerId !== event.pointerId) return;
+          panRef.current = null;
+          event.currentTarget.classList.remove("panning");
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={(event) => {
+          panRef.current = null;
+          event.currentTarget.classList.remove("panning");
+        }}
+      >
+        <div
+          className="dashboard-image-canvas"
+          style={{ width: `${zoom}%`, margin: zoom <= 100 ? "auto" : "0" }}
+        >
+          <img
+            className="dashboard-image"
+            src={src}
+            alt={alt}
+            draggable={false}
+          />
         </div>
       </div>
     </div>

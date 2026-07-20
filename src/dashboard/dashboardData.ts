@@ -292,7 +292,18 @@ export function basePropertyLabel(
   const bare = property.replace(/^note\./, "");
   return definition?.properties?.[property]?.displayName ||
     definition?.properties?.[`note.${bare}`]?.displayName ||
-    definition?.properties?.[bare]?.displayName || property;
+    definition?.properties?.[bare]?.displayName || formatBasePropertyLabel(
+      property,
+    );
+}
+
+function formatBasePropertyLabel(property: string): string {
+  const separator = property.indexOf(".");
+  if (separator < 0) return property;
+  const namespace = property.slice(0, separator);
+  return ["note", "file", "formula"].includes(namespace)
+    ? property.slice(separator + 1)
+    : property;
 }
 
 function statementMatches(row: DashboardDataRow, statement: string): boolean {

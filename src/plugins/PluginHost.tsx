@@ -332,6 +332,7 @@ export function PluginHost({
               label: registeredView.name,
               defaultConfig: { filePath: "" },
               defaultSize: { w: 12, h: 7 },
+              hiddenFromPalette: true,
               extensions: registeredView.extensions,
               filePathOf: (config) =>
                 config && typeof config === "object" &&

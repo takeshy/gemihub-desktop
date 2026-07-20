@@ -2105,7 +2105,7 @@ body.resizing-side-pane * {
 
 .chat-model-selector {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 4px;
   margin-top: 6px;
 }
@@ -2132,6 +2132,21 @@ body.resizing-side-pane * {
   color: var(--text-muted);
   font-size: 11px;
   white-space: nowrap;
+}
+.chat-web-search-toggle {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  padding: 0 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.chat-web-search-toggle input {
+  margin: 0;
 }
 
 .chat-thinking-select select {
@@ -6376,8 +6391,10 @@ body.resizing-side-pane * {
 }
 
 .callout {
+  --callout-color: #2563eb;
   border: 1px solid var(--border);
   border-left-width: 4px;
+  border-left-color: var(--callout-color);
   border-radius: 8px;
   color: var(--text);
   padding: 12px 14px;
@@ -6397,8 +6414,8 @@ body.resizing-side-pane * {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: currentColor;
-  color: var(--panel);
+  background: var(--callout-color);
+  color: #ffffff;
   font-size: 12px;
   line-height: 1;
 }
@@ -6410,33 +6427,33 @@ body.resizing-side-pane * {
 .callout-note,
 .callout-info,
 .callout-todo {
-  border-left-color: #2563eb;
+  --callout-color: #2563eb;
   background: color-mix(in srgb, #2563eb 9%, var(--panel));
 }
 
 .callout-tip,
 .callout-success {
-  border-left-color: #059669;
+  --callout-color: #059669;
   background: color-mix(in srgb, #059669 9%, var(--panel));
 }
 
 .callout-warning,
 .callout-question {
-  border-left-color: #d97706;
+  --callout-color: #d97706;
   background: color-mix(in srgb, #d97706 10%, var(--panel));
 }
 
 .callout-failure,
 .callout-danger,
 .callout-bug {
-  border-left-color: #dc2626;
+  --callout-color: #dc2626;
   background: color-mix(in srgb, #dc2626 8%, var(--panel));
 }
 
 .callout-example,
 .callout-abstract,
 .callout-quote {
-  border-left-color: #7c3aed;
+  --callout-color: #7c3aed;
   background: color-mix(in srgb, #7c3aed 7%, var(--panel));
 }
 
@@ -9422,6 +9439,12 @@ body.resizing-modal {
   padding: 10px;
   text-align: left;
 }
+.gemihub-base-card-image {
+  width: calc(100% + 20px);
+  height: 150px;
+  margin: -10px -10px 8px;
+  background: var(--panel-subtle);
+}
 .gemihub-base-cards > button:hover {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 3px 10px rgb(0 0 0 / 10%);
@@ -10571,14 +10594,20 @@ body.resizing-modal {
 }
 
 .dashboard-image-frame {
-  display: flex;
+  display: block;
   width: 100%;
   height: 100%;
-  align-items: center;
-  justify-content: center;
   overflow: auto;
   background: color-mix(in srgb, var(--panel-subtle) 70%, var(--panel));
   padding: 12px;
+}
+.dashboard-image-frame.pannable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.dashboard-image-frame.pannable.panning {
+  cursor: grabbing;
 }
 
 .dashboard-image-viewer {
@@ -10609,9 +10638,7 @@ body.resizing-modal {
 }
 
 .dashboard-image-canvas {
-  flex: 0 0 auto;
   min-width: 25%;
-  margin: auto;
 }
 
 .dashboard-image {

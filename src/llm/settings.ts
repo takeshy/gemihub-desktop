@@ -88,6 +88,7 @@ export interface ChatSettings {
   cliPaths: Record<CLIType, string>;
   slashCommands: SlashCommand[];
   mcpServers: MCPServerConfig[];
+  webSearchEnabled: boolean;
   selectedRagSetting: string | null;
   ragSettings: Record<string, RAGSetting>;
   okfRoot: string;
@@ -177,6 +178,7 @@ export const defaultChatSettings: ChatSettings = {
     description: "Generate an HTML infographic",
   }],
   mcpServers: [],
+  webSearchEnabled: false,
   selectedRagSetting: null,
   ragSettings: {},
   okfRoot: "Knowledge",
@@ -524,6 +526,11 @@ export function loadChatSettings(): ChatSettings {
         : [],
       fileToolMode: parsed.fileToolMode ??
         (parsed.enableFileTools === false ? "none" : "all"),
+      webSearchEnabled: parsed.webSearchEnabled === true ||
+        parsed.selectedRagSetting === "__websearch__",
+      selectedRagSetting: parsed.selectedRagSetting === "__websearch__"
+        ? null
+        : parsed.selectedRagSetting ?? null,
       thinkingEnabledModels: Array.isArray(parsed.thinkingEnabledModels)
         ? parsed.thinkingEnabledModels.filter((value): value is string =>
           typeof value === "string"

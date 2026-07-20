@@ -352,6 +352,18 @@ func TestAddChatUsage(t *testing.T) {
 	}
 }
 
+func TestNativeWebSearchEndpointResolution(t *testing.T) {
+	if got := providerEndpointHost("https://api.openai.com/v1/chat/completions"); got != "api.openai.com" {
+		t.Fatalf("unexpected OpenAI host: %q", got)
+	}
+	if got := providerEndpointHost("https://api.x.ai/v1"); got != "api.x.ai" {
+		t.Fatalf("unexpected xAI host: %q", got)
+	}
+	if got := responsesEndpoint("https://api.openai.com/v1/chat/completions"); got != "https://api.openai.com/v1/responses" {
+		t.Fatalf("unexpected Responses endpoint: %q", got)
+	}
+}
+
 func TestChatToolDefinitionsIncludeRegisteredFrontendTool(t *testing.T) {
 	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "none", CustomTools: []ChatToolDefinition{{
 		Name: "run_skill_workflow", Description: "Run an active skill workflow", Parameters: map[string]any{"type": "object"},

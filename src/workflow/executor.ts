@@ -1244,10 +1244,12 @@ async function executeNode(
         }
       }
       let commandPrompt = prompt;
-      const ragName = node.properties.ragSetting === undefined
+      const configuredRag = node.properties.ragSetting;
+      const ragName = configuredRag === undefined
         ? settings.selectedRagSetting ?? undefined
-        : node.properties.ragSetting;
-      const webSearchEnabled = ragName === "__websearch__";
+        : configuredRag;
+      const webSearchEnabled = configuredRag === "__websearch__" ||
+        (configuredRag === undefined && settings.webSearchEnabled);
       if (ragName && ragName !== "__none__" && ragName !== "__websearch__") {
         const rag = settings.ragSettings[ragName];
         if (!rag) throw new Error(`RAG setting not found: ${ragName}`);
@@ -1263,7 +1265,7 @@ async function executeNode(
         }`;
       }
       services.runtime ??= { cliSessionIds: {} };
-      const mcpNames = imageGenerationModel || webSearchEnabled
+      const mcpNames = imageGenerationModel
         ? []
         : property(node, "mcpServers", variables).split(",").map((value) =>
           value.trim()
@@ -1308,21 +1310,19 @@ async function executeNode(
         mcpBindings.map((binding) => [binding.name, binding]),
       );
       const javascriptTool: ChatToolDefinition | null =
-        imageGenerationModel || webSearchEnabled || settings.provider === "cli"
-          ? null
-          : {
-            name: "execute_javascript",
-            description:
-              "Execute JavaScript in an isolated sandbox with no DOM, network, or storage access. Use return to provide a value; optional input is available as the input variable.",
-            parameters: {
-              type: "object",
-              properties: {
-                code: { type: "string" },
-                input: { type: "string" },
-              },
-              required: ["code"],
+        imageGenerationModel || settings.provider === "cli" ? null : {
+          name: "execute_javascript",
+          description:
+            "Execute JavaScript in an isolated sandbox with no DOM, network, or storage access. Use return to provide a value; optional input is available as the input variable.",
+          parameters: {
+            type: "object",
+            properties: {
+              code: { type: "string" },
+              input: { type: "string" },
             },
-          };
+            required: ["code"],
+          },
+        };
       const customTools = [
         ...mcpBindings.map(({ name, description, parameters }) => ({
           name,
@@ -1425,8 +1425,8 @@ async function executeNode(
             content: commandPrompt,
             attachments: chatAttachments.length ? chatAttachments : undefined,
           }],
-          enableFileTools: webSearchEnabled ? false : fileMode !== "none",
-          fileToolMode: webSearchEnabled ? "none" : fileMode,
+          enableFileTools: fileMode !== "none",
+          fileToolMode: fileMode,
           cliType: settings.cliType,
           cliPath: settings.cliPaths[settings.cliType],
           cliSessionId: services.runtime.cliSessionIds[settings.cliType] || "",
