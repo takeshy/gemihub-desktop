@@ -145,6 +145,7 @@ export function WidgetSettingsPanel({
     }
     | null
   >(null);
+  const [workflowAILoading, setWorkflowAILoading] = useState(false);
   const [workflowHistory, setWorkflowHistory] = useState<WorkflowRun[]>([]);
   const [baseAIOpen, setBaseAIOpen] = useState(false),
     [baseAIInstruction, setBaseAIInstruction] = useState(""),
@@ -399,6 +400,8 @@ export function WidgetSettingsPanel({
     }
   }, [widget.config]);
   const openWorkflowAI = async () => {
+    if (workflowAILoading) return;
+    setActionError("");
     const path = text(widget.config, "workflow");
     if (!path) {
       setWorkflowAI({
@@ -409,17 +412,26 @@ export function WidgetSettingsPanel({
       });
       return;
     }
-    const file = await readFile(path);
-    if (!file) {
-      setActionError(`Cannot read ${path}`);
-      return;
+    setWorkflowAILoading(true);
+    try {
+      const file = await readFile(path);
+      if (!file) {
+        setActionError(`Cannot read ${path}. Select an existing workflow file and try again.`);
+        return;
+      }
+      setWorkflowAI({
+        mode: "modify",
+        path,
+        name: workflowNameFromFilePath(path),
+        markdown: file.content,
+      });
+    } catch (caught) {
+      setActionError(
+        caught instanceof Error ? caught.message : `Cannot read ${path}`,
+      );
+    } finally {
+      setWorkflowAILoading(false);
     }
-    setWorkflowAI({
-      mode: "modify",
-      path,
-      name: workflowNameFromFilePath(path),
-      markdown: file.content,
-    });
   };
   const buildBaseWithAI = async () => {
     if (!baseAIInstruction.trim()) return;
@@ -628,15 +640,19 @@ export function WidgetSettingsPanel({
               <button
                 type="button"
                 className="widget-settings-ai"
+                disabled={workflowAILoading}
                 onClick={() => void openWorkflowAI()}
               >
                 {text(widget.config, "workflow")
                   ? <Pencil size={13} />
                   : <Sparkles size={13} />}
-                {text(widget.config, "workflow")
+                {workflowAILoading
+                  ? "Opening workflow…"
+                  : text(widget.config, "workflow")
                   ? "Modify workflow with AI"
                   : "Create workflow with AI"}
               </button>
+              {actionError && <small className="error">{actionError}</small>}
               {fileInput("outputVariable", "result")}
               <label>
                 <span>Output format</span>

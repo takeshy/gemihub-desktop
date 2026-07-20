@@ -193,6 +193,7 @@ export function AIWorkflowBuilderModal({
     {},
   );
   const streamRef = useRef("");
+  const requestRef = useRef<HTMLTextAreaElement>(null);
   const configured = configuredChatProviders(settings);
   const relevantHistory = useMemo(
     () =>
@@ -247,6 +248,19 @@ export function AIWorkflowBuilderModal({
       ? settings
       : switchChatProvider(settings, provider);
     return settingsForModel(resolved, model);
+  };
+  const openExternal = () => {
+    if (!name.trim()) {
+      setError("Enter a workflow name before using an external LLM.");
+      return;
+    }
+    if (!request.trim()) {
+      setError("Describe the workflow change in Request before using an external LLM.");
+      requestRef.current?.focus();
+      return;
+    }
+    setError("");
+    setPhase("external");
   };
   const call = async (
     systemPrompt: string,
@@ -663,9 +677,13 @@ export function AIWorkflowBuilderModal({
             <label>
               <span>Request</span>
               <textarea
+                ref={requestRef}
                 rows={7}
                 value={request}
-                onChange={(event) => setRequest(event.target.value)}
+                onChange={(event) => {
+                  setRequest(event.target.value);
+                  if (error) setError("");
+                }}
               />
             </label>
             <label>
@@ -734,8 +752,7 @@ export function AIWorkflowBuilderModal({
               <button type="button" onClick={onClose}>Cancel</button>
               <button
                 type="button"
-                disabled={!request.trim() || !name.trim()}
-                onClick={() => setPhase("external")}
+                onClick={openExternal}
               >
                 Use external LLM
               </button>
