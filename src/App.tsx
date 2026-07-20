@@ -43,6 +43,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import packageJson from "../package.json";
 import { MemoListModal } from "./components/MemoListModal";
 import { OkfSettingsCard } from "./okf/OkfSettingsCard";
 import { FileTree } from "./components/FileTree";
@@ -2865,6 +2866,9 @@ export default function App() {
                   >
                     <Plug size={16} /> Plugins
                   </button>
+                  <div className="settings-version">
+                    Version {packageJson.version}
+                  </div>
                 </aside>
                 <div className="settings-body">
                   {settingsSection === "general" && (

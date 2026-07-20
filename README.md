@@ -1,12 +1,12 @@
-# GemiHub
+# GemiHub Desktop
 
-> **Your AI is only as good as your data.**<br> **GemiHub is the IDE for
+> **Your AI is only as good as your data.**<br> **GemiHub Desktop is the IDE for
 > ideas—an open workspace where everything becomes context for AI.**
 
 AI can generate an answer in seconds, but the knowledge behind that answer is
 usually scattered across notes, PDFs, books, boards, and half-finished ideas.
-GemiHub brings those materials into one local, visual workspace and turns them
-into usable context for AI.
+GemiHub Desktop brings those materials into one local, visual workspace and
+turns them into usable context for AI.
 
 Instead of copying fragments between apps and repeatedly explaining your project
 to a chatbot, you can read, connect, annotate, organize, and ask questions in
@@ -225,5 +225,5 @@ GemiHub Desktop is built with [Wails](https://wails.io/)
 ([wailsapp/wails](https://github.com/wailsapp/wails)). We thank Lea Anthony and
 the Wails contributors for making the framework available under the MIT License.
 
-GemiHub is an independent project and is not affiliated with, endorsed by, or
-sponsored by Obsidian.
+GemiHub is an independent project and is not affiliated with or endorsed by
+Obsidian.

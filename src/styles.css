@@ -10839,6 +10839,13 @@ body.resizing-modal {
   color: var(--accent);
 }
 
+.settings-version {
+  margin-top: auto;
+  padding: 10px 9px 2px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .settings-choice {
   display: inline-flex;
   width: fit-content;
