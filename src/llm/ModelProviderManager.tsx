@@ -3,7 +3,9 @@ import { Check, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { fetchProviderModels } from "./modelProviders";
 import {
   type ChatSettings,
+  type LocalLLMFramework,
   type ModelProviderProfile,
+  localLLMFrameworks,
   newModelProfile,
   selectModelProfile,
   syncActiveModelProfile,
@@ -163,11 +165,17 @@ export function ModelProviderManager(
                       onChange={(event) => {
                         const value = event.target.value;
                         if (value === "local") {
+                          const local = localLLMFrameworks.ollama;
                           patch(profile.id, {
                             local: true,
                             provider: "openai",
                             openAICompatible: true,
-                            endpoint: "http://127.0.0.1:11434/v1",
+                            localFramework: "ollama",
+                            name: local.label,
+                            endpoint: local.endpoint,
+                            availableModels: [],
+                            enabledModels: [],
+                            model: "",
                           });
                         } else {
                           const compatible = value === "openai-compatible";
@@ -184,6 +192,9 @@ export function ModelProviderManager(
                             provider,
                             openAICompatible: compatible,
                             endpoint: fresh.endpoint,
+                            localFramework: "ollama",
+                            username: "",
+                            password: "",
                           });
                         }
                       }}
@@ -198,6 +209,37 @@ export function ModelProviderManager(
                     </select>
                   </label>
                 </div>
+                {profile.local && (
+                  <label>
+                    <span>Framework</span>
+                    <select
+                      value={profile.localFramework}
+                      onChange={(event) => {
+                        const localFramework = event.target
+                          .value as LocalLLMFramework;
+                        const preset = localLLMFrameworks[localFramework];
+                        patch(profile.id, {
+                          localFramework,
+                          name: preset.label,
+                          endpoint: preset.endpoint,
+                          availableModels: [],
+                          enabledModels: [],
+                          model: "",
+                          username: "",
+                          password: "",
+                        });
+                      }}
+                    >
+                      {Object.entries(localLLMFrameworks).map(
+                        ([value, preset]) => (
+                          <option key={value} value={value}>
+                            {preset.label}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                )}
                 <label>
                   <span>Base URL</span>
                   <input
@@ -209,6 +251,29 @@ export function ModelProviderManager(
                       patch(profile.id, { endpoint: event.target.value })}
                   />
                 </label>
+                {profile.localFramework === "opencode" && profile.local && (
+                  <div className="rag-number-grid">
+                    <label>
+                      <span>Username (optional)</span>
+                      <input
+                        value={profile.username}
+                        autoComplete="off"
+                        onChange={(event) =>
+                          patch(profile.id, { username: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Password (optional)</span>
+                      <input
+                        type="password"
+                        value={profile.password}
+                        autoComplete="off"
+                        onChange={(event) =>
+                          patch(profile.id, { password: event.target.value })}
+                      />
+                    </label>
+                  </div>
+                )}
                 <label>
                   <span>API key {profile.local && "(optional)"}</span>
                   <input

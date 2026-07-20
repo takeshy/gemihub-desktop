@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,9 @@ type ChatRequest struct {
 	Provider        string               `json:"provider"`
 	Endpoint        string               `json:"endpoint"`
 	APIKey          string               `json:"apiKey"`
+	LocalFramework  string               `json:"localFramework,omitempty"`
+	LocalUsername   string               `json:"localUsername,omitempty"`
+	LocalPassword   string               `json:"localPassword,omitempty"`
 	Model           string               `json:"model"`
 	VertexProjectID string               `json:"vertexProjectId"`
 	VertexLocation  string               `json:"vertexLocation"`
@@ -113,15 +117,15 @@ type PendingFileAction struct {
 }
 
 type ChatResult struct {
-	Content         string             `json:"content"`
-	PendingAction   *PendingFileAction `json:"pendingAction,omitempty"`
-	ToolsUsed       []string           `json:"toolsUsed,omitempty"`
-	CLISessionID    string             `json:"cliSessionId,omitempty"`
-	Provider        string             `json:"provider,omitempty"`
-	Model           string             `json:"model,omitempty"`
-	Thinking        string             `json:"thinking,omitempty"`
-	Usage           *ChatUsage         `json:"usage,omitempty"`
-	GeneratedImages []GeneratedImage   `json:"generatedImages,omitempty"`
+	Content          string             `json:"content"`
+	PendingAction    *PendingFileAction `json:"pendingAction,omitempty"`
+	ToolsUsed        []string           `json:"toolsUsed,omitempty"`
+	CLISessionID     string             `json:"cliSessionId,omitempty"`
+	Provider         string             `json:"provider,omitempty"`
+	Model            string             `json:"model,omitempty"`
+	Thinking         string             `json:"thinking,omitempty"`
+	Usage            *ChatUsage         `json:"usage,omitempty"`
+	GeneratedImages  []GeneratedImage   `json:"generatedImages,omitempty"`
 	WebSearchSources []WebSearchSource  `json:"webSearchSources,omitempty"`
 }
 
@@ -360,7 +364,11 @@ func (a *App) Chat(request ChatRequest) (*ChatResult, error) {
 	case "anthropic":
 		result, err = a.chatAnthropic(request)
 	default:
-		result, err = a.chatOpenAI(request)
+		if strings.EqualFold(request.LocalFramework, "opencode") {
+			result, err = a.chatOpenCodeLocal(request)
+		} else {
+			result, err = a.chatOpenAI(request)
+		}
 	}
 	if err != nil || result == nil {
 		return result, err
@@ -373,6 +381,127 @@ func (a *App) Chat(request ChatRequest) (*ChatResult, error) {
 		}
 	}
 	return result, nil
+}
+
+func openCodeHeaders(request ChatRequest) map[string]string {
+	headers := map[string]string{}
+	if request.APIKey != "" {
+		headers["Authorization"] = "Bearer " + request.APIKey
+	} else if request.LocalUsername != "" || request.LocalPassword != "" {
+		username := request.LocalUsername
+		if username == "" {
+			username = "opencode"
+		}
+		token := base64.StdEncoding.EncodeToString([]byte(username + ":" + request.LocalPassword))
+		headers["Authorization"] = "Basic " + token
+	}
+	return headers
+}
+
+func openCodePrompt(request ChatRequest) string {
+	var prompt strings.Builder
+	if request.SystemPrompt != "" {
+		fmt.Fprintf(&prompt, "[system]\n%s\n\n", request.SystemPrompt)
+	}
+	for _, message := range request.Messages {
+		role := "assistant"
+		if message.Role == "user" {
+			role = "user"
+		}
+		fmt.Fprintf(&prompt, "[%s]\n%s\n\n", role, message.Content)
+	}
+	return strings.TrimSpace(prompt.String())
+}
+
+func openCodeResponseText(value any) string {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, key := range []string{"parts", "content"} {
+		if list, ok := object[key].([]any); ok {
+			var text strings.Builder
+			for _, raw := range list {
+				part, _ := raw.(map[string]any)
+				partType, _ := part["type"].(string)
+				if partType != "" && partType != "text" {
+					continue
+				}
+				if value, ok := part["text"].(string); ok {
+					text.WriteString(value)
+				} else if value, ok := part["content"].(string); ok {
+					text.WriteString(value)
+				}
+			}
+			if text.Len() > 0 {
+				return text.String()
+			}
+		}
+		if text, ok := object[key].(string); ok && text != "" {
+			return text
+		}
+	}
+	for _, key := range []string{"info", "message", "reply"} {
+		if text := openCodeResponseText(object[key]); text != "" {
+			return text
+		}
+	}
+	for _, key := range []string{"output", "text"} {
+		if text, ok := object[key].(string); ok && text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func (a *App) chatOpenCodeLocal(request ChatRequest) (*ChatResult, error) {
+	base := strings.TrimRight(request.Endpoint, "/")
+	if base == "" {
+		base = "http://127.0.0.1:4096"
+	}
+	slash := strings.Index(request.Model, "/")
+	if slash <= 0 || slash == len(request.Model)-1 {
+		return nil, fmt.Errorf("OpenCode model must be <providerID>/<modelID>")
+	}
+	headers := openCodeHeaders(request)
+	var session struct {
+		ID        string `json:"id"`
+		SessionID string `json:"sessionID"`
+		Session   struct {
+			ID string `json:"id"`
+		} `json:"session"`
+	}
+	if err := httpJSON(request.context(a.ctx), http.MethodPost, base+"/session", headers, map[string]any{}, &session); err != nil {
+		return nil, fmt.Errorf("create OpenCode session: %w", err)
+	}
+	sessionID := session.ID
+	if sessionID == "" {
+		sessionID = session.SessionID
+	}
+	if sessionID == "" {
+		sessionID = session.Session.ID
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("OpenCode server did not return a session id")
+	}
+	payload := map[string]any{
+		"model": map[string]any{
+			"providerID": request.Model[:slash],
+			"modelID":    request.Model[slash+1:],
+		},
+		"parts": []map[string]any{{"type": "text", "text": openCodePrompt(request)}},
+	}
+	var response any
+	endpoint := base + "/session/" + url.PathEscape(sessionID) + "/message"
+	if err := httpJSON(request.context(a.ctx), http.MethodPost, endpoint, headers, payload, &response); err != nil {
+		return nil, fmt.Errorf("send OpenCode message: %w", err)
+	}
+	content := openCodeResponseText(response)
+	if content == "" {
+		return nil, fmt.Errorf("OpenCode returned an empty assistant response")
+	}
+	a.emitChatStream(request, "text", content, "")
+	return &ChatResult{Content: content}, nil
 }
 
 func (a *App) CancelChat(streamID string) bool {

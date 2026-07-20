@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -427,7 +428,7 @@ func TestWebSearchSourcesAreSortedAndUseURLAsFallbackTitle(t *testing.T) {
 	sources := webSearchSources(map[string]string{
 		"https://z.example/source": "",
 		"https://a.example/source": "A source",
-		"javascript:alert(1)":       "Unsafe",
+		"javascript:alert(1)":      "Unsafe",
 	})
 	if len(sources) != 2 || sources[0].URL != "https://a.example/source" || sources[0].Title != "A source" || sources[1].Title != sources[1].URL {
 		t.Fatalf("unexpected web search sources: %#v", sources)
@@ -461,5 +462,70 @@ func TestResolveChatToolOnlyCompletesRegisteredRequest(t *testing.T) {
 	}
 	if app.ResolveChatTool("missing", `{}`, "") {
 		t.Fatal("unknown request must not be accepted")
+	}
+}
+
+func TestOpenCodePromptAndResponseExtraction(t *testing.T) {
+	prompt := openCodePrompt(ChatRequest{
+		SystemPrompt: "Be concise.",
+		Messages: []ChatMessage{
+			{Role: "user", Content: "Hello"},
+			{Role: "assistant", Content: "Hi"},
+		},
+	})
+	if prompt != "[system]\nBe concise.\n\n[user]\nHello\n\n[assistant]\nHi" {
+		t.Fatalf("unexpected OpenCode prompt: %q", prompt)
+	}
+	response := map[string]any{
+		"parts": []any{
+			map[string]any{"type": "reasoning", "text": "hidden"},
+			map[string]any{"type": "text", "text": "Hello "},
+			map[string]any{"type": "text", "text": "world"},
+		},
+	}
+	if got := openCodeResponseText(response); got != "Hello world" {
+		t.Fatalf("unexpected OpenCode response text: %q", got)
+	}
+}
+
+func TestOpenCodeBasicAuthDefaultsUsername(t *testing.T) {
+	headers := openCodeHeaders(ChatRequest{LocalPassword: "secret"})
+	if headers["Authorization"] != "Basic b3BlbmNvZGU6c2VjcmV0" {
+		t.Fatalf("unexpected Authorization header: %q", headers["Authorization"])
+	}
+}
+
+func TestChatOpenCodeLocalUsesSessionAPI(t *testing.T) {
+	var messageBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/session":
+			_, _ = writer.Write([]byte(`{"id":"session-1"}`))
+		case "/session/session-1/message":
+			if err := json.NewDecoder(request.Body).Decode(&messageBody); err != nil {
+				t.Errorf("decode message request: %v", err)
+			}
+			_, _ = writer.Write([]byte(`{"parts":[{"type":"text","text":"local reply"}]}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	result, err := NewApp().chatOpenCodeLocal(ChatRequest{
+		Endpoint:       server.URL,
+		Model:          "ollama/qwen3",
+		SystemPrompt:   "System",
+		Messages:       []ChatMessage{{Role: "user", Content: "Question"}},
+		LocalFramework: "opencode",
+		ctx:            context.Background(),
+	})
+	if err != nil || result.Content != "local reply" {
+		t.Fatalf("unexpected OpenCode result: result=%#v err=%v", result, err)
+	}
+	model, _ := messageBody["model"].(map[string]any)
+	if model["providerID"] != "ollama" || model["modelID"] != "qwen3" {
+		t.Fatalf("unexpected OpenCode model payload: %#v", model)
 	}
 }

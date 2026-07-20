@@ -8,7 +8,47 @@ function modelURL(profile: ModelProviderProfile): string {
   if (profile.provider === "gemini") {
     return `${base}/models`;
   }
+  if (profile.local) return `${base}/models`;
   return base.endsWith("/v1") ? `${base}/models` : `${base}/v1/models`;
+}
+
+function basicAuth(username: string, password: string): string {
+  const bytes = new TextEncoder().encode(`${username || "opencode"}:${password}`);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `Basic ${btoa(binary)}`;
+}
+
+function openCodeModels(payload: unknown): string[] {
+  const value = payload as {
+    providers?: unknown[];
+    data?: unknown[];
+  };
+  const providers = Array.isArray(payload)
+    ? payload
+    : value.providers ?? value.data ?? [];
+  const models: string[] = [];
+  for (const raw of providers) {
+    const provider = raw as {
+      id?: string;
+      providerID?: string;
+      name?: string;
+      models?: Record<string, string | { id?: string; modelID?: string; name?: string }> |
+        Array<string | { id?: string; modelID?: string; name?: string }>;
+    };
+    const providerID = provider.providerID || provider.id || provider.name || "";
+    if (!providerID || providerID.includes("/") || !provider.models) continue;
+    const entries = Array.isArray(provider.models)
+      ? provider.models.map((item) => ["", item] as const)
+      : Object.entries(provider.models);
+    for (const [key, item] of entries) {
+      const modelID = typeof item === "string"
+        ? (key || item)
+        : item.modelID || item.id || item.name || key;
+      if (modelID) models.push(`${providerID}/${modelID}`);
+    }
+  }
+  return models;
 }
 
 export async function fetchProviderModels(
@@ -22,10 +62,38 @@ export async function fetchProviderModels(
       headers.Authorization = `Bearer ${profile.apiKey}`;
     }
   }
+  if (
+    profile.local && profile.localFramework === "opencode" &&
+    !profile.apiKey && (profile.username || profile.password)
+  ) {
+    headers.Authorization = basicAuth(profile.username, profile.password);
+  }
   if (profile.provider === "anthropic" && profile.apiKey) {
     delete headers.Authorization;
     headers["x-api-key"] = profile.apiKey;
     headers["anthropic-version"] = "2023-06-01";
+  }
+  if (profile.local && profile.localFramework === "opencode") {
+    const base = profile.endpoint.replace(/\/+$/, "");
+    let lastStatus = 0;
+    let lastBody = "";
+    for (const path of ["/config/providers", "/provider"]) {
+      const response = await workflowHTTPRequest({
+        url: `${base}${path}`,
+        method: "GET",
+        headers,
+      });
+      lastStatus = response.status;
+      lastBody = response.body;
+      if (response.status < 200 || response.status >= 300) continue;
+      const models = openCodeModels(JSON.parse(response.body));
+      if (models.length) {
+        return [...new Set(models)].sort((a, b) => a.localeCompare(b));
+      }
+    }
+    throw new Error(
+      `OpenCode model request failed (${lastStatus}): ${lastBody.slice(0, 240)}`,
+    );
   }
   let response = await workflowHTTPRequest({
     url: modelURL(profile),

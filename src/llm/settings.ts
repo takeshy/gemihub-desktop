@@ -1,6 +1,29 @@
 import type { RAGSetting } from "../lib/wailsBackend";
 
 export type ChatProvider = "openai" | "gemini" | "vertex" | "anthropic" | "cli";
+export type LocalLLMFramework =
+  | "ollama"
+  | "lm-studio"
+  | "anythingllm"
+  | "vllm"
+  | "opencode";
+
+export const localLLMFrameworks: Record<
+  LocalLLMFramework,
+  { label: string; endpoint: string }
+> = {
+  ollama: { label: "Ollama", endpoint: "http://127.0.0.1:11434/v1" },
+  "lm-studio": {
+    label: "LM Studio (OpenAI compatible)",
+    endpoint: "http://127.0.0.1:1234/v1",
+  },
+  anythingllm: {
+    label: "AnythingLLM",
+    endpoint: "http://127.0.0.1:3001/api/v1/openai",
+  },
+  vllm: { label: "vLLM", endpoint: "http://127.0.0.1:8000/v1" },
+  opencode: { label: "OpenCode (Local)", endpoint: "http://127.0.0.1:4096" },
+};
 export type CLIType = "codex" | "claude" | "antigravity";
 export type FileToolMode = "all" | "noSearch" | "none";
 
@@ -42,6 +65,9 @@ export interface ModelProviderProfile extends APIProviderProfile {
   enabled: boolean;
   local: boolean;
   openAICompatible: boolean;
+  localFramework: LocalLLMFramework;
+  username: string;
+  password: string;
 }
 
 export interface SlashCommand {
@@ -80,6 +106,9 @@ export interface ChatSettings {
   >;
   modelProfiles: ModelProviderProfile[];
   selectedModelProfileId: string;
+  localFramework: LocalLLMFramework;
+  localUsername: string;
+  localPassword: string;
   verifiedCliTypes: CLIType[];
   systemPrompt: string;
   enableFileTools: boolean;
@@ -163,6 +192,9 @@ export const defaultChatSettings: ChatSettings = {
   providerProfiles: {},
   modelProfiles: [],
   selectedModelProfileId: "",
+  localFramework: "ollama",
+  localUsername: "",
+  localPassword: "",
   verifiedCliTypes: [],
   systemPrompt:
     "You are a helpful assistant working inside the user's active Workspace. Inspect Workspace files before making assumptions. Use propose_file_edit for changes.",
@@ -296,6 +328,9 @@ export function syncActiveModelProfile(settings: ChatSettings): ChatSettings {
           provider: activeProvider,
           endpoint: settings.endpoint,
           apiKey: settings.apiKey,
+          localFramework: settings.localFramework,
+          username: settings.localUsername,
+          password: settings.localPassword,
           enabledModels: model && !profile.enabledModels.includes(model)
             ? [...profile.enabledModels, model]
             : profile.enabledModels,
@@ -320,6 +355,9 @@ export function selectModelProfile(
     provider: profile.provider,
     endpoint: profile.endpoint,
     apiKey: profile.apiKey,
+    localFramework: profile.localFramework,
+    localUsername: profile.username,
+    localPassword: profile.password,
     model: model || profile.model || profile.enabledModels[0] || "",
     vertexProjectId: "",
     vertexLocation: "global",
@@ -349,6 +387,9 @@ export function updateModelProfile(
     provider: updated.provider,
     endpoint: updated.endpoint,
     apiKey: updated.apiKey,
+    localFramework: updated.localFramework,
+    localUsername: updated.username,
+    localPassword: updated.password,
     model: changes.model ?? updated.model ?? updated.enabledModels[0] ?? "",
   };
 }
@@ -362,7 +403,7 @@ export function newModelProfile(
   return {
     id: crypto.randomUUID(),
     name: local
-      ? "Local LLM"
+      ? localLLMFrameworks.ollama.label
       : provider === "openai"
       ? openAICompatible ? "OpenAI Compatible" : "OpenAI"
       : provider === "gemini"
@@ -381,6 +422,9 @@ export function newModelProfile(
     enabled: true,
     local,
     openAICompatible: local || openAICompatible,
+    localFramework: "ollama",
+    username: "",
+    password: "",
     vertexProjectId: "",
     vertexLocation: "global",
     vertexOAuthClientId: "",

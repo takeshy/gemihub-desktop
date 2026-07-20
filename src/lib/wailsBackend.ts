@@ -234,6 +234,9 @@ export interface ChatRequest {
   provider: "openai" | "gemini" | "vertex" | "anthropic" | "cli";
   endpoint: string;
   apiKey: string;
+  localFramework?: "ollama" | "lm-studio" | "anythingllm" | "vllm" | "opencode";
+  localUsername?: string;
+  localPassword?: string;
   model: string;
   vertexProjectId: string;
   vertexLocation: string;

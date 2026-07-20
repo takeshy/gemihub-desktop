@@ -9,6 +9,7 @@ import {
   selectConfiguredModel,
   selectModelProfile,
   updateModelProfile,
+  localLLMFrameworks,
 } from "./settings.ts";
 
 Deno.test("Gemini 3.5 Flash thinking can be switched on and off", () => {
@@ -79,6 +80,24 @@ Deno.test("OpenAI and OpenAI Compatible profiles have distinct defaults", () => 
     endpoint: "",
     compatible: true,
   });
+});
+
+Deno.test("Local LLM frameworks expose the expected connection presets", () => {
+  assertEquals(Object.keys(localLLMFrameworks), [
+    "ollama",
+    "lm-studio",
+    "anythingllm",
+    "vllm",
+    "opencode",
+  ]);
+  assertEquals(
+    localLLMFrameworks.anythingllm.endpoint,
+    "http://127.0.0.1:3001/api/v1/openai",
+  );
+  assertEquals(
+    localLLMFrameworks.opencode.endpoint,
+    "http://127.0.0.1:4096",
+  );
 });
 
 Deno.test("editing the active profile keeps type and credentials in sync", () => {

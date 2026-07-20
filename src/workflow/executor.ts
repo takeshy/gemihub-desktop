@@ -1409,6 +1409,9 @@ async function executeNode(
           provider: settings.provider,
           endpoint: settings.endpoint,
           apiKey: settings.apiKey,
+          localFramework: settings.localFramework,
+          localUsername: settings.localUsername,
+          localPassword: settings.localPassword,
           model: settings.provider === "cli"
             ? ""
             : requestedModel || settings.model,
