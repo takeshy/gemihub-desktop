@@ -34,8 +34,21 @@ import { isEncryptedFile } from "../lib/hybridEncryption";
 import {
   type FileTreeScope,
   isProtectedWorkspaceRoot,
-  scopedTreePath,
 } from "../lib/fileTreePaths";
+import {
+  createDirectoryRef,
+  duplicateFileRef,
+  type FileRef,
+  fileRef,
+  fileRefFromBackendPath,
+  listFileHistoryRef,
+  openContainingFolderRef,
+  readFileRef,
+  renameFileRef,
+  restoreFileHistoryRef,
+  trashFileRef,
+  writeFileRef,
+} from "../lib/fileRef";
 import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
 import {
   createDirectory,
@@ -103,7 +116,7 @@ function treeFilePaths(nodes: FileTreeNode[], expanded: Set<string>): string[] {
       ? expanded.has(`files:${node.path}`)
         ? treeFilePaths(node.children ?? [], expanded)
         : []
-      : [scopedTreePath("files", node.path)]
+      : [node.path]
   );
 }
 
@@ -130,21 +143,21 @@ function TreeRow({
   depth: number;
   expanded: Set<string>;
   onToggle: (path: string) => void;
-  onOpen: (path: string) => void;
+  onOpen: (file: FileRef) => void;
   onCreateFile: (directory: string) => void;
   onMutated: () => void;
-  onContextMenu: (node: FileTreeNode, path: string, event: MouseEvent) => void;
-  onDragExternal?: (node: FileTreeNode, path: string) => void;
+  onContextMenu: (node: FileTreeNode, file: FileRef, event: MouseEvent) => void;
+  onDragExternal?: (node: FileTreeNode, file: FileRef | null) => void;
   onDropExternal?: (directory: string, fallbackPayload?: string) => void;
   externalSelection?: Set<string>;
   onExternalFileClick?: (
     node: FileTreeNode,
-    path: string,
+    file: FileRef,
     event: MouseEvent,
   ) => void;
   onPointerDragStart?: (
     node: FileTreeNode,
-    path: string,
+    file: FileRef,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => void;
   shouldSuppressClick?: () => boolean;
@@ -157,7 +170,7 @@ function TreeRow({
   const protectedWorkspaceRoot =
     (scope === "workspace" && isProtectedWorkspaceRoot(node, depth)) ||
     isTreeRoot;
-  const scopedPath = (path: string) => scopedTreePath(scope, path);
+  const ref = (path: string) => fileRef(scope, path);
   const mutate = async (kind: "file" | "folder" | "rename" | "delete") => {
     try {
       if (kind === "file") {
@@ -166,22 +179,20 @@ function TreeRow({
       } else if (kind === "folder") {
         const name = prompt("New folder name")?.trim();
         if (name) {
-          await createDirectory(
-            scopedPath(
-              joinPath(node.isDir ? node.path : parentPath(node.path), name),
-            ),
-          );
+          await createDirectoryRef(ref(
+            joinPath(node.isDir ? node.path : parentPath(node.path), name),
+          ));
         }
       } else if (kind === "rename") {
         const nextName = prompt("Rename", node.name)?.trim();
         if (nextName && nextName !== node.name) {
-          await renameFile(
-            scopedPath(node.path),
-            scopedPath(joinPath(parentPath(node.path), nextName)),
+          await renameFileRef(
+            ref(node.path),
+            ref(joinPath(parentPath(node.path), nextName)),
           );
         }
       } else if (confirm(`Move ${node.path} to Trash?`)) {
-        await trashFile(scopedPath(node.path));
+        await trashFileRef(ref(node.path));
       }
       onMutated();
     } catch (error) {
@@ -193,7 +204,7 @@ function TreeRow({
     <>
       <div
         className={`file-tree-row ${scope === "files" ? "external" : ""} ${
-          scope === "files" && externalSelection?.has(scopedPath(node.path))
+          scope === "files" && externalSelection?.has(node.path)
             ? "selected"
             : ""
         } ${
@@ -211,23 +222,23 @@ function TreeRow({
           if (scope === "files") {
             onPointerDragStart?.(
               node,
-              scopedPath(node.path),
+              ref(node.path),
               event,
             );
           }
         }}
         onDragStart={(event) => {
-          const path = scopedPath(node.path);
+          const file = ref(node.path);
           event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", path);
+          event.dataTransfer.setData("text/plain", file.path);
           event.dataTransfer.setData(
             "application/x-gemihub-tree-item",
-            JSON.stringify({ path, name: node.name, isDir: node.isDir }),
+            JSON.stringify({ file, name: node.name, isDir: node.isDir }),
           );
-          onDragExternal?.(node, path);
+          onDragExternal?.(node, file);
         }}
         onDragEnd={() => {
-          window.setTimeout(() => onDragExternal?.(node, ""), 120);
+          window.setTimeout(() => onDragExternal?.(node, null), 120);
         }}
         onDragOver={(event) => {
           if (scope === "workspace" && node.isDir && onDropExternal) {
@@ -246,7 +257,7 @@ function TreeRow({
           }
         }}
         onContextMenu={(event) => {
-          if (!isTreeRoot) onContextMenu(node, scopedPath(node.path), event);
+          if (!isTreeRoot) onContextMenu(node, ref(node.path), event);
         }}
       >
         <button
@@ -258,8 +269,8 @@ function TreeRow({
             node.isDir
               ? onToggle(node.path)
               : scope === "files" && onExternalFileClick
-              ? onExternalFileClick(node, scopedPath(node.path), event)
-              : onOpen(scopedPath(node.path));
+              ? onExternalFileClick(node, ref(node.path), event)
+              : onOpen(ref(node.path));
           }}
           title={node.path}
         >
@@ -348,7 +359,7 @@ export function FileTree({
 }: {
   directoryBase: string;
   workspacePath: string;
-  onOpenFile: (path: string, created?: boolean) => void;
+  onOpenFile: (file: FileRef, created?: boolean) => void;
   onDirectoryBaseUnavailable: () => void;
   onCollapse: () => void;
 }) {
@@ -374,18 +385,18 @@ export function FileTree({
   );
   const [lastSelectedExternal, setLastSelectedExternal] = useState("");
   const [draggedExternal, setDraggedExternal] = useState<
-    Array<{ node: FileTreeNode; path: string }>
+    Array<{ node: FileTreeNode; file: FileRef }>
   >([]);
   const [externalDropTarget, setExternalDropTarget] = useState<string | null>(
     null,
   );
   const draggedExternalRef = useRef<
-    Array<{ node: FileTreeNode; path: string }>
+    Array<{ node: FileTreeNode; file: FileRef }>
   >([]);
   const pointerDragRef = useRef<
     {
       node: FileTreeNode;
-      path: string;
+      file: FileRef;
       pointerId: number;
       startX: number;
       startY: number;
@@ -394,11 +405,13 @@ export function FileTree({
   >(null);
   const suppressExternalClickUntilRef = useRef(0);
   const [contextMenu, setContextMenu] = useState<
-    { node: FileTreeNode; path: string; x: number; y: number } | null
+    { node: FileTreeNode; file: FileRef; x: number; y: number } | null
   >(null);
-  const [encryptedModalPath, setEncryptedModalPath] = useState("");
+  const [encryptedModalFile, setEncryptedModalFile] = useState<FileRef | null>(
+    null,
+  );
   const [historyDialog, setHistoryDialog] = useState<
-    { path: string; entries: FileHistoryEntry[] } | null
+    { file: FileRef; entries: FileHistoryEntry[] } | null
   >(null);
   const [trashDialog, setTrashDialog] = useState<TrashEntry[] | null>(null);
   const [workspaceMove, setWorkspaceMove] = useState<
@@ -514,24 +527,23 @@ export function FileTree({
     !isSameOrNestedPath(directoryBase, workspacePath) &&
     !isSameOrNestedPath(workspacePath, directoryBase);
 
-  const beginExternalMove = (node: FileTreeNode, path: string) => {
-    if (!path) {
+  const beginExternalMove = (node: FileTreeNode, file: FileRef | null) => {
+    if (!file) {
       draggedExternalRef.current = [];
       setDraggedExternal([]);
       setExternalDropTarget(null);
       return;
     }
-    let items: Array<{ node: FileTreeNode; path: string }>;
-    if (!node.isDir && externalSelection.has(path)) {
+    let items: Array<{ node: FileTreeNode; file: FileRef }>;
+    if (!node.isDir && externalSelection.has(file.path)) {
       items = Array.from(externalSelection).map((selectedPath) => {
-        const relative = selectedPath.replace(/^workspace:\/\//, "");
-        const name = relative.split("/").pop() || relative;
+        const name = selectedPath.split("/").pop() || selectedPath;
         return {
-          node: { name, path: relative, isDir: false, size: 0, modTime: 0 },
-          path: selectedPath,
+          node: { name, path: selectedPath, isDir: false, size: 0, modTime: 0 },
+          file: fileRef("files", selectedPath),
         };
       });
-    } else items = [{ node, path }];
+    } else items = [{ node, file }];
     draggedExternalRef.current = items;
     setDraggedExternal(items);
   };
@@ -540,15 +552,15 @@ export function FileTree({
     if (!items.length && fallbackPayload) {
       try {
         const parsed = JSON.parse(fallbackPayload) as {
-          path?: string;
+          file?: FileRef;
           name?: string;
           isDir?: boolean;
         };
-        if (parsed.path && parsed.name) {
+        if (parsed.file && parsed.name) {
           items = [{
-            path: parsed.path,
+            file: parsed.file,
             node: {
-              path: parsed.path.replace(/^workspace:\/\//, ""),
+              path: parsed.file.path,
               name: parsed.name,
               isDir: parsed.isDir === true,
               size: 0,
@@ -560,8 +572,8 @@ export function FileTree({
     }
     if (!items.length) return;
     setWorkspaceMove({
-      items: items.map(({ node, path }) => ({
-        path,
+      items: items.map(({ node, file }) => ({
+        path: file.path,
         name: node.name,
         isDir: node.isDir,
       })),
@@ -618,9 +630,10 @@ export function FileTree({
   });
   const selectExternalFile = (
     node: FileTreeNode,
-    path: string,
+    file: FileRef,
     event: MouseEvent,
   ) => {
+    const path = file.path;
     if (event.ctrlKey || event.metaKey) {
       setExternalSelection((current) => {
         const next = new Set(current);
@@ -648,17 +661,17 @@ export function FileTree({
     }
     setExternalSelection(new Set([path]));
     setLastSelectedExternal(path);
-    openTreeFile(path);
+    openTreeFile(file);
   };
   const startPointerDrag = (
     node: FileTreeNode,
-    path: string,
+    file: FileRef,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     if (event.button !== 0 || !event.isPrimary) return;
     pointerDragRef.current = {
       node,
-      path,
+      file,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -676,7 +689,7 @@ export function FileTree({
       ) {
         drag.active = true;
         suppressExternalClickUntilRef.current = Date.now() + 300;
-        beginExternalMove(drag.node, drag.path);
+        beginExternalMove(drag.node, drag.file);
       }
       if (!drag.active) return;
       event.preventDefault();
@@ -723,19 +736,20 @@ export function FileTree({
     };
   }, [contextMenu]);
 
-  const openTreeFile = (path: string) => {
-    if (path.toLowerCase().endsWith(".encrypted")) {
-      setEncryptedModalPath(path);
+  const openTreeFile = (file: FileRef) => {
+    if (file.path.toLowerCase().endsWith(".encrypted")) {
+      setEncryptedModalFile(file);
       return;
     }
-    if (dashboardPluginWidgetForPath(path)) {
-      onOpenFile(path);
+    if (dashboardPluginWidgetForPath(file.path)) {
+      onOpenFile(file);
       return;
     }
-    void readFile(path).then((file) => {
-      if (file && isEncryptedFile(file.content)) setEncryptedModalPath(path);
-      else onOpenFile(path);
-    }).catch(() => onOpenFile(path));
+    void readFileRef(file).then((result) => {
+      if (result && isEncryptedFile(result.content)) {
+        setEncryptedModalFile(file);
+      } else onOpenFile(file);
+    }).catch(() => onOpenFile(file));
   };
 
   const encryptFromMenu = async () => {
@@ -745,7 +759,7 @@ export function FileTree({
     const password = prompt(tr("files.encryptPassword")) || "";
     if (!password) return;
     try {
-      await encryptWorkspaceFile(selected.path, password);
+      await encryptWorkspaceFile(selected.file, password);
       await reload();
     } catch (error) {
       alert(error instanceof Error ? error.message : String(error));
@@ -756,15 +770,15 @@ export function FileTree({
     if (!selected) return;
     setContextMenu(null);
     setHistoryDialog({
-      path: selected.path,
-      entries: await listFileHistory(selected.path),
+      file: selected.file,
+      entries: await listFileHistoryRef(selected.file),
     });
   };
   const duplicateFromMenu = async () => {
     const selected = contextMenu;
     if (!selected) return;
     setContextMenu(null);
-    await duplicateFile(selected.path);
+    await duplicateFileRef(selected.file);
     await reload();
   };
   const trashFromMenu = async () => {
@@ -772,7 +786,7 @@ export function FileTree({
     if (!selected) return;
     setContextMenu(null);
     if (confirm(`Move ${selected.node.path} to Trash?`)) {
-      await trashFile(selected.path);
+      await trashFileRef(selected.file);
       await reload();
     }
   };
@@ -781,7 +795,7 @@ export function FileTree({
     if (!selected) return;
     setContextMenu(null);
     try {
-      await openContainingFolder(selected.path);
+      await openContainingFolderRef(selected.file);
     } catch (error) {
       alert(error instanceof Error ? error.message : String(error));
     }
@@ -789,10 +803,10 @@ export function FileTree({
   const moveIntoWorkspaceFromMenu = () => {
     const selected = contextMenu;
     setContextMenu(null);
-    if (!selected || !selected.path.startsWith("files://")) return;
+    if (!selected || selected.file.scope !== "files") return;
     setWorkspaceMove({
       items: [{
-        path: selected.path,
+        path: selected.file.path,
         name: selected.node.name,
         isDir: selected.node.isDir,
       }],
@@ -840,7 +854,7 @@ export function FileTree({
       const moved = new Set(
         workspaceMove.source === "files"
           ? workspaceMove.items.map((item) =>
-            item.path.replace(/^files:\/\//, "").replace(/^\.\//, "")
+            fileRefFromBackendPath(item.path).path.replace(/^\.\//, "")
           )
           : [],
       );
@@ -886,7 +900,7 @@ export function FileTree({
     )?.trim();
     if (!name) return;
     try {
-      await createDirectory(`workspace://${name}`);
+      await createDirectoryRef(fileRef("workspace", name));
       await reload();
     } catch (error) {
       alert(error instanceof Error ? error.message : String(error));
@@ -908,15 +922,15 @@ export function FileTree({
       baseName.toLowerCase().endsWith(normalizedExtension.toLowerCase())
         ? baseName
         : `${baseName}${normalizedExtension}`;
-    const path = scopedTreePath(
+    const file = fileRef(
       "workspace",
       joinPath(createFileDialog.directory, name),
     );
     try {
-      await writeFile(path, "");
+      await writeFileRef(file, "");
       setCreateFileDialog(null);
       await reload();
-      onOpenFile(path, true);
+      onOpenFile(file, true);
     } catch (error) {
       alert(error instanceof Error ? error.message : String(error));
     }
@@ -931,9 +945,9 @@ export function FileTree({
           title="Open Workspace in Explorer"
           aria-label="Open Workspace in Explorer"
           onClick={() =>
-            void openContainingFolder("workspace://.").catch((error) =>
-              alert(error instanceof Error ? error.message : String(error))
-            )}
+            void openContainingFolderRef(fileRef("workspace", ".")).catch((
+              error,
+            ) => alert(error instanceof Error ? error.message : String(error)))}
         >
           <FolderOpen size={16} />
         </button>
@@ -1048,11 +1062,11 @@ export function FileTree({
                   onMutated={() => void reload()}
                   onDropExternal={requestExternalDrop}
                   externalDropTarget={externalDropTarget}
-                  onContextMenu={(node, path, event) => {
+                  onContextMenu={(node, file, event) => {
                     event.preventDefault();
                     setContextMenu({
                       node,
-                      path,
+                      file,
                       x: event.clientX,
                       y: event.clientY,
                     });
@@ -1100,7 +1114,7 @@ export function FileTree({
                     key={`${item.path}:${item.line}`}
                     type="button"
                     onClick={() =>
-                      openTreeFile(scopedTreePath("workspace", item.path))}
+                      openTreeFile(fileRef("workspace", item.path))}
                   >
                     <span>{item.path}{item.line ? `:${item.line}` : ""}</span>
                     <small>{item.preview}</small>
@@ -1143,11 +1157,11 @@ export function FileTree({
                   onPointerDragStart={startPointerDrag}
                   shouldSuppressClick={() =>
                     Date.now() < suppressExternalClickUntilRef.current}
-                  onContextMenu={(node, path, event) => {
+                  onContextMenu={(node, file, event) => {
                     event.preventDefault();
                     setContextMenu({
                       node,
-                      path,
+                      file,
                       x: event.clientX,
                       y: event.clientY,
                     });
@@ -1172,19 +1186,19 @@ export function FileTree({
           >
             <FolderSearch size={14} />Open in Explorer
           </button>
-          {contextMenu.path.startsWith("files://") && (
+          {contextMenu.file.scope === "files" && (
             <button type="button" onClick={moveIntoWorkspaceFromMenu}>
               <FolderOpen size={14} />Move into Workspace…
             </button>
           )}
           {!contextMenu.node.isDir && (
             <>
-              {contextMenu.path.toLowerCase().endsWith(".encrypted")
+              {contextMenu.file.path.toLowerCase().endsWith(".encrypted")
                 ? (
                   <button
                     type="button"
                     onClick={() => {
-                      setEncryptedModalPath(contextMenu.path);
+                      setEncryptedModalFile(contextMenu.file);
                       setContextMenu(null);
                     }}
                   >
@@ -1298,10 +1312,10 @@ export function FileTree({
           </section>
         </div>
       )}
-      {encryptedModalPath && (
+      {encryptedModalFile && (
         <EncryptedFileModal
-          path={encryptedModalPath}
-          onClose={() => setEncryptedModalPath("")}
+          file={encryptedModalFile}
+          onClose={() => setEncryptedModalFile(null)}
           onChanged={() => void reload()}
         />
       )}
@@ -1309,7 +1323,7 @@ export function FileTree({
         <div className="encrypted-file-modal-backdrop">
           <section className="file-lifecycle-dialog">
             <header>
-              <strong>History · {historyDialog.path}</strong>
+              <strong>History · {historyDialog.file.path}</strong>
               <button onClick={() => setHistoryDialog(null)}>
                 <X size={15} />
               </button>
@@ -1325,7 +1339,7 @@ export function FileTree({
                     </span>
                     <button
                       onClick={() =>
-                        void restoreFileHistory(historyDialog.path, entry.id)
+                        void restoreFileHistoryRef(historyDialog.file, entry.id)
                           .then(async () => {
                             await reload();
                             setHistoryDialog(null);
@@ -1404,7 +1418,7 @@ export function FileTree({
                 <div className="workspace-move-sources">
                   {workspaceMove.items.map((item) => (
                     <small key={item.path}>
-                      {item.path.replace(/^files:\/\//, "")}
+                      {fileRefFromBackendPath(item.path).path}
                     </small>
                   ))}
                 </div>

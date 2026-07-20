@@ -65,6 +65,39 @@ func TestWorkspaceFileAPIUsesEntireWorkspace(t *testing.T) {
 	}
 }
 
+func TestListWorkspaceDirectoryFilesScopesTheWalk(t *testing.T) {
+	workspace := t.TempDir()
+	app := NewApp()
+	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	for path, content := range map[string]string{
+		"Dashboards/Timeline/Timeline/2026-07-20.md": "first",
+		"Dashboards/Timeline/Timeline/attachments/image.txt": "attachment",
+		"Notes/unrelated.md": "outside",
+	} {
+		if err := app.WriteWorkspaceFile(path, content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := app.ListWorkspaceDirectoryFiles("Dashboards/Timeline/Timeline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"Dashboards/Timeline/Timeline/2026-07-20.md",
+		"Dashboards/Timeline/Timeline/attachments/image.txt",
+	}
+	if len(paths) != len(want) || paths[0] != want[0] || paths[1] != want[1] {
+		t.Fatalf("scoped paths = %#v, want %#v", paths, want)
+	}
+	missing, err := app.ListWorkspaceDirectoryFiles("Dashboards/Timeline/Missing")
+	if err != nil || len(missing) != 0 {
+		t.Fatalf("missing directory = %#v, %v", missing, err)
+	}
+	if _, err := app.ListWorkspaceDirectoryFiles("../outside"); err == nil {
+		t.Fatal("Workspace path traversal was accepted")
+	}
+}
+
 func TestDirectoryBaseFileOperations(t *testing.T) {
 	app, _ := testDirectoryApp(t)
 	if err := app.WriteFile("notes/hello.md", "hello DirectoryBase"); err != nil {
@@ -250,6 +283,27 @@ func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
 	}
 	if _, err := app.ReadFile(copyPath); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestListTrashDeduplicatesSharedFilesAndWorkspaceBase(t *testing.T) {
+	app, dir := testDirectoryApp(t)
+	app.workspaceState = WorkspaceState{
+		ActiveWorkspaceID: "shared",
+		Workspaces: []Workspace{{ID: "shared", Name: "Shared", Path: dir}},
+	}
+	if err := app.WriteFile("notes/item.md", "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.TrashFile("notes/item.md"); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := app.ListTrash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trash) != 1 {
+		t.Fatalf("shared trash entry was listed %d times: %#v", len(trash), trash)
 	}
 }
 

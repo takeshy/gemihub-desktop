@@ -7,6 +7,7 @@ import { parseWorkflowFile } from "./parser";
 import { keyboardEventShortcut, loadWorkflowAutomationSettings, matchWorkflowFilePattern, workflowAutomationChangedEvent, type WorkflowAutomationSettings, type WorkflowEventTrigger, type WorkflowEventType } from "./automationSettings";
 import { WorkflowProgressModal } from "./WorkflowProgressModal";
 import type { Workflow, WorkflowLog } from "./types";
+import type { FileRef } from "../lib/fileRef";
 
 interface FileEvent {
   type: WorkflowEventType;
@@ -19,7 +20,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return !!element && (element.matches("input, textarea, select") || element.isContentEditable);
 }
 
-export function WorkflowAutomationHost({ directoryBase, settings, activeFile, onOpenFile }: { directoryBase: string; settings: ChatSettings; activeFile: { path: string; content: string } | null; onOpenFile: (path: string) => void }) {
+export function WorkflowAutomationHost({ directoryBase, settings, activeFile, onOpenFile }: { directoryBase: string; settings: ChatSettings; activeFile: { path: string; content: string } | null; onOpenFile: (file: FileRef) => void }) {
   const [automation, setAutomation] = useState<WorkflowAutomationSettings>(() => loadWorkflowAutomationSettings(directoryBase));
   const snapshotRef = useRef<Map<string, DirectoryFileEntry> | null>(null);
   const blockedUntilRef = useRef(new Map<string, number>());

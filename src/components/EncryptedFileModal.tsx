@@ -11,20 +11,23 @@ import {
   rememberedFilePassword,
   saveEncryptedWorkspaceFile,
 } from "../lib/fileEncryption";
+import type { FileRef } from "../lib/fileRef";
 
 function extension(name: string): string {
   return name.split(".").pop()?.toLowerCase() || "";
 }
 
 export function EncryptedFileModal(
-  { path, onClose, onChanged }: {
-    path: string;
+  { file: sourceFile, onClose, onChanged }: {
+    file: FileRef;
     onClose: () => void;
     onChanged: () => void;
   },
 ) {
   const { t: tr } = useI18n();
-  const [password, setPassword] = useState(() => rememberedFilePassword(path));
+  const [password, setPassword] = useState(() =>
+    rememberedFilePassword(sourceFile)
+  );
   const [file, setFile] = useState<DecryptedWorkspaceFile | null>(null);
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,7 +41,7 @@ export function EncryptedFileModal(
     setBusy(true);
     setError("");
     try {
-      const opened = await openEncryptedWorkspaceFile(path, password);
+      const opened = await openEncryptedWorkspaceFile(sourceFile, password);
       setFile(opened);
       setContent(opened.content);
       setDirty(false);
@@ -77,7 +80,7 @@ export function EncryptedFileModal(
     ) return;
     setBusy(true);
     try {
-      await decryptWorkspaceFile(path, password);
+      await decryptWorkspaceFile(sourceFile, password);
       onChanged();
       onClose();
     } catch {
@@ -130,7 +133,7 @@ export function EncryptedFileModal(
         <header>
           <span>
             <LockKeyhole size={16} />
-            {file?.originalName || path.split("/").pop()}
+            {file?.originalName || sourceFile.path.split("/").pop()}
           </span>
           <button type="button" onClick={onClose} title="Close">
             <X size={16} />

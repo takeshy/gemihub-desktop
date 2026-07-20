@@ -4,20 +4,22 @@ import {
   rememberedFilePassword,
   rememberFilePassword,
 } from "./fileEncryption.ts";
+import { fileRef } from "./fileRef.ts";
 
-Deno.test("encrypted workspace paths and session passwords normalize workspace URIs", () => {
+Deno.test("encrypted paths and session passwords retain FileRef scope", () => {
   assertEquals(
-    encryptedPathFor("files://notes/readme.md"),
-    "files://notes/readme.md.encrypted",
+    encryptedPathFor("notes/readme.md"),
+    "notes/readme.md.encrypted",
   );
   assertEquals(
     encryptedPathFor("notes/readme.md.encrypted"),
     "notes/readme.md.encrypted",
   );
-  rememberFilePassword("files://notes/readme.md.encrypted", "temporary");
+  const encryptedFile = fileRef("workspace", "notes/readme.md.encrypted");
+  rememberFilePassword(encryptedFile, "temporary");
   assertEquals(
-    rememberedFilePassword("notes/readme.md.encrypted"),
+    rememberedFilePassword(encryptedFile),
     "temporary",
   );
-  rememberFilePassword("notes/readme.md.encrypted", "");
+  rememberFilePassword(encryptedFile, "");
 });

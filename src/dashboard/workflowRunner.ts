@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "../lib/wailsBackend";
+import { readWorkspaceFile, writeWorkspaceFile } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
 import { executeWorkflow } from "../workflow/executor";
 import { parseWorkflowFile } from "../workflow/parser";
@@ -12,7 +12,7 @@ export function workflowCachePath(scope = "local"): string {
 }
 
 async function loadAll(scope: string): Promise<Record<string, WorkflowCacheRecord>> {
-  try { return JSON.parse((await readFile(workflowCachePath(scope)))?.content || "{}") as Record<string, WorkflowCacheRecord>; } catch { return {}; }
+  try { return JSON.parse((await readWorkspaceFile(workflowCachePath(scope)))?.content || "{}") as Record<string, WorkflowCacheRecord>; } catch { return {}; }
 }
 
 export async function loadWorkflowWidgetCache(widgetId: string, scope = "local"): Promise<WorkflowCacheRecord | null> {
@@ -23,7 +23,7 @@ export async function saveWorkflowWidgetCache(widgetId: string, record: Workflow
   saveQueue = saveQueue.catch(() => undefined).then(async () => {
     const all = await loadAll(scope);
     all[widgetId] = record;
-    await writeFile(workflowCachePath(scope), JSON.stringify(all, null, 2));
+    await writeWorkspaceFile(workflowCachePath(scope), JSON.stringify(all, null, 2));
   });
   await saveQueue;
 }
@@ -36,7 +36,7 @@ export function extractWorkflowText(variables: Record<string, string | number>, 
 }
 
 export async function runWorkflowText(settings: ChatSettings, workflowPath: string, outputVariable: string | undefined, signal: AbortSignal): Promise<string> {
-  const file = await readFile(workflowPath);
+  const file = await readWorkspaceFile(workflowPath);
   if (!file) throw new Error(`Workflow not found: ${workflowPath}`);
   const workflow = parseWorkflowFile(file.content, workflowPath);
   const run = await executeWorkflow(workflow, workflowPath, { chatSettings: settings, signal, interactionMode: "headless" });

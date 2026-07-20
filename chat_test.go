@@ -222,14 +222,10 @@ func TestAppendTimelineToolWritesSystemTimeline(t *testing.T) {
 	}
 }
 
-func TestTimelineToolRemainsAvailableWithoutGeneralFileTools(t *testing.T) {
+func TestFilesOffDisablesAllChatTools(t *testing.T) {
 	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "none"})
-	if len(definitions) != 2 {
-		t.Fatalf("got %d tools, want Timeline read and append", len(definitions))
-	}
-	function := definitions[0]["function"].(map[string]any)
-	if function["name"] != "read_timeline" {
-		t.Fatalf("unexpected tool: %#v", function["name"])
+	if len(definitions) != 0 {
+		t.Fatalf("Files off returned tools: %#v", definitions)
 	}
 }
 
@@ -437,13 +433,13 @@ func TestWebSearchSourcesAreSortedAndUseURLAsFallbackTitle(t *testing.T) {
 }
 
 func TestChatToolDefinitionsIncludeRegisteredFrontendTool(t *testing.T) {
-	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "none", CustomTools: []ChatToolDefinition{{
+	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "noSearch", CustomTools: []ChatToolDefinition{{
 		Name: "run_skill_workflow", Description: "Run an active skill workflow", Parameters: map[string]any{"type": "object"},
 	}}})
-	if len(definitions) != 3 {
+	if len(definitions) != 8 {
 		t.Fatalf("expected Timeline tools and one custom definition, got %#v", definitions)
 	}
-	function, _ := definitions[2]["function"].(map[string]any)
+	function, _ := definitions[7]["function"].(map[string]any)
 	if function["name"] != "run_skill_workflow" {
 		t.Fatalf("unexpected custom tool definition: %#v", function)
 	}

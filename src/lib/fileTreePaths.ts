@@ -1,4 +1,5 @@
 import type { FileTreeNode } from "./wailsBackend";
+import { type FileRef, fileRef } from "./fileRef";
 
 export type FileTreeScope = "workspace" | "files";
 
@@ -24,7 +25,6 @@ export function isProtectedWorkspaceRoot(
   return depth === 0 && node.isDir && isWorkspaceResourcePath(node.name);
 }
 
-export function scopedTreePath(scope: FileTreeScope, path: string): string {
-  if (scope === "files") return `files://${path}`;
-  return `workspace://${path}`;
+export function scopedTreeRef(scope: FileTreeScope, path: string): FileRef {
+  return fileRef(scope, path);
 }

@@ -41,9 +41,6 @@ export function wikiEmbedPathCandidates(
 export function localTargetToPath(baseDirPath: string, target: string): string {
   const clean = target.split("#")[0].trim();
   if (!clean) return "";
-  if (/^(?:workspace|files):\/\//i.test(clean)) {
-    return /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
-  }
   const windows = isWindowsPath(baseDirPath) || isWindowsPath(clean);
   if (
     clean.startsWith("/") || isWindowsPath(clean) || clean.startsWith("\\\\")
@@ -53,7 +50,6 @@ export function localTargetToPath(baseDirPath: string, target: string): string {
   const withExt = /\.[A-Za-z0-9]+$/.test(clean) ? clean : `${clean}.md`;
   const separator = windows ? "\\" : "/";
   if (!baseDirPath) return withExt;
-  if (baseDirPath.endsWith("://")) return `${baseDirPath}${withExt}`;
   const trimmed = baseDirPath.endsWith("/") || baseDirPath.endsWith("\\")
     ? baseDirPath.slice(0, -1)
     : baseDirPath;
@@ -94,7 +90,6 @@ export function localHrefToPathCandidates(
 export function isLocalDocumentHref(href: string): boolean {
   if (!href) return false;
   const decoded = safeDecodeURIComponent(href);
-  if (/^(?:workspace|files):\/\//i.test(decoded)) return true;
   if (isWindowsPath(decoded) || /^file:\/\//i.test(decoded)) return true;
   if (href.startsWith("#wiki:") || href.startsWith("#wikiembed:")) return true;
   if (href.startsWith("#")) return false;
@@ -131,18 +126,6 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 export function pathDirName(path: string): string {
-  const scope = /^(workspace|files):\/\//i.exec(path)?.[1]?.toLowerCase();
-  if (scope) {
-    const prefix = `${scope}://`;
-    const relative = path.slice(prefix.length);
-    const separatorIndex = Math.max(
-      relative.lastIndexOf("/"),
-      relative.lastIndexOf("\\"),
-    );
-    return separatorIndex === -1
-      ? prefix
-      : `${prefix}${relative.slice(0, separatorIndex)}`;
-  }
   const separatorIndex = Math.max(
     path.lastIndexOf("/"),
     path.lastIndexOf("\\"),

@@ -14,7 +14,9 @@ import {
   Trash2,
   Workflow as WorkflowIcon,
 } from "lucide-react";
+import { isFileRef } from "../lib/fileRef";
 import { chat, listPluginIDs } from "../lib/wailsBackend";
+import type { FileRef } from "../lib/fileRef";
 import { ChatPanel } from "../llm/ChatPanel";
 import type { ActiveSelection } from "../llm/selection";
 import { RAGSearchPanel } from "../llm/RAGSearchPanel";
@@ -55,7 +57,11 @@ import {
   registerPluginWidget,
   unregisterPluginWidgets,
 } from "../dashboard/widgetRegistry";
-import { normalizeDesktopPluginView, pluginViewForPath } from "./pluginViews";
+import {
+  normalizeDesktopPluginView,
+  pluginViewForPath,
+  readPluginViewFile,
+} from "./pluginViews";
 
 const CONFIG_KEY = "llm-hub:plugins";
 const SELECTED_PLUGIN_KEY = "llm-hub:selected-plugin";
@@ -84,15 +90,16 @@ function PluginMainViewWidget(
     config: unknown;
   },
 ) {
-  const configuredPath =
+  const configuredFile =
     config && typeof config === "object" && !Array.isArray(config) &&
-      typeof (config as { filePath?: unknown }).filePath === "string"
-      ? (config as { filePath: string }).filePath
-      : "";
-  const filePath = configuredPath &&
-      (!view.extensions?.length || pluginViewForPath([view], configuredPath))
-    ? configuredPath
-    : "";
+      isFileRef((config as { file?: unknown }).file)
+      ? (config as { file: FileRef }).file
+      : null;
+  const file = configuredFile &&
+      (!view.extensions?.length || pluginViewForPath([view], configuredFile.path))
+    ? configuredFile
+    : null;
+  const filePath = file?.path || "";
   const [fileContent, setFileContent] = useState("");
 
   useEffect(() => {
@@ -101,18 +108,16 @@ function PluginMainViewWidget(
       setFileContent("");
       return;
     }
-    const reader = filePath.toLowerCase().startsWith("files://")
-      ? api.files?.read(filePath)
-      : api.workspaceFiles?.read(filePath);
+    const reader = file ? readPluginViewFile(api, file) : undefined;
     void reader?.then((content) => {
-      if (!cancelled) setFileContent(content);
+      if (!cancelled) setFileContent(content || "");
     }).catch(() => {
       if (!cancelled) setFileContent("");
     });
     return () => {
       cancelled = true;
     };
-  }, [api, filePath]);
+  }, [api, file, filePath]);
 
   const Component = view.component;
   const fileName = filePath.split(/[\\/]/).pop() || undefined;
@@ -122,6 +127,7 @@ function PluginMainViewWidget(
       language={language}
       fileId={filePath || undefined}
       filePath={filePath || undefined}
+      fileRoot={file?.scope}
       fileName={fileName}
       fileContent={fileContent || undefined}
     />
@@ -148,7 +154,7 @@ export function PluginHost({
   activeSelection,
   onOpenChatSettings,
   onOpenRAGSettings,
-  onOpenDirectoryFile,
+  onOpenFile,
 }: {
   directoryBase: string;
   workspaceBase: string;
@@ -171,7 +177,7 @@ export function PluginHost({
   activeSelection: ActiveSelection | null;
   onOpenChatSettings: () => void;
   onOpenRAGSettings: () => void;
-  onOpenDirectoryFile: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
 }) {
   const configKey = useMemo(() => workspaceConfigKey(workspaceBase), [
     workspaceBase,
@@ -330,16 +336,15 @@ export function PluginHost({
             registerPluginWidget(registeredView.pluginId, {
               type: pluginMainViewWidgetType(registeredView.id),
               label: registeredView.name,
-              defaultConfig: { filePath: "" },
+              defaultConfig: { file: null },
               defaultSize: { w: 12, h: 7 },
               hiddenFromPalette: true,
               extensions: registeredView.extensions,
               filePathOf: (config) =>
                 config && typeof config === "object" &&
                   !Array.isArray(config) &&
-                  typeof (config as { filePath?: unknown }).filePath ===
-                    "string"
-                  ? (config as { filePath: string }).filePath
+                  isFileRef((config as { file?: unknown }).file)
+                  ? (config as { file: FileRef }).file.path
                   : undefined,
               render: (config) => (
                 <PluginMainViewWidget
@@ -720,7 +725,7 @@ export function PluginHost({
             directoryBase={workspaceBase}
             settings={chatSettings}
             activeFile={activeFile}
-            onOpenFile={onOpenDirectoryFile}
+            onOpenFile={onOpenFile}
           />
           <SkillWorkflowToolHost
             directoryBase={workspaceBase}
@@ -772,9 +777,9 @@ export function PluginHost({
                 externalAttachments={chatAttachmentRequest}
                 pluginCommands={slashCommands}
                 onOpenSettings={onOpenChatSettings}
-                onOpenFile={onOpenDirectoryFile}
-                onOpenWorkflow={(path) => {
-                  onOpenDirectoryFile(path);
+                onOpenFile={onOpenFile}
+                onOpenWorkflow={(file) => {
+                  onOpenFile(file);
                   setActiveTab("workflow");
                 }}
               />
@@ -786,7 +791,7 @@ export function PluginHost({
                 settings={chatSettings}
                 onSettingsChange={onChatSettingsChange}
                 onOpenSettings={onOpenRAGSettings}
-                onOpenFile={onOpenDirectoryFile}
+                onOpenFile={onOpenFile}
                 onChatWithResults={(files) => {
                   setChatAttachmentRequest((current) => ({
                     id: current.id + 1,
@@ -802,7 +807,7 @@ export function PluginHost({
                 directoryBase={workspaceBase}
                 settings={chatSettings}
                 activeFile={activeFile}
-                onOpenFile={onOpenDirectoryFile}
+                onOpenFile={onOpenFile}
               />
             )
             : activeTab === "plugins" && activePluginId

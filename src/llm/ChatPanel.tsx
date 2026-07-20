@@ -97,6 +97,7 @@ import {
   type SlashCommand,
 } from "./settings";
 import { type ActiveSelection, formatActiveSelection } from "./selection";
+import { type FileRef, fileRef } from "../lib/fileRef";
 import {
   type GroundingSource,
   groundingSourceLabel,
@@ -461,8 +462,8 @@ export function ChatPanel({
   };
   pluginCommands?: PluginSlashCommand[];
   onOpenSettings: () => void;
-  onOpenFile: (path: string) => void;
-  onOpenWorkflow: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
+  onOpenWorkflow: (file: FileRef) => void;
 }) {
   const [sessions, setSessions] = useState<ChatSession[]>(() => [newSession()]);
   const [loadedHistoryScope, setLoadedHistoryScope] = useState<string | null>(
@@ -946,7 +947,7 @@ export function ChatPanel({
         };
       }
       try {
-        const file = await readFile(entry.workflowPath);
+        const file = await readWorkspaceFile(entry.workflowPath);
         if (!file) {
           throw new Error(`Workflow file not found: ${entry.workflowPath}`);
         }
@@ -976,7 +977,7 @@ export function ChatPanel({
           interactionMode: "panel",
           signal: activeRunControllerRef.current?.signal,
           loadWorkflow: async (path) => {
-            const nested = await readFile(path);
+            const nested = await readWorkspaceFile(path);
             if (!nested) throw new Error(`Workflow file not found: ${path}`);
             return parseWorkflowFile(nested.content, path);
           },
@@ -1916,7 +1917,7 @@ export function ChatPanel({
                           ? ` · relevance ${source.score.toFixed(3)}`
                           : ""
                       }`}
-                      onClick={() => onOpenFile(source.path)}
+                      onClick={() => onOpenFile(fileRef("workspace", source.path))}
                     >
                       <FileText size={11} />
                       {groundingSourceLabel(source)}
@@ -2003,7 +2004,7 @@ export function ChatPanel({
                         <button
                           type="button"
                           key={name}
-                          onClick={() => onOpenFile(skill.skillFilePath)}
+                          onClick={() => onOpenFile(fileRef("workspace", skill.skillFilePath))}
                         >
                           {name}
                         </button>
@@ -2017,7 +2018,7 @@ export function ChatPanel({
               <button
                 type="button"
                 className="chat-open-failed-workflow"
-                onClick={() => onOpenWorkflow(message.failedWorkflowPath!)}
+                onClick={() => onOpenWorkflow(fileRef("workspace", message.failedWorkflowPath!))}
               >
                 <WorkflowIcon size={12} />Open failed workflow
               </button>
@@ -2099,7 +2100,7 @@ export function ChatPanel({
                   <button
                     type="button"
                     className="chat-skill-open"
-                    onClick={() => onOpenFile(skill.skillFilePath)}
+                    onClick={() => onOpenFile(fileRef("workspace", skill.skillFilePath))}
                   >
                     {skill.name}
                   </button>

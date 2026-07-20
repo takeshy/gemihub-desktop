@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw, Sparkles, X } from "lucide-react";
-import { chat, readWorkspaceFile as readFile, writeWorkspaceFile as writeFile } from "../lib/wailsBackend";
+import { chat, readWorkspaceFile as readWorkspaceFile, writeWorkspaceFile as writeWorkspaceFile } from "../lib/wailsBackend";
 import {
   chatModelChoices,
   type ChatProvider,
@@ -122,7 +122,7 @@ async function loadSkillFiles(skill: WorkspaceSkill): Promise<SkillAIFile[]> {
     ),
   ];
   return await Promise.all(paths.map(async (path) => {
-    const file = await readFile(path);
+    const file = await readWorkspaceFile(path);
     if (!file) throw new Error(`Skill file was not found: ${path}`);
     return { path, content: file.content };
   }));
@@ -275,7 +275,7 @@ export function ModifySkillWithAIModal(
     const applied: SkillAIFile[] = [];
     try {
       for (const original of files) {
-        const current = await readFile(original.path);
+        const current = await readWorkspaceFile(original.path);
         if (!current || current.content !== original.content) {
           throw new Error(
             `${original.path} changed after generation. Reload and generate the change again.`,
@@ -287,7 +287,7 @@ export function ModifySkillWithAIModal(
         Number(right.path === skill.skillFilePath)
       );
       for (const change of ordered) {
-        await writeFile(change.path, change.after);
+        await writeWorkspaceFile(change.path, change.after);
         applied.push({ path: change.path, content: change.before });
       }
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
@@ -295,7 +295,7 @@ export function ModifySkillWithAIModal(
       onClose();
     } catch (caught) {
       for (const original of applied.reverse()) {
-        await writeFile(original.path, original.content).catch(() => undefined);
+        await writeWorkspaceFile(original.path, original.content).catch(() => undefined);
       }
       setError(caught instanceof Error ? caught.message : String(caught));
       setPhase("review");

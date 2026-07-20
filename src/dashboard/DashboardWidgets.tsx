@@ -67,6 +67,7 @@ import {
   deleteWorkspaceFile,
   fileInventory,
   listMemoFiles,
+  listWorkspaceDirectoryFiles,
   listWorkspaceFiles,
   readFile,
   readMemoFile,
@@ -77,6 +78,7 @@ import {
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
+import { fileRef, type FileRef } from "../lib/fileRef";
 import {
   decryptFileContent,
   encryptFileContent,
@@ -621,9 +623,9 @@ export function TimelineDashboardWidget(
     );
   const load = useCallback(async () => {
     try {
-      const paths = (await listWorkspaceFiles()).filter((entry) =>
-        entry.path.startsWith(`${folder}/`) && /\.md$/i.test(entry.path)
-      ).map((entry) => entry.path).sort();
+      const paths = (await listWorkspaceDirectoryFiles(folder)).filter((path) =>
+        /\/\d{4}-\d{2}-\d{2}\.md$/i.test(path)
+      );
       const loaded = await Promise.all(
         paths.map(async (path) => ({
           path,
@@ -842,6 +844,14 @@ export function TimelineDashboardWidget(
     <div className="dashboard-timeline-widget">
       <div className="timeline-toolbar">
         <strong>{name}</strong>
+        <select
+          aria-label="Filter by tag"
+          value={tag}
+          onChange={(event) => setTag(event.target.value)}
+        >
+          <option value="">All tags</option>
+          {allTags.map((value) => <option key={value}>{value}</option>)}
+        </select>
         <button
           type="button"
           className={filtersOpen || hasFilters ? "active" : ""}
@@ -867,10 +877,6 @@ export function TimelineDashboardWidget(
               placeholder="Search posts"
             />
           </label>
-          <select value={tag} onChange={(event) => setTag(event.target.value)}>
-            <option value="">All tags</option>
-            {allTags.map((value) => <option key={value}>{value}</option>)}
-          </select>
           <input
             aria-label="From"
             type="date"
@@ -1200,7 +1206,7 @@ export function TimelineDashboardWidget(
       )}
       {previewPath && (
         <KanbanCardModal
-          path={previewPath}
+          file={fileRef("workspace", previewPath)}
           isDark={isDark}
           onNavigate={() => {
             const path = previewPath;
@@ -1232,11 +1238,12 @@ function columns(
   return result;
 }
 export function KanbanDashboardWidget(
-  { config, isDark, onChange, onOpenPath }: {
+  { config, isDark, onChange, onOpenFile, onTitleChange }: {
     config: Record<string, unknown>;
     isDark: boolean;
     onChange: (config: Record<string, unknown>) => void;
-    onOpenPath: (path: string) => void;
+    onOpenFile: (file: FileRef) => void;
+    onTitleChange?: (title: string) => void;
   },
 ) {
   const [definition, setDefinition] = useState<KanbanDefinition>(config),
@@ -1256,13 +1263,19 @@ export function KanbanDashboardWidget(
   const dragColumnRef = useRef<string | null>(null);
   const dropHandledRef = useRef(false);
   const hasLoadedRef = useRef(false);
+  const onTitleChangeRef = useRef(onTitleChange);
+  useEffect(() => {
+    onTitleChangeRef.current = onTitleChange;
+  }, [onTitleChange]);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     if (!hasLoadedRef.current) setLoading(true);
     try {
       const path = configText(config, "kanban");
       const parsed = path
-        ? parseKanbanDefinition((await readFile(path))?.content || "")
+        ? parseKanbanDefinition(
+          (await readWorkspaceFile(path))?.content || "",
+        )
         : null;
       const storedOrder = Array.isArray(config.cardOrder)
         ? config.cardOrder.filter((item): item is string =>
@@ -1275,10 +1288,12 @@ export function KanbanDashboardWidget(
         cardOrder: storedOrder,
       };
       setDefinition(next);
+      const boardTitle = configText(next, "title");
+      if (boardTitle) onTitleChangeRef.current?.(boardTitle);
       let loaded = filterBaseRows(
         await loadDashboardRows(
           configText(next, "folder"),
-          next.workspaceOnly === true,
+          "workspace",
         ),
         next.filter,
       );
@@ -1364,10 +1379,7 @@ export function KanbanDashboardWidget(
       : nextOrder.length;
     nextOrder.splice(insertAt, 0, row.id);
     try {
-      const writeBoardFile = definition.workspaceOnly === true
-        ? writeWorkspaceFile
-        : writeFile;
-      await writeBoardFile(
+      await writeWorkspaceFile(
         row.path,
         `---\n${
           yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd()
@@ -1463,18 +1475,13 @@ export function KanbanDashboardWidget(
       file = title.replace(/[\\/:*?"<>|#^[\]]/g, "").trim() ||
         `card-${Date.now()}`;
     const existing = new Set(
-      (definition.workspaceOnly === true
-        ? await listWorkspaceFiles()
-        : await fileInventory()).map((entry) => entry.path),
+      (await listWorkspaceFiles()).map((entry) => entry.path),
     );
     let path = `${folder ? `${folder}/` : ""}${file}.md`, suffix = 2;
     while (existing.has(path)) {
       path = `${folder ? `${folder}/` : ""}${file} ${suffix++}.md`;
     }
-    const writeBoardFile = definition.workspaceOnly === true
-      ? writeWorkspaceFile
-      : writeFile;
-    await writeBoardFile(
+    await writeWorkspaceFile(
       path,
       `---\n${
         yaml.dump({ [titleKey]: title, [statusKey]: status }, {
@@ -1520,15 +1527,13 @@ export function KanbanDashboardWidget(
         {moveError && (
           <span className="dashboard-inline-error">{moveError}</span>
         )}
-        {tags.length > 0 && (
-          <select
-            value={tagFilter}
-            onChange={(event) => setTagFilter(event.target.value)}
-          >
-            <option value="">All tags</option>
-            {tags.map((tag) => <option key={tag}>{tag}</option>)}
-          </select>
-        )}
+        <select
+          value={tagFilter}
+          onChange={(event) => setTagFilter(event.target.value)}
+        >
+          <option value="">All tags</option>
+          {tags.map((tag) => <option key={tag}>{tag}</option>)}
+        </select>
         <button type="button" onClick={() => setShowNewCard(true)}>
           <Plus size={13} />New Card
         </button>
@@ -1673,10 +1678,16 @@ export function KanbanDashboardWidget(
                   const key = typeof field === "string"
                     ? field
                     : field.field || "";
+                  const label = typeof field === "string"
+                    ? field
+                    : Object.hasOwn(field, "label")
+                    ? field.label || ""
+                    : key;
                   return key
                     ? (
                       <small key={key}>
-                        {key}: {String(row.frontmatter[key] ?? "")}
+                        {label ? `${label}: ` : ""}
+                        {String(row.frontmatter[key] ?? "")}
                       </small>
                     )
                     : null;
@@ -1765,14 +1776,12 @@ export function KanbanDashboardWidget(
       )}
       {previewPath && (
         <KanbanCardModal
-          path={previewPath}
-          fileScope={definition.workspaceOnly === true
-            ? "workspace"
-            : "directory"}
+          file={fileRef("workspace", previewPath)}
           isDark={isDark}
           onNavigate={() => {
+            const path = previewPath;
             setPreviewPath("");
-            onOpenPath(previewPath);
+            onOpenFile(fileRef("workspace", path));
           }}
           onSaved={() => void load()}
           onClose={() => setPreviewPath("")}
@@ -1786,13 +1795,13 @@ export function BaseDashboardWidget({
   config,
   isDark,
   onChange,
-  onOpenPath,
+  onOpenFile,
 }: {
   config: Record<string, unknown>;
   settings: ChatSettings;
   isDark: boolean;
   onChange: (config: Record<string, unknown>) => void;
-  onOpenPath: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
 }) {
   const [rows, setRows] = useState<DashboardDataRow[]>([]);
   const [baseData, setBaseData] = useState<BaseQueryData | null>(null);
@@ -1827,7 +1836,7 @@ export function BaseDashboardWidget({
       return;
     }
     try {
-      const file = await readFile(path);
+      const file = await readWorkspaceFile(path);
       if (!file) {
         setError(`Cannot read ${path}`);
         return;
@@ -2359,13 +2368,12 @@ export function BaseDashboardWidget({
         )}
       {previewPath && (
         <KanbanCardModal
-          path={previewPath}
-          fileScope="workspace"
+          file={fileRef("workspace", previewPath)}
           isDark={isDark}
           onNavigate={() => {
             const path = previewPath;
             setPreviewPath("");
-            onOpenPath(path);
+            onOpenFile(fileRef("workspace", path));
           }}
           onSaved={() => void load()}
           onClose={() => setPreviewPath("")}
@@ -2395,7 +2403,7 @@ export function SecretManagerDashboardWidget(
     [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false),
     [viewing, setViewing] = useState<SecretEntry | null>(null),
-    [fileViewing, setFileViewing] = useState(""),
+    [fileViewing, setFileViewing] = useState<FileRef | null>(null),
     [busy, setBusy] = useState(false),
     [autoUnlocking, setAutoUnlocking] = useState(false);
   const [name, setName] = useState(""),
@@ -2469,7 +2477,7 @@ export function SecretManagerDashboardWidget(
       setError("");
       try {
         await encryptWorkspaceFile(
-          `workspace://${selectedFile}`,
+          fileRef("workspace", selectedFile),
           password,
           metadataRecord(metadataFields),
         );
@@ -2518,7 +2526,7 @@ export function SecretManagerDashboardWidget(
   };
   const openSecret = async (entry: SecretEntry) => {
     if (entry.publicMetadata.sourceKind === "workspace-file") {
-      setFileViewing(`workspace://${entry.path}`);
+      setFileViewing(fileRef("workspace", entry.path));
       return;
     }
     const savedPassword = getSecretManagerSessionPassword(managerId);
@@ -3038,8 +3046,8 @@ export function SecretManagerDashboardWidget(
       )}
       {fileViewing && (
         <EncryptedFileModal
-          path={fileViewing}
-          onClose={() => setFileViewing("")}
+          file={fileViewing}
+          onClose={() => setFileViewing(null)}
           onChanged={() => void load()}
         />
       )}

@@ -40,11 +40,10 @@ function safePluginId(pluginId: string): string {
 
 function pluginFilePath(path: string, scope: "workspace" | "files"): string {
   const value = path.trim();
-  const match = /^(workspace|files):\/\//i.exec(value);
-  if (match && match[1].toLowerCase() !== scope) {
-    throw new Error(`${scope} file API cannot access ${match[1].toLowerCase()} paths.`);
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+    throw new Error(`${scope} file API accepts relative paths only.`);
   }
-  return `${scope}://${match ? value.slice(match[0].length) : value}`;
+  return value;
 }
 
 export function createPluginAPI(
@@ -168,7 +167,7 @@ export function createPluginAPI(
     const storagePath = `.llm-hub/plugin-data/${safePluginId(pluginId)}.json`;
     const readAll = async (): Promise<Record<string, unknown>> => {
       try {
-        const result = await readFile(storagePath);
+        const result = await readWorkspaceFile(storagePath);
         return result?.content ? JSON.parse(result.content) as Record<string, unknown> : {};
       } catch {
         return {};
@@ -179,7 +178,7 @@ export function createPluginAPI(
       async set(key, value) {
         const current = await readAll();
         current[key] = value;
-        await writeFile(storagePath, JSON.stringify(current, null, 2));
+        await writeWorkspaceFile(storagePath, JSON.stringify(current, null, 2));
       },
       getAll: readAll,
     };

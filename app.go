@@ -341,6 +341,20 @@ func (a *App) OpenLocalFileDefault(path string) error {
 	if err != nil {
 		return err
 	}
+	return openFileDefault(source)
+}
+
+// OpenWorkspaceFileDefault opens a Workspace file without relying on a scoped
+// string path or the current Files directory.
+func (a *App) OpenWorkspaceFileDefault(path string) error {
+	source, err := a.workspacePath(path, false)
+	if err != nil {
+		return err
+	}
+	return openFileDefault(source)
+}
+
+func openFileDefault(source string) error {
 	var command *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":

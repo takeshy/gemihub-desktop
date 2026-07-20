@@ -3,7 +3,6 @@ import {
   chat,
   type ChatRequest,
   type ChatToolDefinition,
-  duplicateFile,
   executeWorkflowShell,
   type FileTreeNode,
   listWorkspaceFiles,
@@ -11,16 +10,21 @@ import {
   onChatStream,
   onChatToolRequest,
   readWorkspaceFile,
-  renameFile,
   resolveChatTool,
-  saveHTMLExport,
   searchRAG,
-  trashFile,
   workflowHTTPRequest,
   writeWorkspaceBinaryFile,
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
+import {
+  duplicateFileRef,
+  type FileRef,
+  fileRef,
+  renameFileRef,
+  saveHTMLExportRef,
+  trashFileRef,
+} from "../lib/fileRef";
 import { renderMarkdownToPrintableHTML } from "../lib/printableHtml";
 import yaml from "js-yaml";
 import {
@@ -64,7 +68,7 @@ import {
 
 export interface WorkflowExecutionServices {
   chatSettings: ChatSettings;
-  openFile?: (path: string) => void;
+  openFile?: (file: FileRef) => void;
   loadWorkflow?: (path: string) => Promise<Workflow>;
   onLog?: (log: WorkflowLog) => void;
   onThinking?: (nodeId: string, thinking: string) => void;
@@ -957,7 +961,7 @@ async function executeNode(
       let path = property(node, "path", variables);
       if (!path) throw new Error("open node is missing path.");
       if (!/\.[^/]+$/.test(path)) path += ".md";
-      services.openFile?.(path);
+      services.openFile?.(fileRef("workspace", path));
       return { output: path };
     }
     case "json": {
@@ -1072,24 +1076,19 @@ async function executeNode(
     }
     case "gemihub-command": {
       const command = property(node, "command", variables).toLowerCase();
-      const path = property(node, "path", variables).replace(
-        /^workspace:\/\//i,
-        "",
-      );
+      const path = property(node, "path", variables);
       if (!command) throw new Error("gemihub-command node is missing command.");
       if (!path) throw new Error("gemihub-command node is missing path.");
-      const scopedPath = `workspace://${path}`;
+      const sourceFile = fileRef("workspace", path);
       let output: unknown;
       if (command === "duplicate") {
-        output = await duplicateFile(scopedPath);
+        output = await duplicateFileRef(sourceFile);
         const customName = property(node, "text", variables).trim();
         if (customName) {
           const duplicatedPath = String(output);
-          await renameFile(
-            /^(?:workspace|files):\/\//i.test(duplicatedPath)
-              ? duplicatedPath
-              : `workspace://${duplicatedPath}`,
-            `workspace://${customName}`,
+          await renameFileRef(
+            fileRef("workspace", duplicatedPath),
+            fileRef("workspace", customName),
           );
           output = customName;
         }
@@ -1097,7 +1096,7 @@ async function executeNode(
         const text = property(node, "text", variables).trim();
         if (!text) throw new Error("rename requires text.");
         const target = text;
-        await renameFile(scopedPath, `workspace://${target}`);
+        await renameFileRef(sourceFile, fileRef("workspace", target));
         output = target;
       } else if (command === "encrypt") {
         if (services.interactionMode === "headless") {
@@ -1130,17 +1129,18 @@ async function executeNode(
           }
         }
         const description = property(node, "text", variables).trim();
-        output = await encryptWorkspaceFile(
-          scopedPath,
+        const encryptedFile = await encryptWorkspaceFile(
+          sourceFile,
           password,
           metadata,
           description,
         );
+        output = encryptedFile.path;
       } else if (command === "convert-to-html") {
         const source = await readWorkspaceFile(path);
         if (!source) throw new Error(`File not found: ${path}`);
-        output = await saveHTMLExport(
-          scopedPath,
+        output = await saveHTMLExportRef(
+          fileRef("workspace", path),
           renderMarkdownToPrintableHTML(
             source.content,
             source.fileName || path,
@@ -1651,7 +1651,7 @@ async function executeNode(
               "confirmed" in confirmed && confirmed.confirmed))
         ) throw new Error("File deletion cancelled.");
       }
-      await trashFile(`workspace://${path}`);
+      await trashFileRef(fileRef("workspace", path));
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
       return { output: { path, trashed: true } };
     }

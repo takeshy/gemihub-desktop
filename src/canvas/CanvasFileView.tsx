@@ -96,7 +96,7 @@ function clone(data: CanvasData): CanvasData {
 }
 
 function resolveFilePath(canvasPath: string, target: string): string {
-  if (/^(?:[a-z]:[\\/]|\/|\\\\|workspace:\/\/)/i.test(target)) return target;
+  if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(target)) return target;
   const base = pathDirName(canvasPath);
   const separator = base.includes("\\") ? "\\" : "/";
   return base

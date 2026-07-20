@@ -40,6 +40,7 @@ import {
 } from "./settings";
 import { PdfViewer } from "../components/PdfViewer";
 import { contentMatches, type RAGFilterRow } from "./ragSearchFilters";
+import { type FileRef, fileRef } from "../lib/fileRef";
 
 interface ChunkEditState {
   index: number;
@@ -90,7 +91,7 @@ export function RAGSearchPanel({
   settings: ChatSettings;
   onSettingsChange: (settings: ChatSettings) => void;
   onOpenSettings: () => void;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
   onChatWithResults: (files: ChatFile[]) => void;
 }) {
   const names = Object.keys(settings.ragSettings);
@@ -642,7 +643,7 @@ export function RAGSearchPanel({
                     <button
                       key={file.filePath}
                       type="button"
-                      onClick={() => onOpenFile(`workspace://${file.filePath}`)}
+                      onClick={() => onOpenFile(fileRef("workspace", file.filePath))}
                     >
                       <span>{file.filePath}</span>
                       <small>{file.chunks} chunks</small>
@@ -860,7 +861,7 @@ export function RAGSearchPanel({
                 <button
                   type="button"
                   className="rag-search-file"
-                  onClick={() => onOpenFile(`workspace://${result.filePath}`)}
+                  onClick={() => onOpenFile(fileRef("workspace", result.filePath))}
                   title="Open file"
                 >
                   <FileText size={13} />

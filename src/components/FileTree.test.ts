@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
   isProtectedWorkspaceRoot,
-  scopedTreePath,
+  scopedTreeRef,
 } from "../lib/fileTreePaths.ts";
 import type { FileTreeNode } from "../lib/wailsBackend.ts";
 
@@ -22,16 +22,19 @@ Deno.test("only managed workspace roots are protected", () => {
 
 Deno.test("workspace files retain their filesystem scope", () => {
   assertEquals(
-    scopedTreePath("workspace", "readme.md"),
-    "workspace://readme.md",
+    scopedTreeRef("workspace", "readme.md"),
+    { scope: "workspace", path: "readme.md" },
   );
   assertEquals(
-    scopedTreePath("workspace", "notes/readme.md"),
-    "workspace://notes/readme.md",
+    scopedTreeRef("workspace", "notes/readme.md"),
+    { scope: "workspace", path: "notes/readme.md" },
   );
   assertEquals(
-    scopedTreePath("workspace", "Memos/today.md"),
-    "workspace://Memos/today.md",
+    scopedTreeRef("workspace", "Memos/today.md"),
+    { scope: "workspace", path: "Memos/today.md" },
   );
-  assertEquals(scopedTreePath("files", "readme.md"), "files://readme.md");
+  assertEquals(scopedTreeRef("files", "readme.md"), {
+    scope: "files",
+    path: "readme.md",
+  });
 });

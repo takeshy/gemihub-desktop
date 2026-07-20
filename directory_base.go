@@ -281,6 +281,43 @@ func (a *App) ListWorkspaceFiles() ([]DirectoryFileEntry, error) {
 	return fileInventoryForBase(a.GetWorkspacePath())
 }
 
+// ListWorkspaceDirectoryFiles returns file paths below one Workspace directory
+// without hashing every file in the Workspace. It is intended for focused
+// views such as Timeline, whose data lives under a known directory.
+func (a *App) ListWorkspaceDirectoryFiles(path string) ([]string, error) {
+	target, err := a.workspacePath(path, true)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(target); err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	base := a.GetWorkspacePath()
+	result := []string{}
+	err = filepath.WalkDir(target, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		relative, relErr := filepath.Rel(base, current)
+		if relErr != nil {
+			return relErr
+		}
+		result = append(result, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
 func (a *App) ReadWorkspaceFile(path string) (*LocalFileResult, error) {
 	// Missing files are a valid empty starting point for Timeline entries and
 	// other Workspace data that is created on first write.

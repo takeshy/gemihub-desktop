@@ -26,10 +26,11 @@ import {
 } from "lucide-react";
 import {
   listWorkspaceFiles,
-  readWorkspaceFile as readFile,
-  writeWorkspaceFile as writeFile,
+  readWorkspaceFile as readWorkspaceFile,
+  writeWorkspaceFile as writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
+import { type FileRef, fileRef } from "../lib/fileRef";
 import { executeWorkflow, reopenWorkflowMcpApp } from "./executor";
 import {
   canonicalWorkflowPath,
@@ -213,7 +214,7 @@ export function WorkflowPanel({
   directoryBase: string;
   settings: ChatSettings;
   activeFile: { path: string; content: string } | null;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
 }) {
   const [paths, setPaths] = useState<string[]>([]);
   const [path, setPath] = useState("");
@@ -260,7 +261,7 @@ export function WorkflowPanel({
         const batch = await Promise.all(
           candidates.slice(index, index + 20).map(async (item) => ({
             path: item.path,
-            file: await readFile(item.path).catch(() => null),
+            file: await readWorkspaceFile(item.path).catch(() => null),
           })),
         );
         for (const item of batch) {
@@ -355,7 +356,7 @@ export function WorkflowPanel({
       setWorkflow(null);
       return;
     }
-    void readFile(path).then((file) => setMarkdown(file?.content ?? "")).catch((
+    void readWorkspaceFile(path).then((file) => setMarkdown(file?.content ?? "")).catch((
       error,
     ) => setParseError(error instanceof Error ? error.message : String(error)));
   }, [path]);
@@ -394,7 +395,7 @@ export function WorkflowPanel({
       setSkillWorkflowMarkdown("");
       return;
     }
-    void readFile(workflowPath).then((file) =>
+    void readWorkspaceFile(workflowPath).then((file) =>
       setSkillWorkflowMarkdown(file?.content || "")
     ).catch(() => setSkillWorkflowMarkdown(""));
   }, [skill?.skillFilePath, skill?.workflows[0]?.path]);
@@ -433,7 +434,7 @@ export function WorkflowPanel({
     const next = workflowDocument.updateNodes(nodes);
     setMarkdown(next);
     if (path) {
-      void writeFile(path, next).then(() => {
+      void writeWorkspaceFile(path, next).then(() => {
         window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
         window.dispatchEvent(
           new CustomEvent("llm-hub:dashboard-data-changed", {
@@ -502,7 +503,7 @@ export function WorkflowPanel({
 
   const saveCurrent = async () => {
     if (!path || (!workflow && !skill)) return;
-    await writeFile(path, markdown);
+    await writeWorkspaceFile(path, markdown);
     const synced = await syncSkillWorkflowInputVariables(path, markdown);
     if (synced?.path === path) setMarkdown(synced.content);
     window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
@@ -545,15 +546,15 @@ export function WorkflowPanel({
     if (!requested) return;
     const nextPath = canonicalWorkflowPath(requested);
     const name = workflowNameFromFilePath(nextPath);
-    await writeFile(nextPath, workflowTemplate(name));
+    await writeWorkspaceFile(nextPath, workflowTemplate(name));
     setPaths((current) => [...new Set([...current, nextPath])].sort());
     setPath(nextPath);
-    onOpenFile(nextPath);
+    onOpenFile(fileRef("workspace", nextPath));
     window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   };
 
   const loadWorkflow = async (workflowPath: string) => {
-    const file = await readFile(workflowPath);
+    const file = await readWorkspaceFile(workflowPath);
     if (!file) throw new Error(`Workflow not found: ${workflowPath}`);
     return parseWorkflowFile(file.content, workflowPath);
   };
@@ -587,7 +588,7 @@ export function WorkflowPanel({
     variables: Record<string, string | number>,
   ) => {
     if (running) return;
-    const file = await readFile(record.workflowPath);
+    const file = await readWorkspaceFile(record.workflowPath);
     if (!file) {
       setParseError(`Workflow not found: ${record.workflowPath}`);
       return;
@@ -683,7 +684,7 @@ export function WorkflowPanel({
                     key={item}
                     onClick={() => {
                       setPath(item);
-                      onOpenFile(item);
+                      onOpenFile(fileRef("workspace", item));
                     }}
                   >
                     <span className="workflow">
@@ -834,7 +835,7 @@ export function WorkflowPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    void readFile(path).then((file) =>
+                    void readWorkspaceFile(path).then((file) =>
                       file && setMarkdown(file.content)
                     );
                   }}
@@ -872,7 +873,7 @@ export function WorkflowPanel({
                           key={item.path}
                           onClick={() => {
                             setPath(target);
-                            onOpenFile(target);
+                            onOpenFile(fileRef("workspace", target));
                           }}
                         >
                           <WorkflowIcon size={14} />
@@ -1247,8 +1248,8 @@ export function WorkflowPanel({
               const skillPath = `${folder}/SKILL.md`;
               if (
                 aiMode === "create" &&
-                ((await readFile(skillPath).catch(() => null)) ||
-                  (await readFile(workflowPath).catch(() => null)))
+                ((await readWorkspaceFile(skillPath).catch(() => null)) ||
+                  (await readWorkspaceFile(workflowPath).catch(() => null)))
               ) throw new Error(`A skill already exists at ${folder}.`);
               const previous = aiMode === "modify" ? skill : null;
               const existingWorkflowPath = previous?.workflows[0]
@@ -1271,7 +1272,7 @@ export function WorkflowPanel({
               );
               let workflowMarkdown = workflowYamlFromContent(result.block);
               if (aiMode === "modify") {
-                const existingFile = await readFile(existingWorkflowPath).catch(
+                const existingFile = await readWorkspaceFile(existingWorkflowPath).catch(
                   () => null,
                 );
                 if (existingFile) {
@@ -1285,28 +1286,28 @@ export function WorkflowPanel({
                   );
                 }
               }
-              await writeFile(existingWorkflowPath, workflowMarkdown);
-              await writeFile(skillPath, skillMarkdown);
+              await writeWorkspaceFile(existingWorkflowPath, workflowMarkdown);
+              await writeWorkspaceFile(skillPath, skillMarkdown);
               setPaths((current) =>
                 [...new Set([...current, existingWorkflowPath])].sort()
               );
               setPath(skillPath);
               setMarkdown(skillMarkdown);
-              onOpenFile(skillPath);
+              onOpenFile(fileRef("workspace", skillPath));
               window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
               return;
             }
             if (aiMode === "create") {
               const target = canonicalWorkflowPath(result.path);
-              if (await readFile(target).catch(() => null)) {
+              if (await readWorkspaceFile(target).catch(() => null)) {
                 throw new Error(`A file already exists at ${target}.`);
               }
               const nextMarkdown = workflowYamlFromContent(result.block);
-              await writeFile(target, nextMarkdown);
+              await writeWorkspaceFile(target, nextMarkdown);
               setPaths((current) => [...new Set([...current, target])].sort());
               setPath(target);
               setMarkdown(nextMarkdown);
-              onOpenFile(target);
+              onOpenFile(fileRef("workspace", target));
             } else {
               const replaced = replaceWorkflowDefinition(
                 markdown,
@@ -1316,7 +1317,7 @@ export function WorkflowPanel({
                 replaced,
                 result.request,
               );
-              await writeFile(path, nextMarkdown);
+              await writeWorkspaceFile(path, nextMarkdown);
               setMarkdown(nextMarkdown);
             }
             window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));

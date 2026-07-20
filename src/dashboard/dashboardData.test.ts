@@ -5,6 +5,7 @@ import {
   filterBaseRows,
   folderFromBaseFilters,
   formatBaseCellValue,
+  loadDashboardRows,
   parseBaseDefinition,
   parseKanbanDefinition,
   searchBaseRows,
@@ -24,6 +25,43 @@ const row = (
   content: "",
   frontmatter: { status },
   cells: { status, "file.path": path, "file.tags": tags },
+});
+
+Deno.test("workspace Kanban rows load from the selected folder", async () => {
+  const target = globalThis as unknown as Record<string, unknown>;
+  const original = target.go;
+  const originalWindow = target.window;
+  target.window = target;
+  target.go = {
+    main: {
+      App: {
+        ListWorkspaceDirectoryFiles: async (folder: string) => {
+          assertEquals(folder, "projects/kanban_test");
+          return [
+            "projects/kanban_test/Task 1.md",
+            "projects/kanban_test/Task 2.md",
+          ];
+        },
+        ReadWorkspaceFile: async (path: string) => ({
+          path,
+          fileName: path.split("/").pop(),
+          content: path.endsWith("Task 1.md")
+            ? "---\nstatus: todo\ntitle: First\ntags: [kanban-test]\n---\nBody"
+            : "---\nstatus: done\ntitle: Second\n---\nBody",
+        }),
+      },
+    },
+  };
+  try {
+    const rows = await loadDashboardRows("projects/kanban_test", "workspace");
+    assertEquals(rows.length, 2);
+    assertEquals(rows[0].frontmatter.status, "todo");
+    assertEquals(rows[0].cells["file.tags"], ["kanban-test"]);
+  } finally {
+    target.go = original;
+    if (originalWindow === undefined) delete target["window"];
+    else target["window"] = originalWindow;
+  }
 });
 
 Deno.test("base definitions parse views and filter DirectoryBase rows", () => {

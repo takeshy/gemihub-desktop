@@ -1,9 +1,9 @@
 import {
-  createDirectory,
+  createWorkspaceDirectory,
   externalHTTPRequest,
   listWorkspaceFiles,
-  readFile,
-  writeFile,
+  readWorkspaceFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import { applyHostPatches } from "../lib/hostPatches";
 
@@ -272,7 +272,7 @@ export async function listInstalledSkills(): Promise<InstalledSkill[]> {
     const id = entry.path.split("/")[1];
     if (!safeSkillID(id)) return null;
     const manifest = parseManifest(
-      (await readFile(`skills/${id}/manifest.json`))?.content,
+      (await readWorkspaceFile(`skills/${id}/manifest.json`))?.content,
     );
     return {
       id,
@@ -298,7 +298,7 @@ export async function installSkillFiles(
   const installed: string[] = [],
     skipped: Array<{ id: string; reason: string }> = [];
   let fileCount = 0;
-  await createDirectory("skills");
+  await createWorkspaceDirectory("skills");
   for (const id of targets) {
     if (!safeSkillID(id)) {
       skipped.push({ id, reason: "invalid skill id" });
@@ -338,7 +338,7 @@ export async function installSkillFiles(
     }
     const current = parseManifest(
       installedManifests[id] ??
-        (await readFile(`skills/${id}/manifest.json`))?.content,
+        (await readWorkspaceFile(`skills/${id}/manifest.json`))?.content,
     );
     if (current?.version) {
       const comparison = compareVersions(manifest.version, current.version);
@@ -371,7 +371,7 @@ export async function installSkillFiles(
     }
     if (!writes.length) continue;
     for (const file of writes) {
-      await writeFile(file.path, file.content);
+      await writeWorkspaceFile(file.path, file.content);
       fileCount++;
     }
     installed.push(id);

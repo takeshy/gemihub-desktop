@@ -101,7 +101,7 @@ Deno.test("timeline names use the shared portable folder convention", () => {
 Deno.test("memo Timeline history retains its source, quote, and body", () => {
   assertEquals(
     memoTimelineBody(
-      "files://Research/Paper.pdf",
+      "Research/Paper.pdf",
       "Paper.pdf",
       "first line\nsecond line",
       "My note",

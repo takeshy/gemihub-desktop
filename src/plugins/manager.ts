@@ -2,7 +2,7 @@ import { applyHostPatches } from "../lib/hostPatches";
 import {
   externalHTTPRequest,
   installPluginFiles,
-  readFile,
+  readWorkspaceFile,
   uninstallManagedPlugin,
 } from "../lib/wailsBackend";
 import type { PluginConfig, PluginManifest, PluginPermission } from "./types";
@@ -395,7 +395,7 @@ export async function readPluginInstallMetadata(
   id: string,
 ): Promise<PluginInstallMetadata | null> {
   try {
-    const file = await readFile(`.llm-hub/plugins/${id}/install.json`);
+    const file = await readWorkspaceFile(`.llm-hub/plugins/${id}/install.json`);
     return file?.content
       ? JSON.parse(file.content) as PluginInstallMetadata
       : null;

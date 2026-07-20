@@ -90,6 +90,20 @@ import {
 } from "../lib/fileEncryption";
 import { isEncryptedFile, reencryptFileContent } from "../lib/hybridEncryption";
 import { sameFileReference } from "./fileReference";
+import {
+  type FileRef,
+  fileRef,
+  fileRefBackendPath,
+  fileRefFromBackendPath,
+  isFileRef,
+  openFileRefDefault,
+  openFileRefInExternalEditor,
+  openHTMLFileRefInBrowser,
+  readFileRef,
+  sameFileRef,
+  saveHTMLExportRef,
+  writeFileRef,
+} from "../lib/fileRef";
 
 const DEFAULT_COLS = 12;
 const DEFAULT_ROW_HEIGHT = 80;
@@ -121,7 +135,7 @@ interface PickerFile {
 }
 
 interface PendingFileWrite {
-  path: string;
+  file: FileRef;
   content: string;
   displayPath: string;
   encryptedSource?: string;
@@ -136,7 +150,7 @@ async function persistFileWidgetWrite(pending: PendingFileWrite) {
       pending.password,
     )
     : pending.content;
-  await writeFile(pending.path, content);
+  await writeFileRef(pending.file, content);
 }
 
 interface WidgetNavigationHistory {
@@ -145,10 +159,8 @@ interface WidgetNavigationHistory {
 }
 
 function workspaceDashboardPath(path: string): string | null {
-  if (/^(?:files):\/\//i.test(path)) return null;
-  const workspacePath = path.replace(/^workspace:\/\//i, "");
-  if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(workspacePath)) return null;
-  return /\.dashboard$/i.test(workspacePath) ? workspacePath : null;
+  if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) return null;
+  return /\.dashboard$/i.test(path) ? path : null;
 }
 
 function clampLayout(pos: LayoutPos, cols = DEFAULT_COLS): LayoutPos {
@@ -204,53 +216,25 @@ function isFileWidgetType(type: string): boolean {
 }
 
 function rawFilePathFromConfig(config: Record<string, unknown>): string {
-  return typeof config.filePath === "string"
-    ? config.filePath
-    : typeof config.path === "string"
-    ? config.path
-    : "";
+  return isFileRef(config.file) ? config.file.path : "";
 }
 function filePathFromConfig(config: Record<string, unknown>): string {
-  return rawFilePathFromConfig(config).replace(
-    /^(?:workspace|files):\/\//i,
-    "",
-  );
+  return isFileRef(config.file) ? config.file.path : "";
 }
 function fileReadPathFromConfig(config: Record<string, unknown>): string {
-  const raw = rawFilePathFromConfig(config);
-  if (/^(?:workspace|files):\/\//i.test(raw)) return raw;
-  if (config.fileScope === "workspace") return `workspace://${raw}`;
-  if (config.fileScope === "files") return `files://${raw}`;
-  return raw;
+  return isFileRef(config.file) ? fileRefBackendPath(config.file) : "";
 }
 function normalizedFileReference(
   path?: string,
-): { filePath?: string; fileScope?: "workspace" | "files" } {
-  if (!path) return { filePath: path, fileScope: undefined };
-  if (/^workspace:\/\//i.test(path)) {
-    return {
-      filePath: path.replace(/^workspace:\/\//i, ""),
-      fileScope: "workspace",
-    };
-  }
-  if (/^files:\/\//i.test(path)) {
-    return {
-      filePath: path.replace(/^files:\/\//i, ""),
-      fileScope: "files",
-    };
-  }
-  return { filePath: path, fileScope: undefined };
+): { file?: FileRef } {
+  if (!path) return {};
+  return { file: fileRefFromBackendPath(path) };
 }
 function configString(config: Record<string, unknown>, key: string): string {
   return typeof config[key] === "string" ? config[key] as string : "";
 }
-function isWorkspaceBackedPath(path: string): boolean {
-  if (path.startsWith("workspace://")) return true;
-  if (path.startsWith("files://")) return false;
-  if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) return false;
-  return /^(?:Dashboards|Memos|Secrets|skills|workflows)(?:[\\/]|$)/i.test(
-    path,
-  );
+function isWorkspaceBackedFile(ref: FileRef | null): boolean {
+  return ref?.scope === "workspace";
 }
 
 function recentContent(
@@ -376,7 +360,7 @@ function FilePickerDialog({
   recentFiles: RecentFile[];
   onBrowse: () => void;
   onSelect: (file: RecentFile) => void;
-  onSelectPath: (path: string) => void;
+  onSelectPath: (file: FileRef) => void;
   onClose: () => void;
 }) {
   const { t: tr } = useI18n();
@@ -404,10 +388,7 @@ function FilePickerDialog({
     setLoading(true);
     void listWorkspaceFiles().then((workspace) => {
       if (cancelled) return;
-      const entries = workspace.map((entry) => ({
-        ...entry,
-        path: `workspace://${entry.path}`,
-      }));
+      const entries = workspace;
       setFiles(
         entries.filter((entry) => isFileWidgetFileName(entry.path)).map((
           entry,
@@ -469,7 +450,9 @@ function FilePickerDialog({
                   if (
                     scope === "workspace" && filteredFiles[activeIndex]
                   ) {
-                    onSelectPath(filteredFiles[activeIndex].path);
+                    onSelectPath(
+                      fileRef("workspace", filteredFiles[activeIndex].path),
+                    );
                   } else if (
                     scope === "recent" && filteredRecent[activeIndex]
                   ) {
@@ -546,7 +529,8 @@ function FilePickerDialog({
                       index === activeIndex ? "selected" : ""
                     }`}
                     onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => onSelectPath(file.path)}
+                    onClick={() =>
+                      onSelectPath(fileRef("workspace", file.path))}
                   >
                     {isImageFileName(file.fileName)
                       ? <Image size={18} />
@@ -554,7 +538,7 @@ function FilePickerDialog({
                     <span>
                       <strong>{file.fileName}</strong>
                       <small>
-                        {file.path.replace(/^workspace:\/\//i, "")}
+                        {file.path}
                       </small>
                     </span>
                     <time>{file.updatedAt.toLocaleDateString()}</time>
@@ -675,7 +659,7 @@ export function DashboardView({
   onOpenSettings: () => void;
   openPathRequest: {
     id: number;
-    path: string;
+    file: FileRef | null;
     source?:
       | "local"
       | "directory"
@@ -719,6 +703,9 @@ export function DashboardView({
   const [moreOpenId, setMoreOpenId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsWidgetId, setSettingsWidgetId] = useState<string | null>(null);
+  const [kanbanEditRequests, setKanbanEditRequests] = useState<
+    Record<string, number>
+  >({});
   const [pendingNewWidgetId, setPendingNewWidgetId] = useState<string | null>(
     null,
   );
@@ -945,11 +932,18 @@ export function DashboardView({
         if (existing) window.clearTimeout(existing);
         const encrypted = nextConfig.encrypted === true;
         const path = fileReadPathFromConfig(nextConfig);
+        const file = isFileRef(nextConfig.file) ? nextConfig.file : null;
+        if (!file) return;
+        const encryptedFile = isFileRef(nextConfig.file)
+          ? nextConfig.file
+          : undefined;
         const encryptedSource = encrypted &&
             typeof nextConfig.encryptedSourceContent === "string"
           ? nextConfig.encryptedSourceContent
           : undefined;
-        const password = encrypted ? rememberedFilePassword(path) : undefined;
+        const password = encrypted && encryptedFile
+          ? rememberedFilePassword(encryptedFile)
+          : undefined;
         if (encrypted && (!encryptedSource || !password)) {
           console.warn(
             "Encrypted File Widget auto-save is unavailable without its session password.",
@@ -957,7 +951,7 @@ export function DashboardView({
           return;
         }
         const pendingWrite: PendingFileWrite = {
-          path,
+          file,
           content: nextContent,
           displayPath: nextFilePath,
           encryptedSource,
@@ -1419,10 +1413,18 @@ export function DashboardView({
   );
 
   const openPluginWidgetForPath = useCallback(
-    (path: string): string | undefined => {
-      const definition = dashboardPluginWidgetForPath(path);
+    (source: FileRef | string): string | undefined => {
+      const ref = isFileRef(source) ? source : fileRefFromBackendPath(source);
+      const workspacePath = ref.scope === "workspace" ||
+        (!isFileRef(source) && source === ref.path);
+      if (workspacePath && /\.kanban(?:[?#].*)?$/i.test(ref.path)) {
+        return openOrUpdatePluginWidget("kanban", {
+          kanban: ref.path,
+        });
+      }
+      const definition = dashboardPluginWidgetForPath(ref.path);
       return definition
-        ? openOrUpdatePluginWidget(definition.type, { filePath: path })
+        ? openOrUpdatePluginWidget(definition.type, { file: ref })
         : undefined;
     },
     [openOrUpdatePluginWidget],
@@ -1516,40 +1518,43 @@ export function DashboardView({
 
   const resolveOpenedFile = useCallback(
     async (
-      path: string,
+      source: FileRef | string,
       result: { path: string; fileName: string; content: string },
     ) => {
+      const sourceFile = isFileRef(source)
+        ? source
+        : normalizedFileReference(source).file || fileRef("files", source);
       if (
         !result.fileName.toLowerCase().endsWith(".encrypted") &&
-        !path.toLowerCase().endsWith(".encrypted") &&
+        !sourceFile.path.toLowerCase().endsWith(".encrypted") &&
         !isEncryptedFile(result.content)
       ) {
         return {
           fileName: result.fileName,
           content: await prepareOpenedContent(result.fileName, result.content),
-          filePath: /^(?:workspace|files):\/\//i.test(path)
-            ? path
-            : result.path,
+          filePath: sourceFile.path,
           extraConfig: docKindFor(result.fileName) === "external"
-            ? { externalOnly: true }
-            : {},
+            ? { externalOnly: true, file: sourceFile }
+            : { file: sourceFile },
         };
       }
-      const password = rememberedFilePassword(result.path) ||
+      const encryptedFile = sourceFile;
+      const password = rememberedFilePassword(encryptedFile) ||
         prompt(tr("encrypted.passwordPrompt")) || "";
       if (!password) {
         throw new Error("Password is required to open an encrypted file.");
       }
-      const opened = await openEncryptedWorkspaceFile(path, password);
+      const opened = await openEncryptedWorkspaceFile(encryptedFile, password);
       return {
         fileName: opened.originalName,
         content: await prepareOpenedContent(
           opened.originalName,
           opened.content,
         ),
-        filePath: opened.encryptedPath,
+        filePath: opened.encryptedFile.path,
         extraConfig: {
           encrypted: true,
+          file: opened.encryptedFile,
           encryptedSourceContent: opened.encryptedContent,
         },
       };
@@ -1558,12 +1563,10 @@ export function DashboardView({
   );
 
   const readKnownPath = useCallback(
-    (path: string) => {
-      const workspacePath = path.match(/^workspace:\/\/(.*)$/i)?.[1];
-      if (workspacePath !== undefined) return readWorkspaceFile(workspacePath);
-      return /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
-        ? readLocalFile(path)
-        : readFile(path);
+    (source: FileRef | string) => {
+      if (isFileRef(source)) return readFileRef(source);
+      const ref = normalizedFileReference(source).file;
+      return ref ? readFileRef(ref) : Promise.resolve(null);
     },
     [],
   );
@@ -1632,7 +1635,12 @@ export function DashboardView({
       if (!isFileWidgetType(widget.type)) continue;
       const filePath = filePathFromConfig(widget.config);
       const readPath = fileReadPathFromConfig(widget.config);
-      if (!filePath || !isWorkspaceBackedPath(readPath)) continue;
+      if (
+        !filePath ||
+        !isWorkspaceBackedFile(
+          isFileRef(widget.config.file) ? widget.config.file : null,
+        )
+      ) continue;
       hydratedFilePathsRef.current.delete(`${widget.id}:${filePath}`);
       void (async () => {
         try {
@@ -1762,24 +1770,23 @@ export function DashboardView({
     async (widgetId: string, path: string) => {
       if (openPluginWidgetForPath(path)) return true;
       const target = data.widgets.find((widget) => widget.id === widgetId);
-      const scopedPrefix = target?.config.fileScope === "workspace" ||
-          target?.config.fileScope === "files"
-        ? target.config.fileScope
-        : "";
-      const readPath = scopedPrefix &&
-          !/^(?:(?:workspace|files):\/\/|[a-z]:[\\/]|\/|\\\\)/i.test(path)
-        ? `${scopedPrefix}://${path}`
-        : path;
-      const result = await readKnownPath(readPath);
+      const current = target && isFileRef(target.config.file)
+        ? target.config.file
+        : null;
+      const explicit = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+        ? normalizedFileReference(path).file
+        : undefined;
+      const ref = explicit || fileRef(current?.scope || "files", path);
+      const result = await readFileRef(ref);
       if (!result) return false;
-      const opened = await resolveOpenedFile(readPath, result);
+      const opened = await resolveOpenedFile(ref, result);
       openFileInWidget(
         widgetId,
         opened.fileName,
         opened.content,
         readFileMode(opened.fileName),
         opened.filePath,
-        opened.extraConfig,
+        { ...opened.extraConfig, file: ref },
       );
       return true;
     },
@@ -1787,7 +1794,6 @@ export function DashboardView({
       data.widgets,
       openFileInWidget,
       openPluginWidgetForPath,
-      readKnownPath,
       resolveOpenedFile,
     ],
   );
@@ -1814,7 +1820,7 @@ export function DashboardView({
         result.fileName,
         result.content,
       );
-      const openedPath = /^workspace:\/\//i.test(path) ? path : result.path;
+      const openedPath = result.path;
       const targetId = lastActiveFileWidgetIdRef.current;
       const target =
         data.widgets.find((widget) =>
@@ -1865,10 +1871,7 @@ export function DashboardView({
       }
       const pluginWidgetId = openPluginWidgetForPath(path);
       if (pluginWidgetId) return pluginWidgetId;
-      if (
-        !/^workspace:\/\//i.test(path) &&
-        !/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
-      ) {
+      if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) {
         return openDirectoryPathInLastActiveWidget(path);
       }
       const result = await readKnownPath(path);
@@ -1918,6 +1921,53 @@ export function DashboardView({
       openFileInWidget,
       openPluginWidgetForPath,
       readKnownPath,
+    ],
+  );
+
+  const openFileRefInLastActiveWidget = useCallback(
+    async (file: FileRef) => {
+      if (file.scope === "workspace" && /\.dashboard$/i.test(file.path)) {
+        await onOpenDashboard(file.path);
+        return undefined;
+      }
+      const pluginWidgetId = openPluginWidgetForPath(file);
+      if (pluginWidgetId) return pluginWidgetId;
+      const result = await readFileRef(file);
+      if (!result) return undefined;
+      const opened = await resolveOpenedFile(file, result);
+      const targetId = lastActiveFileWidgetIdRef.current;
+      const target =
+        data.widgets.find((widget) =>
+          widget.id === targetId && isFileWidgetType(widget.type)
+        ) ?? data.widgets.find((widget) => isFileWidgetType(widget.type));
+      if (!target) {
+        return createFileWidget(
+          opened.fileName,
+          opened.content,
+          readFileMode(opened.fileName),
+          activeLayoutDirection,
+          opened.filePath,
+          opened.extraConfig,
+        );
+      }
+      openFileInWidget(
+        target.id,
+        opened.fileName,
+        opened.content,
+        readFileMode(opened.fileName),
+        opened.filePath,
+        opened.extraConfig,
+      );
+      return target.id;
+    },
+    [
+      activeLayoutDirection,
+      createFileWidget,
+      data.widgets,
+      onOpenDashboard,
+      openFileInWidget,
+      openPluginWidgetForPath,
+      resolveOpenedFile,
     ],
   );
 
@@ -2305,19 +2355,20 @@ export function DashboardView({
   useEffect(() => {
     if (openPathRequest.id <= handledOpenPathRequestRef.current) return;
     handledOpenPathRequestRef.current = openPathRequest.id;
-    if (!openPathRequest.path) return;
+    if (!openPathRequest.file) return;
+    const requestedFile = openPathRequest.file;
     void (async () => {
       try {
-        const widgetId = openPathRequest.source === "memo-list"
-          ? await openMemoSourceMaximized(openPathRequest.path)
-          : openPathRequest.source === "startup"
-          ? await openKnownPathInLastActiveWidget(openPathRequest.path)
-          : openPathRequest.source === "filetree" ||
-              openPathRequest.source === "filetree-created"
-          ? await openDirectoryPathInLastActiveWidget(openPathRequest.path)
-          : openPathRequest.source === "directory"
-          ? await openDirectoryPathAsWidget(openPathRequest.path)
-          : await openPathAsWidget(openPathRequest.path);
+        if (
+          requestedFile.scope === "workspace" &&
+          /\.dashboard$/i.test(requestedFile.path)
+        ) {
+          await onOpenDashboard(requestedFile.path);
+          return;
+        }
+        const widgetId = await openFileRefInLastActiveWidget(
+          requestedFile,
+        );
         if (!widgetId) alert(tr("alert.openFileFailed"));
         else if (
           openPathRequest.source === "memo-list" ||
@@ -2329,7 +2380,7 @@ export function DashboardView({
           setMaximizedWidgetId(widgetId);
           if (
             openPathRequest.source === "filetree-created" &&
-            /\.md$/i.test(openPathRequest.path)
+            /\.md$/i.test(requestedFile.path)
           ) {
             onChange((current) => ({
               ...current,
@@ -2351,6 +2402,7 @@ export function DashboardView({
     openDirectoryPathInLastActiveWidget,
     openKnownPathInLastActiveWidget,
     openMemoSourceMaximized,
+    onOpenDashboard,
     openPathAsWidget,
     openPathRequest,
     tr,
@@ -2501,16 +2553,21 @@ export function DashboardView({
                 else onHistoryClick(source);
               };
               const openInExternalEditor = async () => {
-                const targetPath = fileReadPathFromConfig(widget.config);
-                if (!targetPath) return;
+                const targetFile = isFileRef(widget.config.file)
+                  ? widget.config.file
+                  : null;
+                if (!targetFile) return;
                 try {
                   if (docKindFor(widgetFileName) === "image") {
-                    await openLocalFileDefault(targetPath);
+                    await openFileRefDefault(targetFile);
                   } else {
                     if (!externalEditorPath) {
                       throw new Error("External editor is not configured.");
                     }
-                    await openExternalEditor(externalEditorPath, targetPath);
+                    await openFileRefInExternalEditor(
+                      externalEditorPath,
+                      targetFile,
+                    );
                   }
                 } catch (error) {
                   console.error(error);
@@ -2522,13 +2579,15 @@ export function DashboardView({
                 }
               };
               const openInBrowser = async () => {
-                const targetPath = fileReadPathFromConfig(widget.config);
-                if (!fileIsBrowserHtml || !targetPath) return;
+                const targetFile = isFileRef(widget.config.file)
+                  ? widget.config.file
+                  : null;
+                if (!fileIsBrowserHtml || !targetFile) return;
                 try {
                   // Flush the current editor state before the external browser
                   // reads the file from disk.
-                  await writeFile(targetPath, widgetContent);
-                  await openHTMLInBrowser(targetPath);
+                  await writeFileRef(targetFile, widgetContent);
+                  await openHTMLFileRefInBrowser(targetFile);
                 } catch (error) {
                   console.error(error);
                   alert(
@@ -2539,15 +2598,17 @@ export function DashboardView({
                 }
               };
               const convertMarkdownToHTML = async () => {
-                const sourcePath = fileReadPathFromConfig(widget.config);
-                if (!fileIsMarkdown || !sourcePath) return;
+                const sourceFile = isFileRef(widget.config.file)
+                  ? widget.config.file
+                  : null;
+                if (!fileIsMarkdown || !sourceFile) return;
                 try {
-                  await writeFile(sourcePath, widgetContent);
+                  await writeFileRef(sourceFile, widgetContent);
                   const title =
                     widgetFileName.replace(/\.(?:md|markdown)$/i, "") ||
                     "document";
-                  const exportedPath = await saveHTMLExport(
-                    sourcePath,
+                  const exportedPath = await saveHTMLExportRef(
+                    sourceFile,
                     renderMarkdownToPrintableHTML(widgetContent, title),
                   );
                   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
@@ -3153,7 +3214,19 @@ export function DashboardView({
                         {dashboardWidgetHasSettings(widget.type) && (
                           <button
                             type="button"
-                            onClick={() => setSettingsWidgetId(widget.id)}
+                            onClick={() => {
+                              if (
+                                isFileWidgetType(widget.type) &&
+                                docKindFor(widgetFileName) === "kanban"
+                              ) {
+                                setKanbanEditRequests((current) => ({
+                                  ...current,
+                                  [widget.id]: Date.now(),
+                                }));
+                                return;
+                              }
+                              setSettingsWidgetId(widget.id);
+                            }}
                             title="Widget settings"
                           >
                             <Settings2 size={14} />
@@ -3197,6 +3270,7 @@ export function DashboardView({
                     {isFileWidgetType(widget.type) && (
                       <FileWidgetBody
                         widget={widget}
+                        kanbanEditRequest={kanbanEditRequests[widget.id] || 0}
                         fallbackFileName={fileName}
                         fallbackContent={documentMarkdown}
                         isDark={isDark}
@@ -3209,6 +3283,8 @@ export function DashboardView({
                         memoDirPath={memoDirPath}
                         memoSyncTimeline={memoSyncTimeline}
                         onOpenPath={(path) => void openPathAsWidget(path)}
+                        onOpenFile={(file) =>
+                          void openFileRefInLastActiveWidget(file)}
                         onOpenPathMaximized={(path) =>
                           void openKnownPathMaximized(path)}
                         onNavigatePath={(path) =>
@@ -3258,8 +3334,8 @@ export function DashboardView({
                       <CalendarDashboardWidget
                         config={widget.config}
                         isDark={isDark}
-                        onOpenPath={(path) =>
-                          void openKnownPathInLastActiveWidget(path)}
+                        onOpenFile={(file) =>
+                          void openFileRefInLastActiveWidget(file)}
                       />
                     )}
                     {widget.type === "kanban" && (
@@ -3268,8 +3344,13 @@ export function DashboardView({
                         isDark={isDark}
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
-                        onOpenPath={(path) =>
-                          void openKnownPathInLastActiveWidget(path)}
+                        onTitleChange={(title) => {
+                          if (title !== widget.title) {
+                            updateWidget({ ...widget, title });
+                          }
+                        }}
+                        onOpenFile={(file) =>
+                          void openFileRefInLastActiveWidget(file)}
                       />
                     )}
                     {widget.type === "base" && (
@@ -3279,9 +3360,13 @@ export function DashboardView({
                         isDark={isDark}
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
-                        onOpenPath={(path) =>
-                          void openKnownPathMaximized(
-                            `workspace://${path}`,
+                        onOpenFile={(file) =>
+                          void openFileRefInLastActiveWidget(file).then(
+                            (widgetId) => {
+                              if (!widgetId) return;
+                              setActiveWidgetId(widgetId);
+                              setMaximizedWidgetId(widgetId);
+                            },
                           )}
                       />
                     )}
@@ -3395,10 +3480,10 @@ export function DashboardView({
               file.filePath,
             );
           }}
-          onSelectPath={async (path) => {
-            const result = await readKnownPath(path);
+          onSelectPath={async (file) => {
+            const result = await readKnownPath(file);
             if (!result) return;
-            const opened = await resolveOpenedFile(path, result);
+            const opened = await resolveOpenedFile(file, result);
             applyPickedFile(
               opened.fileName,
               opened.content,
@@ -3433,23 +3518,7 @@ export function DashboardView({
               chatSettings={chatSettings}
               directoryBase={directoryBase}
               filesBase={workspaceBase}
-              onChange={(config) => {
-                if (
-                  isFileWidgetType(widget.type) &&
-                  typeof config.path === "string" &&
-                  config.path !== filePathFromConfig(widget.config)
-                ) {
-                  updateWidget({
-                    ...widget,
-                    config: {
-                      ...config,
-                      filePath: config.path,
-                      fileName: config.path.split("/").pop() || config.path,
-                      content: "",
-                    },
-                  });
-                } else updateWidget({ ...widget, config });
-              }}
+              onChange={(config) => updateWidget({ ...widget, config })}
               onTitleChange={(title) => updateWidget({ ...widget, title })}
               dashboardFileName={dashboardPath}
               onTypeChange={(type, config) =>

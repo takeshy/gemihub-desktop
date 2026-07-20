@@ -67,9 +67,9 @@ Deno.test("official catalog accepts the shared GemiHub compatibility baseline", 
 Deno.test("external skills apply workspace host patches before installation", async () => {
   const writes: Array<[string, string]> = [];
   const backend = {
-    CreateDirectory: async () => undefined,
-    ReadFile: async () => null,
-    WriteFile: async (path: string, content: string) => {
+    CreateWorkspaceDirectory: async () => undefined,
+    ReadWorkspaceFile: async () => null,
+    WriteWorkspaceFile: async (path: string, content: string) => {
       writes.push([path, content]);
     },
   };
@@ -112,9 +112,9 @@ Deno.test("external skill installer validates manifests and confines writes", as
   target.go = {
     main: {
       App: {
-        CreateDirectory: () => Promise.resolve(),
-        ReadFile: () => Promise.resolve(null),
-        WriteFile: (path: string, content: string) => {
+        CreateWorkspaceDirectory: () => Promise.resolve(),
+        ReadWorkspaceFile: () => Promise.resolve(null),
+        WriteWorkspaceFile: (path: string, content: string) => {
           writes.set(path, content);
           return Promise.resolve();
         },

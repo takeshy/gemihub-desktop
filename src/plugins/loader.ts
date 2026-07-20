@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
-import { readFile } from "../lib/wailsBackend";
+import { readWorkspaceFile } from "../lib/wailsBackend";
 import type {
   PluginAPI,
   PluginConfig,
@@ -38,7 +38,7 @@ function executePluginCode(
 }
 
 async function readPluginText(pluginId: string, name: string): Promise<string> {
-  const result = await readFile(`.llm-hub/plugins/${pluginId}/${name}`);
+  const result = await readWorkspaceFile(`.llm-hub/plugins/${pluginId}/${name}`);
   if (!result) throw new Error(`Missing plugin asset: ${name}`);
   return result.content;
 }

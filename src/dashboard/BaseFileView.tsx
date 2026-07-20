@@ -17,18 +17,19 @@ import type { BaseDefinition } from "./dashboardData";
 import { BaseConfigEditor } from "./BaseConfigEditor";
 import { BaseViewRenderer } from "./BaseViewRenderer";
 import { KanbanCardModal } from "./KanbanCardModal";
+import { fileRef, type FileRef } from "../lib/fileRef";
 
 export function BaseFileView({
   content,
   path,
   onChange,
-  onOpenPath,
+  onOpenFile,
   isDark,
 }: {
   content: string;
   path: string;
   onChange: (content: string) => void;
-  onOpenPath: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
   isDark: boolean;
 }) {
   const [mode, setMode] = useState<"display" | "edit" | "raw">("display");
@@ -166,13 +167,12 @@ export function BaseFileView({
         : null}
       {previewPath && (
         <KanbanCardModal
-          path={previewPath}
-          fileScope="workspace"
+          file={fileRef("workspace", previewPath)}
           isDark={isDark}
           onNavigate={() => {
             const target = previewPath;
             setPreviewPath("");
-            onOpenPath(`workspace://${target}`);
+            onOpenFile(fileRef("workspace", target));
           }}
           onSaved={() => setRefreshKey((value) => value + 1)}
           onClose={() => setPreviewPath("")}

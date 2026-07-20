@@ -54,9 +54,6 @@ import {
 import {
   appendMemoFile,
   hasWailsBackend,
-  openLocalFileDefault,
-  readFile,
-  readLocalFile,
   readMemoFile,
   writeBinaryFile,
   writeMemoFileAtomic,
@@ -84,6 +81,14 @@ import type { ActiveSelection } from "../llm/selection";
 import { appendTimelineEntry, memoTimelineBody } from "./timelineEvents";
 import { WorkflowFileView } from "../workflow/WorkflowFileView";
 import { memoChatDraft } from "./memoChat";
+import {
+  type FileRef,
+  fileRef,
+  fileRefBackendPath,
+  isFileRef,
+  openFileRefDefault,
+  readFileRef,
+} from "../lib/fileRef";
 
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
@@ -228,6 +233,7 @@ function latestEntryId(entries: MemoEntry[], ids: string[]): string {
 
 export function FileWidgetBody({
   widget,
+  kanbanEditRequest,
   fallbackFileName,
   fallbackContent,
   isDark,
@@ -235,6 +241,7 @@ export function FileWidgetBody({
   memoDirPath,
   memoSyncTimeline,
   onOpenPath,
+  onOpenFile,
   onOpenPathMaximized,
   onNavigatePath,
   onActivate,
@@ -244,6 +251,7 @@ export function FileWidgetBody({
   onAskMemoAI,
 }: {
   widget: DashboardWidget;
+  kanbanEditRequest?: number;
   fallbackFileName: string;
   fallbackContent: string;
   isDark: boolean;
@@ -251,6 +259,7 @@ export function FileWidgetBody({
   memoDirPath: string;
   memoSyncTimeline: string;
   onOpenPath: (path: string) => void;
+  onOpenFile: (file: FileRef) => void;
   onOpenPathMaximized: (path: string) => void;
   onNavigatePath: (path: string) => void;
   onActivate: () => void;
@@ -260,14 +269,12 @@ export function FileWidgetBody({
   onAskMemoAI: (draft: string) => void;
 }) {
   const { t: tr } = useI18n();
-  const filePath = typeof widget.config.filePath === "string"
-    ? widget.config.filePath
-    : typeof widget.config.path === "string"
-    ? widget.config.path
-    : "";
+  const storedFile = isFileRef(widget.config.file) ? widget.config.file : null;
+  const filePath = storedFile?.path || "";
+  const effectiveFilePath = filePath;
   const fileName = typeof widget.config.fileName === "string"
     ? widget.config.fileName
-    : filePath.split("/").pop() || fallbackFileName;
+    : effectiveFilePath.split("/").pop() || fallbackFileName;
   const documentContent = typeof widget.config.content === "string"
     ? widget.config.content
     : fallbackContent;
@@ -289,12 +296,8 @@ export function FileWidgetBody({
   // collapsed re-expands the panel (openPanel).
   const memoPanelVisible = memoPanelOpen && !memoPanelCollapsed;
   const kind = docKindFor(fileName);
-  const selectionPath = filePath || fileName;
-  const downloadPath = widget.config.fileScope === "workspace"
-    ? `workspace://${filePath}`
-    : widget.config.fileScope === "files"
-    ? `files://${filePath}`
-    : filePath;
+  const selectionPath = effectiveFilePath || fileName;
+  const downloadPath = storedFile ? fileRefBackendPath(storedFile) : filePath;
 
   const uploadMarkdownImage = useCallback(
     async (file: File): Promise<string> => {
@@ -311,15 +314,18 @@ export function FileWidgetBody({
       const slash = filePath.replaceAll("\\", "/").lastIndexOf("/");
       const directory = slash >= 0 ? filePath.slice(0, slash + 1) : "";
       const target = `${directory}attachments/${attachmentName}`;
-      if (widget.config.fileScope === "workspace") {
+      if (storedFile?.scope === "workspace") {
         await writeWorkspaceBinaryFile(target, base64);
-      } else if (widget.config.fileScope === "files") {
-        await writeBinaryFile(`files://${target}`, base64);
+      } else if (storedFile?.scope === "files") {
+        await writeBinaryFile(
+          fileRefBackendPath(fileRef("files", target)),
+          base64,
+        );
       } else await writeBinaryFile(target, base64);
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
       return `attachments/${attachmentName}`;
     },
-    [filePath, widget.config.fileScope],
+    [filePath, storedFile?.scope],
   );
 
   const memoFilePath = useMemo(
@@ -383,22 +389,19 @@ export function FileWidgetBody({
   }, [selectionPath]);
 
   const recoverPdfFromDisk = useCallback(() => {
-    if (!filePath || widget.config.encrypted === true) return;
+    if (!effectiveFilePath || widget.config.encrypted === true) return;
     if (recoveredPdfPathRef.current === selectionPath) return;
     recoveredPdfPathRef.current = selectionPath;
-    const absolute = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(filePath);
-    const readPath = absolute ? filePath : downloadPath;
-    void (absolute ? readLocalFile(readPath) : readFile(readPath)).then(
-      (file) => {
-        if (!file?.content) return;
-        onConfigChange({
-          ...widget.config,
-          fileName: file.fileName,
-          content: file.content,
-        });
-        setPdfReloadVersion((value) => value + 1);
-      },
-    ).catch((reloadError) => {
+    if (!storedFile) return;
+    void readFileRef(storedFile).then((file) => {
+      if (!file?.content) return;
+      onConfigChange({
+        ...widget.config,
+        fileName: file.fileName,
+        content: file.content,
+      });
+      setPdfReloadVersion((value) => value + 1);
+    }).catch((reloadError) => {
       console.warn("Could not recover PDF from disk.", reloadError);
     });
   }, [
@@ -550,8 +553,13 @@ export function FileWidgetBody({
         : localHrefToPathCandidates(wikiBaseDirPath, href);
       for (const path of paths) {
         try {
-          const absolute = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path);
-          if (absolute ? await readLocalFile(path) : await readFile(path)) {
+          const ref = fileRef(
+            /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+              ? "absolute"
+              : storedFile?.scope || "workspace",
+            path,
+          );
+          if (await readFileRef(ref)) {
             return path;
           }
         } catch {
@@ -560,7 +568,7 @@ export function FileWidgetBody({
       }
       return paths[0] ?? "";
     },
-    [wikiBaseDirPath],
+    [storedFile?.scope, wikiBaseDirPath],
   );
 
   const resolveMarkdownImageSrc = useCallback(
@@ -571,10 +579,12 @@ export function FileWidgetBody({
         : localHrefToPathCandidates(wikiBaseDirPath, src);
       for (const path of paths) {
         try {
-          const absolute = /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path);
-          const file = absolute
-            ? await readLocalFile(path)
-            : await readFile(path);
+          const file = await readFileRef(fileRef(
+            /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
+              ? "absolute"
+              : storedFile?.scope || "workspace",
+            path,
+          ));
           if (file?.content.startsWith("data:")) return file.content;
         } catch {
           // Try workspace-relative and parent-root candidates in order.
@@ -582,7 +592,7 @@ export function FileWidgetBody({
       }
       return src;
     },
-    [wikiBaseDirPath],
+    [storedFile?.scope, wikiBaseDirPath],
   );
 
   const openWikiLink = useCallback(
@@ -1285,7 +1295,8 @@ export function FileWidgetBody({
             <button
               type="button"
               onClick={() =>
-                void openLocalFileDefault(downloadPath).catch((error) =>
+                storedFile &&
+                void openFileRefDefault(storedFile).catch((error) =>
                   alert(error instanceof Error ? error.message : String(error))
                 )}
               disabled={!filePath}
@@ -1318,7 +1329,7 @@ export function FileWidgetBody({
           isDark={isDark}
           onChange={(content) =>
             onConfigChange({ ...widget.config, fileName, content })}
-          onOpenPath={onOpenPath}
+          onOpenFile={onOpenFile}
         />
       );
     }
@@ -1328,10 +1339,11 @@ export function FileWidgetBody({
         <KanbanFileView
           content={documentContent}
           path={filePath || fileName}
+          editRequest={kanbanEditRequest}
           isDark={isDark}
           onChange={(content) =>
             onConfigChange({ ...widget.config, fileName, content })}
-          onOpenPath={onOpenPath}
+          onOpenFile={onOpenFile}
         />
       );
     }

@@ -35,16 +35,17 @@ import {
   updateCalendarEvent,
 } from "./timelineEvents";
 import { KanbanCardModal } from "./KanbanCardModal";
+import { fileRef, type FileRef } from "../lib/fileRef";
 
 function sameMonth(date: Date, month: Date): boolean {
   return date.getFullYear() === month.getFullYear() &&
     date.getMonth() === month.getMonth();
 }
 
-export function CalendarDashboardWidget({ config, isDark, onOpenPath }: {
+export function CalendarDashboardWidget({ config, isDark, onOpenFile }: {
   config: Record<string, unknown>;
   isDark: boolean;
-  onOpenPath?: (path: string) => void;
+  onOpenFile?: (file: FileRef) => void;
 }) {
   const { language, t: tr } = useI18n();
   const timelineName = sanitizeTimelineName(
@@ -493,14 +494,13 @@ export function CalendarDashboardWidget({ config, isDark, onOpenPath }: {
       )}
       {previewPath && (
         <KanbanCardModal
-          path={previewPath}
-          fileScope="workspace"
+          file={fileRef("workspace", previewPath)}
           isDark={isDark}
           backdropClassName="calendar-link-preview-backdrop"
           onNavigate={() => {
             const path = previewPath;
             setPreviewPath("");
-            onOpenPath?.(path);
+            onOpenFile?.(fileRef("workspace", path));
           }}
           onSaved={() => void load()}
           onClose={() => setPreviewPath("")}

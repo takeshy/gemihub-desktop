@@ -7275,6 +7275,108 @@ body.resizing-side-pane * {
   color: var(--text-muted);
   font-size: 8px;
 }
+.kanban-config-editor .kanban-file-column {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) repeat(3, auto);
+}
+.kanban-settings-columns {
+  display: grid;
+  gap: 7px;
+}
+.kanban-display-field,
+.kanban-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 76px repeat(3, auto);
+  gap: 5px;
+}
+.kanban-filter-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+.kanban-display-field button,
+.kanban-filter-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.workspace-folder-picker {
+  position: relative;
+}
+.workspace-folder-picker > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+}
+.workspace-folder-picker > div > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+.workspace-folder-picker > aside {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+.workspace-folder-picker nav,
+.workspace-folder-picker nav span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.workspace-folder-picker nav {
+  padding: 7px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.workspace-folder-picker button {
+  color: inherit;
+}
+.workspace-folder-picker nav button,
+.workspace-folder-picker li button {
+  border: 0;
+  background: transparent;
+}
+.workspace-folder-picker ul {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+.workspace-folder-picker li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.workspace-folder-picker li button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 6px;
+  text-align: left;
+}
+.workspace-folder-picker li button:first-child svg.selected {
+  margin-left: auto;
+}
+.workspace-folder-picker aside > p {
+  margin: 0;
+  padding: 15px;
+  color: var(--text-muted);
+  text-align: center;
+}
 .dashboard-widget-settings > footer {
   display: flex;
   justify-content: space-between;
@@ -7609,6 +7711,17 @@ body.resizing-side-pane * {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.timeline-toolbar select {
+  max-width: 120px;
+  min-width: 76px;
+  height: 23px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--text);
+  padding: 2px 5px;
+  font-size: 9px;
 }
 .timeline-toolbar button {
   position: relative;
@@ -13284,6 +13397,10 @@ body.resizing-modal {
 .app-timeline-body .timeline-toolbar,
 .app-timeline-body .timeline-toolbar strong {
   font-size: 13px;
+}
+.app-timeline-body .timeline-toolbar select {
+  height: 30px;
+  font-size: 12px;
 }
 
 .app-timeline-body .timeline-filters input,

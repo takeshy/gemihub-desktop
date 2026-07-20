@@ -6,7 +6,7 @@ import {
   type ChatUsage,
   listWorkspaceFiles,
   onChatStream,
-  readWorkspaceFile as readFile,
+  readWorkspaceFile as readWorkspaceFile,
 } from "../lib/wailsBackend";
 import {
   chatModelChoices,
@@ -431,7 +431,7 @@ export function AIWorkflowBuilderModal({
       const path of attachmentPaths
     ) paths.add(path);
     for (const path of paths) {
-      const file = await readFile(path).catch(() => null);
+      const file = await readWorkspaceFile(path).catch(() => null);
       if (!file) continue;
       const dataUrl = file.content.match(/^data:([^;,]+);base64,([\s\S]+)$/);
       if (dataUrl) {

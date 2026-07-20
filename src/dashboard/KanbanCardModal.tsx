@@ -12,13 +12,8 @@ import { PdfViewer } from "../components/PdfViewer";
 import { WysiwygEditor } from "../components/WysiwygEditor";
 import { ImageViewer } from "../components/ImageViewer";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
-import {
-  readFile,
-  readLocalFile,
-  readWorkspaceFile,
-  writeFile,
-  writeWorkspaceFile,
-} from "../lib/wailsBackend";
+import { readFileRef, writeFileRef } from "../lib/fileRef";
+import type { FileRef } from "../lib/fileRef";
 import { docKindFor } from "./documentKind";
 import { epubToHtml } from "../lib/epub";
 
@@ -79,16 +74,14 @@ function replaceBody(content: string, body: string): string {
 
 export function KanbanCardModal(
   {
-    path,
-    fileScope = "directory",
+    file,
     isDark,
     backdropClassName = "",
     onNavigate,
     onSaved,
     onClose,
   }: {
-    path: string;
-    fileScope?: "directory" | "workspace";
+    file: FileRef;
     isDark: boolean;
     backdropClassName?: string;
     onNavigate: () => void;
@@ -96,6 +89,7 @@ export function KanbanCardModal(
     onClose: () => void;
   },
 ) {
+  const path = file.path;
   const [content, setContent] = useState("");
   const [epubHtml, setEpubHtml] = useState("");
   const [savedContent, setSavedContent] = useState("");
@@ -119,20 +113,15 @@ export function KanbanCardModal(
     let cancelled = false;
     setLoading(true);
     setError("");
-    const read = fileScope === "workspace"
-      ? readWorkspaceFile(path)
-      : /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)
-      ? readLocalFile(path)
-      : readFile(path);
-    void read.then((file) => {
+    void readFileRef(file).then((result) => {
       if (cancelled) return;
-      if (!file) {
+      if (!result) {
         setError(`Cannot read ${path}`);
         setLoading(false);
         return;
       }
-      setContent(file.content);
-      setSavedContent(file.content);
+      setContent(result.content);
+      setSavedContent(result.content);
       setLoading(false);
     }).catch((caught: unknown) => {
       if (!cancelled) {
@@ -143,7 +132,7 @@ export function KanbanCardModal(
     return () => {
       cancelled = true;
     };
-  }, [fileScope, path]);
+  }, [file.scope, path]);
 
   useEffect(() => {
     if (kind !== "epub" || !content.startsWith("data:")) {
@@ -260,11 +249,7 @@ export function KanbanCardModal(
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      if (fileScope === "workspace") {
-        await writeWorkspaceFile(path, content);
-      } else {
-        await writeFile(path, content);
-      }
+      await writeFileRef(file, content);
       setSavedContent(content);
       setError("");
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));

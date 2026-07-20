@@ -292,6 +292,9 @@ func fileToolDefinitionsForMode(mode string) []map[string]any {
 }
 
 func chatToolDefinitions(request ChatRequest) []map[string]any {
+	if requestFileToolMode(request) == "none" {
+		return nil
+	}
 	definitions := append([]map[string]any(nil), timelineToolDefinitions...)
 	definitions = append(definitions, fileToolDefinitionsForMode(requestFileToolMode(request))...)
 	for _, tool := range request.CustomTools {
@@ -327,11 +330,13 @@ func (a *App) Chat(request ChatRequest) (*ChatResult, error) {
 	}
 	ctx, cancel := context.WithCancel(baseContext)
 	request.ctx = ctx
-	timelineInstruction := "When the user asks what they did today, what happened on a date, or a similar activity-history question, call read_timeline for that local date before answering. When the user explicitly asks you to memo, save, remember, or record something, call append_timeline. If they ask to save your answer or findings, save the useful answer or a concise self-contained summary, then tell them it was recorded."
-	if strings.TrimSpace(request.SystemPrompt) == "" {
-		request.SystemPrompt = timelineInstruction
-	} else if !strings.Contains(request.SystemPrompt, "append_timeline") {
-		request.SystemPrompt = strings.TrimSpace(request.SystemPrompt) + "\n\n" + timelineInstruction
+	if requestFileToolMode(request) != "none" {
+		timelineInstruction := "When the user asks what they did today, what happened on a date, or a similar activity-history question, call read_timeline for that local date before answering. When the user explicitly asks you to memo, save, remember, or record something, call append_timeline. If they ask to save your answer or findings, save the useful answer or a concise self-contained summary, then tell them it was recorded."
+		if strings.TrimSpace(request.SystemPrompt) == "" {
+			request.SystemPrompt = timelineInstruction
+		} else if !strings.Contains(request.SystemPrompt, "append_timeline") {
+			request.SystemPrompt = strings.TrimSpace(request.SystemPrompt) + "\n\n" + timelineInstruction
+		}
 	}
 	if request.StreamID != "" {
 		a.chatCancelMu.Lock()

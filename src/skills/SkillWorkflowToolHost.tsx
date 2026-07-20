@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { onChatToolRequest, readFile, resolveChatTool } from "../lib/wailsBackend";
+import { onChatToolRequest, readWorkspaceFile, resolveChatTool } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
 import { executeWorkflow } from "../workflow/executor";
 import { appendWorkflowHistory } from "../workflow/history";
@@ -25,7 +25,7 @@ export function SkillWorkflowToolHost({ directoryBase, settings, activeFile }: {
       const workflows = collectSkillWorkflows(await discoverWorkspaceSkills());
       const entry = workflows.get(workflowId);
       if (!entry) return { error: `Unknown workflow ID: ${workflowId}. Available: ${[...workflows.keys()].join(", ")}` };
-      const file = await readFile(entry.workflowPath);
+      const file = await readWorkspaceFile(entry.workflowPath);
       if (!file) return { error: `Workflow file not found: ${entry.workflowPath}` };
       const workflow = parseWorkflowFile(file.content, entry.workflowPath);
       const run = await executeWorkflow(workflow, entry.workflowPath, {
@@ -33,7 +33,7 @@ export function SkillWorkflowToolHost({ directoryBase, settings, activeFile }: {
         activeFile,
         interactionMode: "headless",
         loadWorkflow: async (path) => {
-          const nested = await readFile(path);
+          const nested = await readWorkspaceFile(path);
           if (!nested) throw new Error(`Workflow file not found: ${path}`);
           return parseWorkflowFile(nested.content, path);
         },

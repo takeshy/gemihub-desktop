@@ -214,6 +214,7 @@ func (a *App) TrashFile(path string) error {
 }
 func (a *App) ListTrash() ([]TrashEntry, error) {
 	result := []TrashEntry{}
+	seen := map[string]struct{}{}
 	bases := []struct{ base, scope string }{{a.GetDirectoryBase(), "files"}, {a.GetWorkspacePath(), "workspace"}}
 	for _, item := range bases {
 		if item.base == "" {
@@ -227,6 +228,10 @@ func (a *App) ListTrash() ([]TrashEntry, error) {
 			}
 			var entry TrashEntry
 			if json.Unmarshal(data, &entry) == nil {
+				if _, duplicate := seen[entry.ID]; duplicate {
+					continue
+				}
+				seen[entry.ID] = struct{}{}
 				result = append(result, entry)
 			}
 		}

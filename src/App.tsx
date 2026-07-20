@@ -110,8 +110,9 @@ import {
   syncRAG,
   verifyDiscordToken,
   type WorkspaceState,
-  writeFile,
+  writeWorkspaceFile,
 } from "./lib/wailsBackend";
+import { type FileRef, fileRef, fileRefFromBackendPath } from "./lib/fileRef";
 import {
   parseRecentDirectories,
   updateRecentDirectories,
@@ -1137,7 +1138,7 @@ export default function App() {
   const [openPathRequest, setOpenPathRequest] = useState<
     {
       id: number;
-      path: string;
+      file: FileRef | null;
       source?:
         | "local"
         | "directory"
@@ -1146,7 +1147,7 @@ export default function App() {
         | "memo-list"
         | "startup";
     }
-  >({ id: 0, path: "" });
+  >({ id: 0, file: null });
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>({
     activeWorkspaceId: "",
     workspaces: [],
@@ -1317,8 +1318,8 @@ export default function App() {
   }, []);
 
   const openDashboardFile = useCallback(async (path: string) => {
-    const dashboardPath = path.replace(/^workspace:\/\//i, "");
-    const loaded = await loadDashboard(dashboardPath);
+    const dashboardPath = path;
+    const loaded = await loadDashboard(path);
     if (!loaded) {
       setDashboardError(`Cannot parse dashboard: ${dashboardPath}`);
       return false;
@@ -1564,7 +1565,7 @@ export default function App() {
         const initialDirectory = associatedDirectory || startupDirectory ||
           readStored(LAST_OPENED_DIRECTORY_KEY, "");
         // Dashboard widgets mount as soon as this state is published. Ensure the
-        // backend resolves files:// paths against the same directory first,
+        // The backend resolves Files-scoped paths against the same directory first,
         // otherwise a restored binary document can be read from stale startup
         // context and only work after the widget is reopened.
         if (initialDirectory) await setDirectoryBase(initialDirectory);
@@ -1704,7 +1705,7 @@ export default function App() {
         if (!cancelled) {
           setOpenPathRequest((current) => ({
             id: current.id + 1,
-            path: startupPaths[0],
+            file: fileRef("absolute", startupPaths[0]),
             source: "startup",
           }));
         }
@@ -1816,7 +1817,7 @@ export default function App() {
         return;
       }
       setDashboard(parsed);
-      void writeFile(activeDashboardPath, dashboardRaw).then(() => {
+      void writeWorkspaceFile(activeDashboardPath, dashboardRaw).then(() => {
         setSavedAt(new Date());
         setDashboardError("");
         window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
@@ -2236,14 +2237,14 @@ export default function App() {
               directoryBase={directoryBase}
               workspacePath={workspacePath}
               onDirectoryBaseUnavailable={handleDirectoryBaseUnavailable}
-              onOpenFile={(path, created) => {
+              onOpenFile={(file, created) => {
                 if (
-                  !path.startsWith("files://") &&
-                  path.toLowerCase().endsWith(".dashboard")
-                ) void openDashboardFile(path);
+                  file.scope === "workspace" &&
+                  file.path.toLowerCase().endsWith(".dashboard")
+                ) void openDashboardFile(file.path);
                 else {setOpenPathRequest((value) => ({
                     id: value.id + 1,
-                    path,
+                    file,
                     source: created ? "filetree-created" : "filetree",
                   })
                   );}
@@ -2541,13 +2542,14 @@ export default function App() {
                   setSettingsSection("rag");
                   setSettingsOpen(true);
                 }}
-                onOpenDirectoryFile={(path) => {
+                onOpenFile={(file) => {
                   if (
-                    path.toLowerCase().endsWith(".dashboard")
-                  ) void openDashboardFile(path);
+                    file.scope === "workspace" &&
+                    file.path.toLowerCase().endsWith(".dashboard")
+                  ) void openDashboardFile(file.path);
                   else {setOpenPathRequest((value) => ({
                       id: value.id + 1,
-                      path,
+                      file,
                       source: "directory",
                     })
                     );}
@@ -2640,7 +2642,7 @@ export default function App() {
             onOpenFile={(path) => {
               setOpenPathRequest((value) => ({
                 id: value.id + 1,
-                path,
+                file: fileRefFromBackendPath(path),
                 source: "memo-list",
               }));
               setMemoListOpen(false);
@@ -2682,7 +2684,7 @@ export default function App() {
                     setTimelineOpen(false);
                     setOpenPathRequest((value) => ({
                       id: value.id + 1,
-                      path,
+                      file: fileRef("workspace", path),
                       source: "filetree",
                     }));
                   }}
@@ -2716,11 +2718,11 @@ export default function App() {
                 <CalendarDashboardWidget
                   config={{ timelineName: "Timeline" }}
                   isDark={isDark}
-                  onOpenPath={(path) => {
+                  onOpenFile={(file) => {
                     setCalendarOpen(false);
                     setOpenPathRequest((value) => ({
                       id: value.id + 1,
-                      path,
+                      file,
                       source: "filetree",
                     }));
                   }}
@@ -2757,7 +2759,6 @@ export default function App() {
                     statusProperty: "status",
                     titleProperty: "title",
                     timelineName: "Timeline",
-                    workspaceOnly: true,
                     columns: [
                       { value: "todo", label: "To do" },
                       { value: "doing", label: "Doing" },
@@ -2766,11 +2767,11 @@ export default function App() {
                   }}
                   isDark={isDark}
                   onChange={() => {}}
-                  onOpenPath={(path) => {
+                  onOpenFile={(file) => {
                     setKanbanOpen(false);
                     setOpenPathRequest((value) => ({
                       id: value.id + 1,
-                      path,
+                      file,
                       source: "filetree",
                     }));
                   }}

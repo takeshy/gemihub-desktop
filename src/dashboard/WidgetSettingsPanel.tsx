@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
+  ChevronUp,
   Code,
   Database,
   FileText,
@@ -9,14 +11,18 @@ import {
   Plus,
   Search,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import {
   chat,
   fileInventory,
+  listWorkspaceDirectoryFiles,
   listWorkspaceFiles,
   readFile,
+  readWorkspaceFile,
   writeFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import yaml from "js-yaml";
 import type { DashboardWidget } from "./types";
@@ -33,11 +39,20 @@ import { loadWorkflowHistory } from "../workflow/history";
 import type { ChatSettings } from "../llm/settings";
 import type { WorkflowRun } from "../workflow/types";
 import { compileBase } from "../bases/index";
-import { type KanbanDefinition, parseKanbanDefinition } from "./dashboardData";
+import {
+  type KanbanDefinition,
+  loadDashboardRows,
+  parseKanbanDefinition,
+} from "./dashboardData";
 import { WidgetDialog } from "./WidgetDialog";
 import { BaseConfigEditor } from "./BaseConfigEditor";
+import { WorkspaceFolderPicker } from "./WorkspaceFolderPicker";
+import { fileRef, isFileRef } from "../lib/fileRef";
 
 function text(config: Record<string, unknown>, key: string): string {
+  if ((key === "path" || key === "filePath") && isFileRef(config.file)) {
+    return config.file.path;
+  }
   return typeof config[key] === "string" ? config[key] as string : "";
 }
 function number(
@@ -48,20 +63,221 @@ function number(
   return typeof config[key] === "number" ? config[key] as number : fallback;
 }
 
+function KanbanDisplayFieldsEditor({ definition, fieldNames, onChange }: {
+  definition: KanbanDefinition;
+  fieldNames: string[];
+  onChange: (next: KanbanDefinition) => void;
+}) {
+  const fields = (definition.displayFields || []).map((item) =>
+    typeof item === "string"
+      ? { field: item, label: "", maxLength: undefined }
+      : {
+        field: item.field || "",
+        label: item.label || "",
+        maxLength: item.maxLength,
+      }
+  );
+  const commit = (displayFields: typeof fields) =>
+    onChange({ ...definition, displayFields });
+  return (
+    <section className="kanban-settings-columns">
+      <strong>Display fields</strong>
+      {fields.map((item, index) => (
+        <div className="kanban-display-field" key={index}>
+          <select
+            value={item.field}
+            onChange={(event) =>
+              commit(fields.map((field, fieldIndex) =>
+                fieldIndex === index
+                  ? { ...field, field: event.target.value }
+                  : field
+              ))}
+          >
+            {item.field && !fieldNames.includes(item.field) && (
+              <option>{item.field}</option>
+            )}
+            {fieldNames.map((field) => <option key={field}>{field}</option>)}
+          </select>
+          <input
+            value={item.label}
+            placeholder="Label"
+            onChange={(event) =>
+              commit(fields.map((field, fieldIndex) =>
+                fieldIndex === index
+                  ? { ...field, label: event.target.value }
+                  : field
+              ))}
+          />
+          {item.field === "file.content" && (
+            <input
+              type="number"
+              min="1"
+              value={item.maxLength || ""}
+              placeholder="Max chars"
+              onChange={(event) =>
+                commit(fields.map((field, fieldIndex) =>
+                  fieldIndex === index
+                    ? {
+                      ...field,
+                      maxLength: Number(event.target.value) || undefined,
+                    }
+                    : field
+                ))}
+            />
+          )}
+          {item.field !== "file.content" && <span aria-hidden="true" />}
+          <button
+            type="button"
+            title="Move up"
+            disabled={index === 0}
+            onClick={() => {
+              const next = [...fields];
+              [next[index - 1], next[index]] = [next[index], next[index - 1]];
+              commit(next);
+            }}
+          >
+            <ChevronUp size={13} />
+          </button>
+          <button
+            type="button"
+            title="Move down"
+            disabled={index === fields.length - 1}
+            onClick={() => {
+              const next = [...fields];
+              [next[index], next[index + 1]] = [next[index + 1], next[index]];
+              commit(next);
+            }}
+          >
+            <ChevronDown size={13} />
+          </button>
+          <button
+            type="button"
+            title="Remove field"
+            onClick={() =>
+              commit(fields.filter((_, fieldIndex) =>
+                fieldIndex !== index
+              ))}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="kanban-file-add"
+        disabled={!fieldNames.length}
+        onClick={() => {
+          const used = new Set(fields.map((item) => item.field));
+          commit([...fields, {
+            field: fieldNames.find((field) => !used.has(field)) ||
+              fieldNames[0] || "",
+            label: "",
+            maxLength: undefined,
+          }]);
+        }}
+      >
+        <Plus size={13} />Add display field
+      </button>
+    </section>
+  );
+}
+
+type KanbanFilter = { property: string; op: string; value?: unknown };
+function KanbanFilterEditor({ definition, fieldNames, onChange }: {
+  definition: KanbanDefinition;
+  fieldNames: string[];
+  onChange: (next: KanbanDefinition) => void;
+}) {
+  const filters = Array.isArray(definition.filter)
+    ? definition.filter.filter((item): item is KanbanFilter =>
+      Boolean(
+        item && typeof item === "object" && typeof item.property === "string",
+      )
+    )
+    : [];
+  const commit = (filter: KanbanFilter[]) =>
+    onChange({ ...definition, filter });
+  return (
+    <section className="kanban-settings-columns">
+      <strong>Filters</strong>
+      {filters.map((filter, index) => (
+        <div className="kanban-filter-row" key={index}>
+          <select
+            value={filter.property}
+            onChange={(event) =>
+              commit(filters.map((item, itemIndex) =>
+                itemIndex === index
+                  ? { ...item, property: event.target.value }
+                  : item
+              ))}
+          >
+            {filter.property && !fieldNames.includes(filter.property) && (
+              <option>{filter.property}</option>
+            )}
+            {fieldNames.map((field) => <option key={field}>{field}</option>)}
+          </select>
+          <select
+            value={filter.op}
+            onChange={(event) =>
+              commit(
+                filters.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? { ...item, op: event.target.value }
+                    : item
+                ),
+              )}
+          >
+            <option value="eq">is</option>
+            <option value="neq">is not</option>
+            <option value="contains">contains</option>
+            <option value="notContains">does not contain</option>
+            <option value="gt">greater than</option>
+            <option value="lt">less than</option>
+            <option value="isEmpty">is empty</option>
+            <option value="notEmpty">is not empty</option>
+          </select>
+          {!filter.op.endsWith("Empty") && (
+            <input
+              value={String(filter.value ?? "")}
+              onChange={(event) =>
+                commit(filters.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? { ...item, value: event.target.value }
+                    : item
+                ))}
+            />
+          )}
+          <button
+            type="button"
+            title="Remove filter"
+            onClick={() =>
+              commit(filters.filter((_, itemIndex) => itemIndex !== index))}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="kanban-file-add"
+        disabled={!fieldNames.length}
+        onClick={() =>
+          commit([...filters, {
+            property: fieldNames[0] || "status",
+            op: "eq",
+            value: "",
+          }])}
+      >
+        <Plus size={13} />Add filter
+      </button>
+    </section>
+  );
+}
+
 export function displayFilePath(path: string, filesBase: string): string {
   const value = path.trim();
-  if (/^workspace:\/\//i.test(value)) {
-    return value.replace(/^workspace:\/\//i, "");
-  }
-  if (!/^files:\/\//i.test(value)) return value;
-  const relative = value.replace(/^files:\/\//i, "");
-  if (/^(?:[a-z]:[\\/]|[/\\]{2}|\/)/i.test(relative) || !filesBase) {
-    return relative;
-  }
-  const separator = filesBase.includes("\\") ? "\\" : "/";
-  return `${filesBase.replace(/[\\/]+$/, "")}${separator}${
-    relative.replace(/[\\/]+/g, separator)
-  }`;
+  if (/^(?:[a-z]:[\\/]|[/\\]{2}|\/)/i.test(value) || !filesBase) return value;
+  return value;
 }
 
 function SearchableFileSelect({
@@ -207,6 +423,9 @@ export function WidgetSettingsPanel({
       ? widget.config.card as Record<string, unknown>
       : {};
   const [files, setFiles] = useState<string[]>([]);
+  const [workspaceFilePaths, setWorkspaceFilePaths] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [json, setJSON] = useState(() =>
     JSON.stringify(widget.config, null, 2)
   );
@@ -239,6 +458,7 @@ export function WidgetSettingsPanel({
       null,
     ),
     [kanbanSaving, setKanbanSaving] = useState(false);
+  const [kanbanFolderFields, setKanbanFolderFields] = useState<string[]>([]);
   const kanbanSaveTimerRef = useRef(0);
   const pendingKanbanDefinitionRef = useRef<KanbanDefinition | null>(null);
   const baseSaveTimerRef = useRef(0);
@@ -250,16 +470,24 @@ export function WidgetSettingsPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   useEffect(() => {
+    if (widget.type === "kanban") {
+      void listWorkspaceDirectoryFiles("Dashboards/Kanbans").then((paths) =>
+        setFiles(paths.sort())
+      );
+      return;
+    }
     void Promise.allSettled([listWorkspaceFiles(), fileInventory()]).then(
       ([workspace, external]) => {
         const paths = new Set<string>();
         if (workspace.status === "fulfilled") {
-          workspace.value.forEach((item) =>
-            paths.add(`workspace://${item.path}`)
-          );
+          const workspacePaths = new Set(workspace.value.map((item) => item.path));
+          setWorkspaceFilePaths(workspacePaths);
+          workspacePaths.forEach((path) => paths.add(path));
         }
         if (external.status === "fulfilled") {
-          external.value.forEach((item) => paths.add(`files://${item.path}`));
+          external.value.forEach((item) =>
+            paths.add(displayFilePath(item.path, filesBase))
+          );
         }
         setFiles([...paths].sort());
       },
@@ -286,7 +514,7 @@ export function WidgetSettingsPanel({
       return;
     }
     let cancelled = false;
-    void readFile(path).then((file) => {
+    void readWorkspaceFile(path).then((file) => {
       if (cancelled) return;
       if (file) {
         setBaseEditorContent(file.content);
@@ -304,7 +532,7 @@ export function WidgetSettingsPanel({
       return;
     }
     let cancelled = false;
-    void readFile(path).then((file) => {
+    void readWorkspaceFile(path).then((file) => {
       if (!cancelled) {
         setKanbanDefinition(file ? parseKanbanDefinition(file.content) : null);
       }
@@ -313,15 +541,40 @@ export function WidgetSettingsPanel({
       cancelled = true;
     };
   }, [widget.config]);
+  useEffect(() => {
+    const folder = typeof kanbanDefinition?.folder === "string"
+      ? kanbanDefinition.folder
+      : "";
+    if (!folder) {
+      setKanbanFolderFields([]);
+      return;
+    }
+    let cancelled = false;
+    void loadDashboardRows(folder, "workspace").then(
+      (rows) => {
+        if (cancelled) return;
+        setKanbanFolderFields([
+          ...new Set([
+            "file.name",
+            "file.path",
+            "file.ctime",
+            "file.mtime",
+            "file.tags",
+            "file.content",
+            ...rows.flatMap((row) => Object.keys(row.frontmatter)),
+          ]),
+        ].sort());
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [kanbanDefinition?.folder]);
   const set = (key: string, value: unknown) =>
     onChange({ ...widget.config, [key]: value });
   const fileList = useMemo(
     () =>
-      files.filter((path) =>
-        !path.replace(/^(?:workspace|files):\/\//i, "").startsWith(
-          ".llm-hub/",
-        )
-      ),
+      files.filter((path) => !path.startsWith(".llm-hub/")),
     [files],
   );
   const labels: Record<string, string> = {
@@ -363,6 +616,7 @@ export function WidgetSettingsPanel({
     key: string,
     placeholder: string,
     extension?: { test: (path: string) => boolean },
+    sourcePaths: string[] = fileList,
   ) => (
     <div className="settings-file-field">
       <span>{labels[key] || key}</span>
@@ -370,11 +624,21 @@ export function WidgetSettingsPanel({
         value={key === "path"
           ? text(widget.config, "path") || text(widget.config, "filePath")
           : text(widget.config, key)}
-        paths={fileList}
+        paths={sourcePaths}
         placeholder={placeholder}
         filter={extension}
         displayPath={(path) => displayFilePath(path, filesBase)}
-        onChange={(path) => set(key, path)}
+        onChange={(path) => {
+          if (
+            key === "path" &&
+            (widget.type === "file" || widget.type === "markdown")
+          ) {
+            const scope = workspaceFilePaths.has(path) ? "workspace" : "absolute";
+            onChange({ ...widget.config, file: fileRef(scope, path) });
+            return;
+          }
+          set(key, path);
+        }}
       />
     </div>
   );
@@ -386,9 +650,9 @@ export function WidgetSettingsPanel({
       ).trim() || "New Note";
     let path = `${stem}.md`, suffix = 2;
     while (files.includes(path)) path = `${stem} ${suffix++}.md`;
-    await writeFile(path, `# ${stem}\n`);
+    await writeWorkspaceFile(path, `# ${stem}\n`);
     setFiles((current) => [...current, path]);
-    onChange({ ...widget.config, path });
+    onChange({ ...widget.config, file: fileRef("workspace", path) });
     setNewFileName("");
     window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   };
@@ -400,7 +664,7 @@ export function WidgetSettingsPanel({
     while (files.includes(path)) {
       path = `Dashboards/Bases/${stem} ${suffix++}.base`;
     }
-    await writeFile(
+    await writeWorkspaceFile(
       path,
       yaml.dump({
         views: [{
@@ -427,7 +691,7 @@ export function WidgetSettingsPanel({
     }
     const { kanban: _kanban, cardOrder, ...board } = widget.config;
     try {
-      await writeFile(
+      await writeWorkspaceFile(
         path,
         yaml.dump({ version: 1, ...board, title }, {
           lineWidth: -1,
@@ -456,7 +720,7 @@ export function WidgetSettingsPanel({
       if (!path || !pending) return;
       setKanbanSaving(true);
       try {
-        await writeFile(
+        await writeWorkspaceFile(
           path,
           yaml.dump({ version: 1, ...pending }, {
             lineWidth: -1,
@@ -484,7 +748,7 @@ export function WidgetSettingsPanel({
       pending = pendingKanbanDefinitionRef.current;
     pendingKanbanDefinitionRef.current = null;
     if (path && pending) {
-      void writeFile(
+      void writeWorkspaceFile(
         path,
         yaml.dump({ version: 1, ...pending }, { lineWidth: -1, noRefs: true }),
       ).then(() =>
@@ -511,7 +775,7 @@ export function WidgetSettingsPanel({
     }
     setWorkflowAILoading(true);
     try {
-      const file = await readFile(path);
+      const file = await readWorkspaceFile(path);
       if (!file) {
         setActionError(
           `Cannot read ${path}. Select an existing workflow file and try again.`,
@@ -546,7 +810,7 @@ export function WidgetSettingsPanel({
       }
     }
     const current = configuredPath
-      ? (await readFile(configuredPath))?.content || ""
+      ? (await readWorkspaceFile(configuredPath))?.content || ""
       : "views:\n  - type: table\n    name: All\n    order: [file.name]\n";
     setBaseAIBusy(true);
     setActionError("");
@@ -586,7 +850,7 @@ export function WidgetSettingsPanel({
       if (compileError) {
         throw new Error("AI returned an invalid .base YAML document.");
       }
-      await writeFile(path, content);
+      await writeWorkspaceFile(path, content);
       onChange({ ...widget.config, base: path });
       setFiles((currentFiles) => [...new Set([...currentFiles, path])]);
       setBaseAIOpen(false);
@@ -634,15 +898,6 @@ export function WidgetSettingsPanel({
             <p className="gemihub-base-auto">
               Changes are applied automatically.
             </p>
-          )}
-          {widget.type === "kanban" && (
-            <label>
-              <span>Widget title</span>
-              <input
-                value={widget.title}
-                onChange={(event) => onTitleChange(event.target.value)}
-              />
-            </label>
           )}
           {(widget.type === "file" || widget.type === "markdown") && (
             <div className="file-config-editor">
@@ -929,7 +1184,7 @@ export function WidgetSettingsPanel({
                           setBaseSaving(true);
                           window.clearTimeout(baseSaveTimerRef.current);
                           baseSaveTimerRef.current = window.setTimeout(() => {
-                            void writeFile(path, content).then(() => {
+                            void writeWorkspaceFile(path, content).then(() => {
                               setBaseLoadError("");
                               window.dispatchEvent(
                                 new CustomEvent(
@@ -1009,31 +1264,32 @@ export function WidgetSettingsPanel({
                               value={typeof kanbanDefinition.title === "string"
                                 ? kanbanDefinition.title
                                 : ""}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                onTitleChange(event.target.value);
                                 updateKanbanDefinition({
                                   ...kanbanDefinition,
                                   title: event.target.value,
-                                })}
+                                });
+                              }}
                             />
                           </label>
                           <label>
                             <span>Folder</span>
-                            <input
+                            <WorkspaceFolderPicker
                               value={typeof kanbanDefinition.folder === "string"
                                 ? kanbanDefinition.folder
                                 : ""}
-                              onChange={(event) =>
+                              onChange={(folder) =>
                                 updateKanbanDefinition({
                                   ...kanbanDefinition,
-                                  folder: event.target.value,
+                                  folder,
                                 })}
-                              placeholder="Tasks"
                             />
                           </label>
                           <div className="settings-two-columns">
                             <label>
                               <span>Status property</span>
-                              <input
+                              <select
                                 value={typeof kanbanDefinition
                                     .statusProperty === "string"
                                   ? kanbanDefinition.statusProperty
@@ -1043,11 +1299,18 @@ export function WidgetSettingsPanel({
                                     ...kanbanDefinition,
                                     statusProperty: event.target.value,
                                   })}
-                              />
+                              >
+                                {!kanbanFolderFields.includes("status") && (
+                                  <option>status</option>
+                                )}
+                                {kanbanFolderFields.map((field) => (
+                                  <option key={field}>{field}</option>
+                                ))}
+                              </select>
                             </label>
                             <label>
                               <span>Title property</span>
-                              <input
+                              <select
                                 value={typeof kanbanDefinition.titleProperty ===
                                     "string"
                                   ? kanbanDefinition.titleProperty
@@ -1057,7 +1320,14 @@ export function WidgetSettingsPanel({
                                     ...kanbanDefinition,
                                     titleProperty: event.target.value,
                                   })}
-                              />
+                              >
+                                {!kanbanFolderFields.includes("title") && (
+                                  <option>title</option>
+                                )}
+                                {kanbanFolderFields.map((field) => (
+                                  <option key={field}>{field}</option>
+                                ))}
+                              </select>
                             </label>
                           </div>
                           <label>
@@ -1078,31 +1348,174 @@ export function WidgetSettingsPanel({
                               Card moves are appended to the selected Timeline.
                             </small>
                           </label>
-                          <label>
-                            <span>Columns (`value: Label`, one per line)</span>
-                            <textarea
-                              rows={7}
-                              value={(Array.isArray(kanbanDefinition.columns)
-                                ? kanbanDefinition.columns
-                                : []).map((item) =>
-                                  typeof item === "string"
-                                    ? `${item}: ${item}`
-                                    : `${item.value || ""}: ${
-                                      item.label || item.value || ""
-                                    }`
-                                ).join("\n")}
+                          <section className="kanban-settings-columns">
+                            <strong>Columns</strong>
+                            {(Array.isArray(kanbanDefinition.columns)
+                              ? kanbanDefinition.columns
+                              : []).map((item) =>
+                                typeof item === "string"
+                                  ? { value: item, label: item }
+                                  : {
+                                    value: item.value || "",
+                                    label: item.label || item.value || "",
+                                  }
+                              ).map((column, index, columns) => (
+                                <div
+                                  className="kanban-file-column"
+                                  key={`${column.value}:${index}`}
+                                >
+                                  <input
+                                    value={column.value}
+                                    placeholder="Value"
+                                    onChange={(event) =>
+                                      updateKanbanDefinition({
+                                        ...kanbanDefinition,
+                                        columns: columns.map((
+                                          current,
+                                          itemIndex,
+                                        ) =>
+                                          itemIndex === index
+                                            ? {
+                                              ...current,
+                                              value: event.target.value,
+                                            }
+                                            : current
+                                        ),
+                                      })}
+                                  />
+                                  <input
+                                    value={column.label}
+                                    placeholder="Label"
+                                    onChange={(event) =>
+                                      updateKanbanDefinition({
+                                        ...kanbanDefinition,
+                                        columns: columns.map((
+                                          current,
+                                          itemIndex,
+                                        ) =>
+                                          itemIndex === index
+                                            ? {
+                                              ...current,
+                                              label: event.target.value,
+                                            }
+                                            : current
+                                        ),
+                                      })}
+                                  />
+                                  <button
+                                    type="button"
+                                    title="Move column up"
+                                    disabled={index === 0}
+                                    onClick={() => {
+                                      const next = [...columns];
+                                      [next[index - 1], next[index]] = [
+                                        next[index],
+                                        next[index - 1],
+                                      ];
+                                      updateKanbanDefinition({
+                                        ...kanbanDefinition,
+                                        columns: next,
+                                      });
+                                    }}
+                                  >
+                                    <ChevronUp size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Move column down"
+                                    disabled={index === columns.length - 1}
+                                    onClick={() => {
+                                      const next = [...columns];
+                                      [next[index], next[index + 1]] = [
+                                        next[index + 1],
+                                        next[index],
+                                      ];
+                                      updateKanbanDefinition({
+                                        ...kanbanDefinition,
+                                        columns: next,
+                                      });
+                                    }}
+                                  >
+                                    <ChevronDown size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Remove column"
+                                    onClick={() =>
+                                      updateKanbanDefinition({
+                                        ...kanbanDefinition,
+                                        columns: columns.filter((
+                                          _,
+                                          itemIndex,
+                                        ) => itemIndex !== index),
+                                      })}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              ))}
+                            <button
+                              type="button"
+                              className="kanban-file-add"
+                              onClick={() => {
+                                const columns =
+                                  Array.isArray(kanbanDefinition.columns)
+                                    ? kanbanDefinition.columns
+                                    : [];
+                                updateKanbanDefinition({
+                                  ...kanbanDefinition,
+                                  columns: [...columns, {
+                                    value: `column-${columns.length + 1}`,
+                                    label: "New column",
+                                  }],
+                                });
+                              }}
+                            >
+                              <Plus size={13} />Add column
+                            </button>
+                          </section>
+                          <label className="kanban-file-check">
+                            <input
+                              type="checkbox"
+                              checked={kanbanDefinition.showUnspecified ===
+                                true}
                               onChange={(event) =>
                                 updateKanbanDefinition({
                                   ...kanbanDefinition,
-                                  columns: event.target.value.split(/\r?\n/)
-                                    .filter(Boolean).map((line) => {
-                                      const [value, ...label] = line.split(":");
-                                      return {
-                                        value: value.trim(),
-                                        label: label.join(":").trim() ||
-                                          value.trim(),
-                                      };
-                                    }),
+                                  showUnspecified: event.target.checked,
+                                })}
+                            />
+                            <span>Show unmatched cards</span>
+                          </label>
+                          <KanbanDisplayFieldsEditor
+                            definition={kanbanDefinition}
+                            fieldNames={kanbanFolderFields}
+                            onChange={updateKanbanDefinition}
+                          />
+                          <KanbanFilterEditor
+                            definition={kanbanDefinition}
+                            fieldNames={kanbanFolderFields}
+                            onChange={updateKanbanDefinition}
+                          />
+                          <label>
+                            <span>Limit</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="500"
+                              value={typeof kanbanDefinition.limit === "number"
+                                ? kanbanDefinition.limit
+                                : 100}
+                              onChange={(event) =>
+                                updateKanbanDefinition({
+                                  ...kanbanDefinition,
+                                  limit: Math.max(
+                                    1,
+                                    Math.min(
+                                      500,
+                                      Number(event.target.value) || 100,
+                                    ),
+                                  ),
                                 })}
                             />
                           </label>
@@ -1117,6 +1530,7 @@ export function WidgetSettingsPanel({
                       "kanban",
                       "Choose another .kanban",
                       /\.kanban$/i,
+                      fileList,
                     )}
                   </>
                 )
@@ -1144,6 +1558,7 @@ export function WidgetSettingsPanel({
                         "kanban",
                         "Import an existing .kanban",
                         /\.kanban$/i,
+                        fileList,
                       )}
                   </>
                 )}
@@ -1294,12 +1709,12 @@ export function WidgetSettingsPanel({
               : workflowAI.path;
             if (
               workflowAI.mode === "create" &&
-              await readFile(target).catch(() => null)
+              await readWorkspaceFile(target).catch(() => null)
             ) throw new Error(`A file already exists at ${target}.`);
             const content = workflowAI.mode === "modify"
               ? replaceWorkflowDefinition(workflowAI.markdown, result.block)
               : workflowYamlFromContent(result.block);
-            await writeFile(target, content);
+            await writeWorkspaceFile(target, content);
             onChange({ ...widget.config, workflow: target });
             setFiles((current) => [...new Set([...current, target])]);
             setWorkflowAI(null);

@@ -45,40 +45,6 @@ Deno.test("wiki embeds try workspace-root and source-relative paths", () => {
   );
 });
 
-Deno.test("wiki links preserve workspace URI roots", () => {
-  assertEquals(pathDirName("files://current.md"), "files://");
-  assertEquals(pathDirName("files://folder/current.md"), "files://folder");
-  assertEquals(pathDirName("workspace://current.md"), "workspace://");
-  assertEquals(
-    pathDirName("workspace://folder/current.md"),
-    "workspace://folder",
-  );
-  assertEquals(wikiTargetToPath("files://", "Note"), "files://Note.md");
-  assertEquals(
-    wikiTargetToPath("files://folder", "Note"),
-    "files://folder/Note.md",
-  );
-});
-
-Deno.test("scoped Markdown links preserve PDF Files and Workspace paths", () => {
-  assertEquals(
-    localHrefToPathCandidates(
-      "Dashboards/Timeline/Timeline",
-      "files://Research/Paper.pdf",
-    ),
-    ["files://Research/Paper.pdf"],
-  );
-  assertEquals(
-    localHrefToPathCandidates(
-      "Dashboards/Timeline/Timeline",
-      "workspace://Sources/Paper.pdf",
-    ),
-    ["workspace://Sources/Paper.pdf"],
-  );
-  assertEquals(isLocalDocumentHref("files://Research/Paper.pdf"), true);
-  assertEquals(isLocalDocumentHref("workspace://Sources/Paper.pdf"), true);
-});
-
 Deno.test("root-relative markdown links resolve from the workspace root", () => {
   assertEquals(localHrefToPathCandidates("task", "/task/cron-parent.md"), [
     "task/cron-parent.md",

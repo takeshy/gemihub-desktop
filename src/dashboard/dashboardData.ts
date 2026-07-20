@@ -2,6 +2,7 @@ import yaml from "js-yaml";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 import {
   fileInventory,
+  listWorkspaceDirectoryFiles,
   listWorkspaceFiles,
   readFile,
   readWorkspaceFile,
@@ -79,17 +80,28 @@ function tags(frontmatter: Record<string, unknown>, content: string): string[] {
 
 export async function loadDashboardRows(
   folder = "",
-  workspaceOnly = false,
+  scope: "workspace" | "files" = "files",
 ): Promise<DashboardDataRow[]> {
+  const workspace = scope === "workspace";
   const entries =
-    (workspaceOnly ? await listWorkspaceFiles() : await fileInventory()).filter(
-      (entry) =>
-        !entry.binary && /\.md(?:own)?$/i.test(entry.path) &&
-        inFolder(entry.path, folder),
-    ).slice(0, 1000);
+    (workspace && folder
+      ? (await listWorkspaceDirectoryFiles(folder)).map((path) => ({
+        path,
+        binary: false,
+        modTime: 0,
+        createdTime: 0,
+        size: 0,
+      }))
+      : workspace
+      ? await listWorkspaceFiles()
+      : await fileInventory()).filter(
+        (entry) =>
+          !entry.binary && /\.md(?:own)?$/i.test(entry.path) &&
+          inFolder(entry.path, folder),
+      ).slice(0, 1000);
   const rows: Array<DashboardDataRow | null> = await Promise.all(
     entries.map(async (entry): Promise<DashboardDataRow | null> => {
-      const file = workspaceOnly
+      const file = workspace
         ? await readWorkspaceFile(entry.path)
         : await readFile(entry.path);
       if (!file) return null;

@@ -6,13 +6,19 @@ import {
   getEncryptedFileMetadata,
   reencryptFileContent,
 } from "./hybridEncryption";
-import { deleteFile, readFile, writeFile } from "./wailsBackend";
+import {
+  deleteFileRef,
+  type FileRef,
+  fileRef,
+  readFileRef,
+  writeFileRef,
+} from "./fileRef";
 
 export const ENCRYPTED_EXTENSION = ".encrypted";
 
 export interface DecryptedWorkspaceFile {
-  encryptedPath: string;
-  originalPath: string;
+  encryptedFile: FileRef;
+  originalFile: FileRef;
   originalName: string;
   mimeType: string;
   content: string;
@@ -22,8 +28,7 @@ export interface DecryptedWorkspaceFile {
 const sessionPasswords = new Map<string, string>();
 
 function fileName(path: string): string {
-  return path.replace(/^(?:workspace|files):\/\//, "").split(/[\\/]/).pop() ||
-    path;
+  return path.split(/[\\/]/).pop() || path;
 }
 
 function withoutEncryptedExtension(path: string): string {
@@ -60,14 +65,18 @@ function mimeFromContent(name: string, content: string): string {
   } as Record<string, string>)[extension] || "application/octet-stream";
 }
 
-export function rememberFilePassword(path: string, password: string): void {
-  const key = path.replace(/^files:\/\//i, "");
+function passwordKey(file: FileRef): string {
+  return `${file.scope}:${file.path}`;
+}
+
+export function rememberFilePassword(file: FileRef, password: string): void {
+  const key = passwordKey(file);
   if (password) sessionPasswords.set(key, password);
   else sessionPasswords.delete(key);
 }
 
-export function rememberedFilePassword(path: string): string {
-  return sessionPasswords.get(path.replace(/^files:\/\//i, "")) || "";
+export function rememberedFilePassword(file: FileRef): string {
+  return sessionPasswords.get(passwordKey(file)) || "";
 }
 
 export function encryptedPathFor(path: string): string {
@@ -77,17 +86,20 @@ export function encryptedPathFor(path: string): string {
 }
 
 export async function encryptWorkspaceFile(
-  path: string,
+  sourceFile: FileRef,
   password: string,
   extraMetadata: Record<string, string> = {},
   description = "",
-): Promise<string> {
-  const source = await readFile(path);
-  if (!source) throw new Error(`File not found: ${path}`);
-  const originalName = source.fileName || fileName(path);
+): Promise<FileRef> {
+  const source = await readFileRef(sourceFile);
+  if (!source) throw new Error(`File not found: ${sourceFile.path}`);
+  const originalName = source.fileName || fileName(sourceFile.path);
   const keys = await generateKeyPair();
   const protectedKey = await encryptPrivateKey(keys.privateKey, password);
-  const destination = encryptedPathFor(path);
+  const destination = fileRef(
+    sourceFile.scope,
+    encryptedPathFor(sourceFile.path),
+  );
   const encrypted = await encryptFileContent(
     source.content,
     keys.publicKey,
@@ -103,28 +115,28 @@ export async function encryptWorkspaceFile(
       },
     },
   );
-  await writeFile(destination, encrypted);
-  if (destination !== path) await deleteFile(path);
+  await writeFileRef(destination, encrypted);
+  if (destination.path !== sourceFile.path) await deleteFileRef(sourceFile);
   rememberFilePassword(destination, password);
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   return destination;
 }
 
 export async function openEncryptedWorkspaceFile(
-  path: string,
+  encryptedFile: FileRef,
   password: string,
 ): Promise<DecryptedWorkspaceFile> {
-  const source = await readFile(path);
-  if (!source) throw new Error(`File not found: ${path}`);
+  const source = await readFileRef(encryptedFile);
+  if (!source) throw new Error(`File not found: ${encryptedFile.path}`);
   const metadata = getEncryptedFileMetadata(source.content).publicMetadata ||
     {};
-  const fallbackPath = withoutEncryptedExtension(path);
+  const fallbackPath = withoutEncryptedExtension(encryptedFile.path);
   const originalName = metadata.originalName || fileName(fallbackPath);
   const content = await decryptFileContent(source.content, password);
-  rememberFilePassword(path, password);
+  rememberFilePassword(encryptedFile, password);
   return {
-    encryptedPath: path,
-    originalPath: fallbackPath,
+    encryptedFile,
+    originalFile: fileRef(encryptedFile.scope, fallbackPath),
     originalName,
     mimeType: metadata.mimeType || mimeFromContent(originalName, content),
     content,
@@ -142,19 +154,19 @@ export async function saveEncryptedWorkspaceFile(
     content,
     password,
   );
-  await writeFile(file.encryptedPath, encryptedContent);
-  rememberFilePassword(file.encryptedPath, password);
+  await writeFileRef(file.encryptedFile, encryptedContent);
+  rememberFilePassword(file.encryptedFile, password);
   return { ...file, content, encryptedContent };
 }
 
 export async function decryptWorkspaceFile(
-  path: string,
+  encryptedFile: FileRef,
   password: string,
-): Promise<string> {
-  const file = await openEncryptedWorkspaceFile(path, password);
-  await writeFile(file.originalPath, file.content);
-  await deleteFile(path);
-  rememberFilePassword(path, "");
+): Promise<FileRef> {
+  const file = await openEncryptedWorkspaceFile(encryptedFile, password);
+  await writeFileRef(file.originalFile, file.content);
+  await deleteFileRef(encryptedFile);
+  rememberFilePassword(encryptedFile, "");
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
-  return file.originalPath;
+  return file.originalFile;
 }

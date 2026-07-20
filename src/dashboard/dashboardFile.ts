@@ -1,11 +1,11 @@
 import yaml from "js-yaml";
 import {
-  createDirectory,
-  deleteFile,
+  createWorkspaceDirectory,
+  deleteWorkspaceFile,
   listWorkspaceFiles,
-  readFile,
-  renameFile,
-  writeFile,
+  readWorkspaceFile,
+  renameWorkspaceFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import {
   DASHBOARD_EXT,
@@ -71,6 +71,7 @@ export function parseDashboard(content: string): DashboardData | null {
     }
     const root = value as Record<string, unknown>;
     const parsedGrid = grid(root.grid);
+    const widgetIds = new Set<string>();
     const widgets: DashboardWidget[] = Array.isArray(root.widgets)
       ? root.widgets.flatMap((raw, index) => {
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
@@ -94,11 +95,16 @@ export function parseDashboard(content: string): DashboardData | null {
             !Array.isArray(record.config)
           ? record.config as Record<string, unknown>
           : {};
+        const requestedId = typeof record.id === "string"
+          ? record.id.trim()
+          : "";
+        const id = requestedId && !widgetIds.has(requestedId)
+          ? requestedId
+          : crypto.randomUUID();
+        widgetIds.add(id);
         return [{
           ...record,
-          id: typeof record.id === "string" && record.id
-            ? record.id
-            : crypto.randomUUID(),
+          id,
           type: typeof record.type === "string" ? record.type : "unknown",
           title: typeof record.title === "string" ? record.title : widgetLabel(
             typeof record.type === "string" ? record.type : "unknown",
@@ -195,7 +201,7 @@ export async function listDashboardFiles(): Promise<DashboardFileEntry[]> {
 export async function loadDashboard(
   path: string,
 ): Promise<DashboardData | null> {
-  const file = await readFile(`workspace://${path}`);
+  const file = await readWorkspaceFile(path);
   return file ? parseDashboard(file.content) : null;
 }
 
@@ -203,8 +209,8 @@ export async function saveDashboard(
   path: string,
   data: DashboardData,
 ): Promise<void> {
-  await createDirectory(`workspace://${DASHBOARD_FOLDER}`);
-  await writeFile(`workspace://${path}`, serializeDashboard(data));
+  await createWorkspaceDirectory(DASHBOARD_FOLDER);
+  await writeWorkspaceFile(path, serializeDashboard(data));
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
 }
 
@@ -215,7 +221,7 @@ export async function createDashboard(
   if (!path) {
     throw new Error("Dashboard name must not contain path separators.");
   }
-  if (await readFile(`workspace://${path}`)) {
+  if (await readWorkspaceFile(path)) {
     throw new Error(`Dashboard already exists: ${name}`);
   }
   const data = emptyDashboard();
@@ -231,17 +237,17 @@ export async function renameDashboard(
   if (!next) {
     throw new Error("Dashboard name must not contain path separators.");
   }
-  if (next !== path && await readFile(`workspace://${next}`)) {
+  if (next !== path && await readWorkspaceFile(next)) {
     throw new Error(`Dashboard already exists: ${name}`);
   }
   if (next !== path) {
-    await renameFile(`workspace://${path}`, `workspace://${next}`);
+    await renameWorkspaceFile(path, next);
   }
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   return next;
 }
 
 export async function removeDashboard(path: string): Promise<void> {
-  await deleteFile(`workspace://${path}`);
+  await deleteWorkspaceFile(path);
   window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
 }

@@ -1,4 +1,14 @@
-import type { PluginView } from "./types";
+import type { FileRef } from "../lib/fileRef";
+import type { PluginAPI, PluginView } from "./types";
+
+export async function readPluginViewFile(
+  api: PluginAPI,
+  file: FileRef,
+): Promise<string | undefined> {
+  if (file.scope === "workspace") return await api.workspaceFiles?.read(file.path);
+  if (file.scope === "files") return await api.files?.read(file.path);
+  return undefined;
+}
 
 /** Normalize the legacy Desktop representation of a companion main view. */
 export function normalizeDesktopPluginView(view: PluginView): PluginView {

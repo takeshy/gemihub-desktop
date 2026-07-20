@@ -434,6 +434,7 @@ interface WailsAppApi {
     leaveLink: boolean,
   ) => Promise<WorkspaceDirectoryMoveResult>;
   ListWorkspaceFiles: () => Promise<DirectoryFileEntry[]>;
+  ListWorkspaceDirectoryFiles: (path: string) => Promise<string[]>;
   ReadWorkspaceFile: (path: string) => Promise<LocalFileResult>;
   WriteWorkspaceFile: (path: string, content: string) => Promise<void>;
   WriteWorkspaceBinaryFile: (
@@ -445,6 +446,7 @@ interface WailsAppApi {
   DeleteWorkspaceFile: (path: string) => Promise<void>;
   ReadFile: (path: string) => Promise<LocalFileResult>;
   OpenLocalFileDefault: (path: string) => Promise<void>;
+  OpenWorkspaceFileDefault: (path: string) => Promise<void>;
   WriteFile: (path: string, content: string) => Promise<void>;
   ReadWorkspaceStateFile: (name: string) => Promise<string>;
   WriteWorkspaceStateFile: (name: string, content: string) => Promise<void>;
@@ -713,6 +715,12 @@ export async function listWorkspaceFiles(): Promise<DirectoryFileEntry[]> {
   return await appApi()?.ListWorkspaceFiles() ?? [];
 }
 
+export async function listWorkspaceDirectoryFiles(
+  path: string,
+): Promise<string[]> {
+  return await appApi()?.ListWorkspaceDirectoryFiles(path) ?? [];
+}
+
 export async function readWorkspaceFile(
   path: string,
 ): Promise<LocalFileResult | null> {
@@ -726,6 +734,14 @@ export async function openLocalFileDefault(path: string): Promise<void> {
     throw new Error("Opening a file externally requires the desktop app.");
   }
   await api.OpenLocalFileDefault(path);
+}
+
+export async function openWorkspaceFileDefault(path: string): Promise<void> {
+  const api = appApi();
+  if (!api) {
+    throw new Error("Opening a Workspace file requires the desktop app.");
+  }
+  await api.OpenWorkspaceFileDefault(path);
 }
 
 export async function writeWorkspaceFile(
@@ -1326,20 +1342,33 @@ type WailsFileDropCallback = (
 ) => void;
 
 const wailsFileDropCallbacks = new Set<WailsFileDropCallback>();
+let wailsFileDropListening = false;
+let wailsFileDropOffTimer = 0;
 
 export function onWailsFileDrop(
   callback: WailsFileDropCallback,
 ): (() => void) | null {
   const runtime = window.runtime;
   if (!runtime?.OnFileDrop || !runtime.OnFileDropOff) return null;
+  if (wailsFileDropOffTimer) {
+    window.clearTimeout(wailsFileDropOffTimer);
+    wailsFileDropOffTimer = 0;
+  }
   wailsFileDropCallbacks.add(callback);
-  if (wailsFileDropCallbacks.size === 1) {
+  if (!wailsFileDropListening) {
+    wailsFileDropListening = true;
     runtime.OnFileDrop((x, y, paths) => {
       for (const listener of wailsFileDropCallbacks) listener(x, y, paths);
     }, false);
   }
   return () => {
     wailsFileDropCallbacks.delete(callback);
-    if (wailsFileDropCallbacks.size === 0) runtime.OnFileDropOff();
+    if (wailsFileDropCallbacks.size > 0 || wailsFileDropOffTimer) return;
+    wailsFileDropOffTimer = window.setTimeout(() => {
+      wailsFileDropOffTimer = 0;
+      if (wailsFileDropCallbacks.size > 0 || !wailsFileDropListening) return;
+      runtime.OnFileDropOff();
+      wailsFileDropListening = false;
+    }, 0);
   };
 }

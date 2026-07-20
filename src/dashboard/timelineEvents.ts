@@ -92,7 +92,7 @@ export function memoTimelineBody(
   quote: string,
   body: string,
 ): string {
-  const linkTarget = filePath.replace(/^files:\/\//i, "");
+  const linkTarget = filePath;
   const quoted = quote.trim()
     ? `\n> ${quote.trim().split(/\r?\n/).join("\n> ")}`
     : "";

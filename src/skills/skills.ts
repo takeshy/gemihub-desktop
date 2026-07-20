@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import { listWorkspaceFiles, readWorkspaceFile, writeFile, type ChatToolDefinition } from "../lib/wailsBackend";
+import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile, type ChatToolDefinition } from "../lib/wailsBackend";
 import { getBuiltinSkillMetadata, isBuiltinSkillPath, loadBuiltinSkill } from "./builtinSkills";
 import { findWorkflowBlocks } from "../workflow/parser";
 
@@ -118,7 +118,7 @@ export async function syncSkillWorkflowInputVariables(workflowPath: string, work
   if (!skillFile) return null;
   const updated = updateSkillWorkflowInputVariables(skillFile.content, relativePath, workflowMarkdown);
   if (!updated) return null;
-  await writeFile(skillPath, updated);
+  await writeWorkspaceFile(skillPath, updated);
   return { path: skillPath, content: updated };
 }
 

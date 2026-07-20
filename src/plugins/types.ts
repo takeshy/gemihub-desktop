@@ -8,6 +8,7 @@ import type {
   FileTreeNode,
 } from "../lib/wailsBackend";
 import type { PluginWidgetDefinition } from "../dashboard/widgetRegistry";
+import type { FileScope } from "../lib/fileRef";
 
 export type PluginPermission =
   | "files"
@@ -54,6 +55,8 @@ export interface PluginViewProps {
   /** Web-compatible alias for the currently opened file path. */
   fileId?: string;
   filePath?: string;
+  /** Storage root for filePath. Paths remain root-relative. */
+  fileRoot?: FileScope;
   fileName?: string;
   fileContent?: string;
 }
