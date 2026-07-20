@@ -175,6 +175,8 @@ export interface ChatMessage {
   skillsUsed?: string[];
   ragUsed?: boolean;
   ragSources?: Array<{ path: string; pageLabel?: string; score?: number }>;
+  webSearchUsed?: boolean;
+  webSearchSources?: WebSearchSource[];
   thinking?: string;
   thinkingEnabled?: boolean;
   usage?: ChatUsage;
@@ -183,6 +185,11 @@ export interface ChatMessage {
   generatedImages?: GeneratedImage[];
   failedWorkflowPath?: string;
   mcpApps?: McpAppInfo[];
+}
+
+export interface WebSearchSource {
+  title: string;
+  url: string;
 }
 
 export interface McpAppInfo {
@@ -305,6 +312,7 @@ export interface ChatResult {
   thinking?: string;
   usage?: ChatUsage;
   generatedImages?: GeneratedImage[];
+  webSearchSources?: WebSearchSource[];
 }
 
 export interface GeneratedImage {

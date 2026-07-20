@@ -42,6 +42,7 @@ Deno.test("Gemini model discovery keeps API keys out of URLs", async () => {
       availableModels: [],
       enabled: true,
       local: false,
+      openAICompatible: false,
     });
     assertEquals(models, ["gemini-test"]);
     assertEquals(received?.url.includes("top-secret"), false);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Check, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { fetchProviderModels } from "./modelProviders";
 import {
   type ChatSettings,
@@ -7,6 +7,7 @@ import {
   newModelProfile,
   selectModelProfile,
   syncActiveModelProfile,
+  updateModelProfile,
 } from "./settings";
 
 export function ModelProviderManager(
@@ -20,17 +21,7 @@ export function ModelProviderManager(
   const [error, setError] = useState("");
   const synced = syncActiveModelProfile(settings);
   const patch = (id: string, changes: Partial<ModelProviderProfile>) => {
-    const next = {
-      ...synced,
-      modelProfiles: synced.modelProfiles.map((item) =>
-        item.id === id ? { ...item, ...changes } : item
-      ),
-    };
-    onChange(
-      next.selectedModelProfileId === id
-        ? selectModelProfile(next, id, changes.model)
-        : next,
-    );
+    onChange(updateModelProfile(synced, id, changes));
   };
   const add = (local: boolean) => {
     const profile = newModelProfile("openai", local);
@@ -105,32 +96,50 @@ export function ModelProviderManager(
               profile.id === synced.selectedModelProfileId ? "selected" : ""
             }`}
           >
-            <button
-              type="button"
-              className="model-provider-summary"
-              onClick={() => {
-                onChange(selectModelProfile(synced, profile.id));
-                setEditing(editing === profile.id ? "" : profile.id);
-              }}
-            >
-              <span>
-                <strong>{profile.name}</strong>
-                <small>
-                  {profile.local ? "Local LLM" : profile.provider} ·{" "}
-                  {profile.enabledModels.length}{" "}
-                  model{profile.enabledModels.length === 1 ? "" : "s"}
-                </small>
-              </span>
-              <i className={profile.enabledModels.length ? "configured" : ""}>
-                {profile.enabledModels.length
-                  ? (
-                    <>
-                      <Check size={10} />Ready
-                    </>
-                  )
-                  : "Configure"}
-              </i>
-            </button>
+            <div className="model-provider-row">
+              <button
+                type="button"
+                className="model-provider-summary"
+                onClick={() => onChange(selectModelProfile(synced, profile.id))}
+              >
+                <span>
+                  <strong>{profile.name}</strong>
+                  <small>
+                    {profile.local
+                      ? "Local LLM"
+                      : profile.provider === "openai"
+                      ? profile.openAICompatible
+                        ? "OpenAI Compatible"
+                        : "OpenAI"
+                      : profile.provider} · {profile.enabledModels.length}{" "}
+                    model{profile.enabledModels.length === 1 ? "" : "s"}
+                  </small>
+                </span>
+                <i className={profile.enabledModels.length ? "configured" : ""}>
+                  {profile.enabledModels.length
+                    ? (
+                      <>
+                        <Check size={10} />Ready
+                      </>
+                    )
+                    : "Configure"}
+                </i>
+              </button>
+              <button
+                type="button"
+                className="model-provider-edit"
+                title={editing === profile.id
+                  ? "Close editor"
+                  : "Edit provider"}
+                aria-label={editing === profile.id
+                  ? "Close provider editor"
+                  : `Edit ${profile.name}`}
+                onClick={() =>
+                  setEditing(editing === profile.id ? "" : profile.id)}
+              >
+                <Pencil size={13} />
+              </button>
+            </div>
             {editing === profile.id && (
               <div className="model-provider-editor">
                 <div className="rag-number-grid">
@@ -145,27 +154,44 @@ export function ModelProviderManager(
                   <label>
                     <span>Type</span>
                     <select
-                      value={profile.local ? "local" : profile.provider}
+                      value={profile.local
+                        ? "local"
+                        : profile.provider === "openai" &&
+                            profile.openAICompatible
+                        ? "openai-compatible"
+                        : profile.provider}
                       onChange={(event) => {
                         const value = event.target.value;
                         if (value === "local") {
                           patch(profile.id, {
                             local: true,
                             provider: "openai",
+                            openAICompatible: true,
+                            endpoint: "http://127.0.0.1:11434/v1",
                           });
                         } else {
-                          const provider =
-                            value as ModelProviderProfile["provider"];
-                          const fresh = newModelProfile(provider);
+                          const compatible = value === "openai-compatible";
+                          const provider = compatible
+                            ? "openai"
+                            : value as ModelProviderProfile["provider"];
+                          const fresh = newModelProfile(
+                            provider,
+                            false,
+                            compatible,
+                          );
                           patch(profile.id, {
                             local: false,
                             provider,
+                            openAICompatible: compatible,
                             endpoint: fresh.endpoint,
                           });
                         }
                       }}
                     >
-                      <option value="openai">OpenAI compatible</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="openai-compatible">
+                        OpenAI Compatible
+                      </option>
                       <option value="gemini">Google Gemini</option>
                       <option value="anthropic">Anthropic</option>
                       <option value="local">Local LLM</option>
@@ -188,6 +214,7 @@ export function ModelProviderManager(
                   <input
                     type="password"
                     value={profile.apiKey}
+                    autoComplete="off"
                     onChange={(event) =>
                       patch(profile.id, { apiKey: event.target.value })}
                   />

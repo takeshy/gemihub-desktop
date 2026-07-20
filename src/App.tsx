@@ -3104,56 +3104,32 @@ export default function App() {
                             settings={chatSettings}
                             onChange={setChatSettings}
                           />
-                          <label className="settings-field">
-                            <span>Selected provider</span>
-                            <select
-                              className="settings-select"
-                              value={chatSettings.provider}
-                              onChange={(event) => {
-                                const provider = event.target
-                                  .value as ChatProvider;
-                                setChatSettings((current) =>
-                                  switchChatProvider(current, provider)
-                                );
-                                if (provider === "cli") {
-                                  setSettingsSection("cli");
-                                }
-                              }}
-                            >
-                              <option value="openai">OpenAI compatible</option>
-                              <option value="gemini">Google Gemini</option>
-                              <option value="vertex">Vertex AI</option>
-                              <option value="anthropic">Anthropic</option>
-                              <option value="cli">Local CLI</option>
-                            </select>
-                          </label>
                           {chatSettings.provider !== "vertex" && (
-                            <label className="settings-field">
-                              <span>Endpoint</span>
-                              <input
-                                value={chatSettings.endpoint}
-                                onChange={(event) =>
-                                  setChatSettings((current) => ({
-                                    ...current,
-                                    endpoint: event.target.value,
-                                  }))}
-                              />
-                            </label>
+                            <button
+                              type="button"
+                              className="settings-choice"
+                              onClick={() =>
+                                setChatSettings((current) =>
+                                  switchChatProvider(current, "vertex")
+                                )}
+                            >
+                              Configure Vertex AI
+                            </button>
                           )}
-                          <label className="settings-field">
-                            <span>Model</span>
-                            <input
-                              value={chatSettings.model}
-                              onChange={(event) =>
-                                setChatSettings((current) => ({
-                                  ...current,
-                                  model: event.target.value,
-                                }))}
-                            />
-                          </label>
                           {chatSettings.provider === "vertex"
                             ? (
                               <>
+                                <label className="settings-field">
+                                  <span>Vertex AI model</span>
+                                  <input
+                                    value={chatSettings.model}
+                                    onChange={(event) =>
+                                      setChatSettings((current) => ({
+                                        ...current,
+                                        model: event.target.value,
+                                      }))}
+                                  />
+                                </label>
                                 <section className="vertex-oauth-settings">
                                   <div>
                                     <strong>Google OAuth</strong>
@@ -3327,20 +3303,7 @@ export default function App() {
                                 </details>
                               </>
                             )
-                            : (
-                              <label className="settings-field">
-                                <span>API key</span>
-                                <input
-                                  type="password"
-                                  value={chatSettings.apiKey}
-                                  onChange={(event) =>
-                                    setChatSettings((current) => ({
-                                      ...current,
-                                      apiKey: event.target.value,
-                                    }))}
-                                />
-                              </label>
-                            )}
+                            : null}
                           <label className="settings-field">
                             <span>System prompt</span>
                             <textarea
@@ -3356,7 +3319,7 @@ export default function App() {
                           <small className="settings-hint">
                             {chatSettings.provider === "vertex"
                               ? "Vertex AI uses the connected Google account; API keys are not supported."
-                              : "API keys are kept in this app's WebView local storage."}
+                              : "Provider credentials can only be changed from a provider card's pencil button."}
                             {" "}
                             Proposed API file writes still require Apply.
                           </small>
@@ -4761,7 +4724,7 @@ export default function App() {
                                         ? "Gemini"
                                         : provider === "vertex"
                                         ? "Vertex AI"
-                                        : "OpenAI compatible"}
+                                        : "OpenAI / Compatible"}
                                     </option>
                                   ))}
                               </select>
@@ -5546,7 +5509,7 @@ export default function App() {
                           {discordProviders.map((provider) => (
                             <option key={provider} value={provider}>
                               {provider === "openai"
-                                ? "OpenAI compatible"
+                                ? "OpenAI / Compatible"
                                 : provider === "gemini"
                                 ? "Google Gemini"
                                 : provider === "vertex"

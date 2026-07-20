@@ -423,6 +423,17 @@ func TestNativeWebSearchEndpointResolution(t *testing.T) {
 	}
 }
 
+func TestWebSearchSourcesAreSortedAndUseURLAsFallbackTitle(t *testing.T) {
+	sources := webSearchSources(map[string]string{
+		"https://z.example/source": "",
+		"https://a.example/source": "A source",
+		"javascript:alert(1)":       "Unsafe",
+	})
+	if len(sources) != 2 || sources[0].URL != "https://a.example/source" || sources[0].Title != "A source" || sources[1].Title != sources[1].URL {
+		t.Fatalf("unexpected web search sources: %#v", sources)
+	}
+}
+
 func TestChatToolDefinitionsIncludeRegisteredFrontendTool(t *testing.T) {
 	definitions := chatToolDefinitions(ChatRequest{FileToolMode: "none", CustomTools: []ChatToolDefinition{{
 		Name: "run_skill_workflow", Description: "Run an active skill workflow", Parameters: map[string]any{"type": "object"},

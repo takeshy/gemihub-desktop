@@ -21,9 +21,11 @@ the same place. Your workspace becomes the context window.
 GemiHub Desktop brings together three ideas developed in earlier projects:
 
 - the fast document viewing, editing, and source-linked memo experience of
-  **mdwys**;
-- the RAG, OKF, AI Chat, Dashboard, and Workflow features of **GemiHub**;
-- the LLM CLI and local-model integrations explored in **obsidian-llm-hub**.
+  **[mdwys](https://github.com/takeshy/mdwys)**;
+- the RAG, OKF, AI Chat, Dashboard, and Workflow features of
+  **[GemiHub](https://github.com/takeshy/gemihub)**;
+- the LLM CLI and local-model integrations explored in
+  **[obsidian-llm-hub](https://github.com/takeshy/obsidian-llm-hub)**.
 
 The goal is a compact everyday Markdown application that can use AI deeply
 without making an online service mandatory. It is distributed as a single

@@ -21,9 +21,9 @@ AI
 GemiHub
 Desktopは、これまで自作してきた3つのプロジェクトの発想を組み合わせたアプリです。
 
-- **mdwys**の、すぐ開けてメモと出典を結びつけられるドキュメント閲覧・編集体験
-- **GemiHub**の、RAG、OKF、AI Chat、Dashboard、Workflow機能
-- **obsidian-llm-hub**で試してきた、LLM CLIとローカルmodelの連携
+- **[mdwys](https://github.com/takeshy/mdwys)**の、すぐ開けてメモと出典を結びつけられるドキュメント閲覧・編集体験
+- **[GemiHub](https://github.com/takeshy/gemihub)**の、RAG、OKF、AI Chat、Dashboard、Workflow機能
+- **[obsidian-llm-hub](https://github.com/takeshy/obsidian-llm-hub)**で試してきた、LLM CLIとローカルmodelの連携
 
 目標は、オンラインサービスを必須にせず、普段使いできる軽量なMarkdownアプリでAIをフル活用することです。GoやDenoのruntimeを必要としない単一実行ファイルとして配布し、現在のWindows
 amd64 buildは20 MB未満です。

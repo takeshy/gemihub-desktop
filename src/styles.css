@@ -1265,7 +1265,8 @@ body.resizing-side-pane * {
 }
 
 .chat-response-sources span,
-.chat-response-sources button {
+.chat-response-sources button,
+.chat-response-sources a {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1279,18 +1280,27 @@ body.resizing-side-pane * {
   padding: 3px 7px;
 }
 
-.chat-response-sources button {
+.chat-response-sources button,
+.chat-response-sources a {
   max-width: 100%;
   cursor: pointer;
   overflow: hidden;
   color: var(--text);
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-decoration: none;
 }
 
-.chat-response-sources button:hover {
+.chat-response-sources button:hover,
+.chat-response-sources a:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--panel-subtle));
+}
+
+.chat-web-sources {
+  border-top: 0;
+  margin-top: 5px;
+  padding-top: 0;
 }
 
 .chat-response-usage {
@@ -7744,6 +7754,9 @@ body.resizing-side-pane * {
   font-size: 9px;
 }
 .timeline-load-more {
+  display: flex;
+  width: max-content;
+  margin: 6px auto;
   justify-self: center;
   padding: 5px 12px;
 }
@@ -8007,13 +8020,16 @@ body.resizing-side-pane * {
 }
 .kanban-columns {
   display: flex;
+  width: 100%;
   flex: 1;
   align-items: stretch;
   gap: 7px;
-  min-width: max-content;
+  min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-gutter: stable;
   padding: 0 7px 7px;
 }
 .kanban-filter {
@@ -11018,6 +11034,26 @@ body.resizing-modal {
   padding: 10px !important;
   text-align: left;
 }
+.model-provider-row {
+  display: flex;
+  align-items: stretch;
+}
+.model-provider-row .model-provider-summary {
+  flex: 1;
+  min-width: 0;
+}
+.model-provider-edit {
+  flex: none;
+  align-self: center;
+  margin-right: 8px;
+  border: 1px solid var(--border) !important;
+  background: var(--surface-raised) !important;
+  color: var(--text-muted) !important;
+}
+.model-provider-edit:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
 .model-provider-summary > span {
   display: grid;
   min-width: 0;
@@ -12914,6 +12950,8 @@ body.resizing-modal {
 .app-timeline-body > .dashboard-timeline-widget,
 .app-kanban-body > .dashboard-kanban-widget {
   height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 18px;
 }
 

@@ -133,7 +133,7 @@ interface AttachedFile {
 }
 
 const providerNames: Record<ChatProvider, string> = {
-  openai: "OpenAI compatible",
+  openai: "OpenAI / Compatible",
   gemini: "Google Gemini",
   vertex: "Vertex AI",
   anthropic: "Anthropic",
@@ -202,7 +202,9 @@ function supportsNativeWebSearch(settings: ChatSettings): boolean {
     return true;
   }
   if (settings.provider === "cli") return false;
-  if (/^(?:dall-e|gpt-image|grok-imagine-(?:image|video))/i.test(settings.model)) {
+  if (
+    /^(?:dall-e|gpt-image|grok-imagine-(?:image|video))/i.test(settings.model)
+  ) {
     return false;
   }
   try {
@@ -826,7 +828,10 @@ export function ChatPanel({
         void encryptHistoryPayload(serialized, "chat-history").then(
           (encrypted) => {
             if (!cancelled) {
-              return writeWorkspaceStateFile(CHAT_HISTORY_STATE_FILE, encrypted);
+              return writeWorkspaceStateFile(
+                CHAT_HISTORY_STATE_FILE,
+                encrypted,
+              );
             }
           },
         ).catch((caught) =>
@@ -1448,13 +1453,12 @@ export function ChatPanel({
       if (slashMcpNames != null) {
         setActiveMcpServerNames(slashMcpNames);
       }
-      const enabledMcpServers =
-        settings.provider === "cli" ||
+      const enabledMcpServers = settings.provider === "cli" ||
           /(?:image|imagen)/i.test(settings.model)
-          ? []
-          : effectiveMcpServers.filter((server) =>
-            server.enabled && server.verified
-          );
+        ? []
+        : effectiveMcpServers.filter((server) =>
+          server.enabled && server.verified
+        );
       const httpDiscovery = await discoverMcpHttpTools(
         enabledMcpServers.filter((server) => server.transport === "http").map((
           server,
@@ -1693,6 +1697,10 @@ export function ChatPanel({
               : undefined,
             ragUsed: ragContext.length > 0,
             ragSources: ragSources.length ? ragSources : undefined,
+            webSearchUsed: Boolean(result.webSearchSources?.length),
+            webSearchSources: result.webSearchSources?.length
+              ? result.webSearchSources
+              : message.webSearchSources,
             thinking: result.thinking || message.thinking,
             thinkingEnabled: thinkingAvailable ? thinkingEnabled : undefined,
             usage: result.usage,
@@ -1897,6 +1905,26 @@ export function ChatPanel({
                       <FileText size={11} />
                       {groundingSourceLabel(source)}
                     </button>
+                  ))}
+                </div>
+              )
+              : null}
+            {message.role === "assistant" && message.webSearchUsed
+              ? (
+                <div className="chat-response-sources chat-web-sources">
+                  <span className="chat-grounding-badge">
+                    <Search size={11} />Used web search
+                  </span>
+                  {message.webSearchSources?.map((source) => (
+                    <a
+                      key={source.url}
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={source.url}
+                    >
+                      {source.title || source.url}
+                    </a>
                   ))}
                 </div>
               )

@@ -41,6 +41,7 @@ export interface ModelProviderProfile extends APIProviderProfile {
   availableModels: string[];
   enabled: boolean;
   local: boolean;
+  openAICompatible: boolean;
 }
 
 export interface SlashCommand {
@@ -327,9 +328,35 @@ export function selectModelProfile(
   };
 }
 
+export function updateModelProfile(
+  settings: ChatSettings,
+  id: string,
+  changes: Partial<ModelProviderProfile>,
+): ChatSettings {
+  const synced = syncActiveModelProfile(settings);
+  const current = synced.modelProfiles.find((profile) => profile.id === id);
+  if (!current) return synced;
+  const updated = { ...current, ...changes };
+  const next = {
+    ...synced,
+    modelProfiles: synced.modelProfiles.map((profile) =>
+      profile.id === id ? updated : profile
+    ),
+  };
+  if (next.selectedModelProfileId !== id) return next;
+  return {
+    ...next,
+    provider: updated.provider,
+    endpoint: updated.endpoint,
+    apiKey: updated.apiKey,
+    model: changes.model ?? updated.model ?? updated.enabledModels[0] ?? "",
+  };
+}
+
 export function newModelProfile(
   provider: ModelProviderProfile["provider"] = "openai",
   local = false,
+  openAICompatible = false,
 ): ModelProviderProfile {
   const defaults = providerDefaults(provider);
   return {
@@ -337,18 +364,23 @@ export function newModelProfile(
     name: local
       ? "Local LLM"
       : provider === "openai"
-      ? "OpenAI"
+      ? openAICompatible ? "OpenAI Compatible" : "OpenAI"
       : provider === "gemini"
       ? "Google Gemini"
       : "Anthropic",
     provider,
-    endpoint: local ? "http://127.0.0.1:11434/v1" : defaults.endpoint,
+    endpoint: local
+      ? "http://127.0.0.1:11434/v1"
+      : openAICompatible
+      ? ""
+      : defaults.endpoint,
     apiKey: "",
     model: "",
     enabledModels: [],
     availableModels: [],
     enabled: true,
     local,
+    openAICompatible: local || openAICompatible,
     vertexProjectId: "",
     vertexLocation: "global",
     vertexOAuthClientId: "",
@@ -478,10 +510,16 @@ export function loadChatSettings(): ChatSettings {
         ? parsed.modelProfiles
         : [];
     const migratedProfiles: ModelProviderProfile[] = legacyProfiles.length
-      ? legacyProfiles.map((item) => ({
-        ...newModelProfile(item.provider, item.local),
-        ...item,
-      }))
+      ? legacyProfiles.map((item) => {
+        const compatible = item.provider === "openai" &&
+          (item.local || (item.endpoint !== "" &&
+            providerEndpointHost(item.endpoint) !== "api.openai.com"));
+        return {
+          ...newModelProfile(item.provider, item.local, compatible),
+          ...item,
+          openAICompatible: item.openAICompatible ?? compatible,
+        };
+      })
       : (["openai", "gemini", "anthropic"] as const).flatMap((kind) => {
         const profile = kind === provider
           ? profileFromSettings(
@@ -565,9 +603,17 @@ export function loadChatSettings(): ChatSettings {
             toolHints,
             verified,
             oauth: server.oauth === true,
-            oauthClientId: typeof server.oauthClientId === "string" ? server.oauthClientId : "",
-            oauthClientSecret: typeof server.oauthClientSecret === "string" ? server.oauthClientSecret : "",
-            oauthScopes: Array.isArray(server.oauthScopes) ? server.oauthScopes.filter((scope): scope is string => typeof scope === "string") : [],
+            oauthClientId: typeof server.oauthClientId === "string"
+              ? server.oauthClientId
+              : "",
+            oauthClientSecret: typeof server.oauthClientSecret === "string"
+              ? server.oauthClientSecret
+              : "",
+            oauthScopes: Array.isArray(server.oauthScopes)
+              ? server.oauthScopes.filter((scope): scope is string =>
+                typeof scope === "string"
+              )
+              : [],
           };
         })
         : [],
@@ -595,6 +641,14 @@ export function loadChatSettings(): ChatSettings {
     };
   } catch {
     return defaultChatSettings;
+  }
+}
+
+function providerEndpointHost(endpoint: string): string {
+  try {
+    return new URL(endpoint).hostname.toLowerCase();
+  } catch {
+    return "";
   }
 }
 

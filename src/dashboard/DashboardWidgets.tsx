@@ -694,6 +694,15 @@ export function TimelineDashboardWidget(
       )}
       {error && <div className="dashboard-widget-error">{error}</div>}
       <div className="timeline-feed">
+        {visibleCount < filtered.length && (
+          <button
+            type="button"
+            className="timeline-load-more"
+            onClick={() => setVisibleCount((count) => count + pageSize)}
+          >
+            Load older
+          </button>
+        )}
         {items === null
           ? (
             <div className="dashboard-widget-loading">
@@ -827,15 +836,6 @@ export function TimelineDashboardWidget(
               </article>
             );
           })}
-        {visibleCount < filtered.length && (
-          <button
-            type="button"
-            className="timeline-load-more"
-            onClick={() => setVisibleCount((count) => count + pageSize)}
-          >
-            Load older
-          </button>
-        )}
       </div>
       <div className={`timeline-composer-shell ${composerOpen ? "open" : ""}`}>
         {!composerOpen

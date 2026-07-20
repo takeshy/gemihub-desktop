@@ -122,6 +122,33 @@ type ChatResult struct {
 	Thinking        string             `json:"thinking,omitempty"`
 	Usage           *ChatUsage         `json:"usage,omitempty"`
 	GeneratedImages []GeneratedImage   `json:"generatedImages,omitempty"`
+	WebSearchSources []WebSearchSource  `json:"webSearchSources,omitempty"`
+}
+
+type WebSearchSource struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+func webSearchSources(sourceTitles map[string]string) []WebSearchSource {
+	urls := make([]string, 0, len(sourceTitles))
+	for sourceURL := range sourceTitles {
+		urls = append(urls, sourceURL)
+	}
+	sort.Strings(urls)
+	result := make([]WebSearchSource, 0, len(urls))
+	for _, sourceURL := range urls {
+		parsed, err := url.Parse(sourceURL)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			continue
+		}
+		title := sourceTitles[sourceURL]
+		if title == "" {
+			title = sourceURL
+		}
+		result = append(result, WebSearchSource{Title: title, URL: sourceURL})
+	}
+	return result
 }
 
 type GeneratedImage struct {
@@ -709,22 +736,11 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 		}
 		if calls == nil || len(calls) == 0 {
 			content := text.String()
-			if len(sources) > 0 {
-				links := make([]string, 0, len(sources))
-				for sourceURL, title := range sources {
-					if title == "" {
-						title = sourceURL
-					}
-					links = append(links, fmt.Sprintf("[%s](%s)", title, sourceURL))
-				}
-				sort.Strings(links)
-				content += "\n\nSources: " + strings.Join(links, " · ")
-			}
 			a.emitChatStream(request, "text", content, "")
 			if thinking.Len() > 0 {
 				a.emitChatStream(request, "thinking", thinking.String(), "")
 			}
-			return &ChatResult{Content: content, Thinking: thinking.String(), ToolsUsed: toolsUsed, Usage: usage}, nil
+			return &ChatResult{Content: content, Thinking: thinking.String(), ToolsUsed: toolsUsed, Usage: usage, WebSearchSources: webSearchSources(sources)}, nil
 		}
 		for _, call := range calls {
 			arguments := map[string]any{}
@@ -1147,6 +1163,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 	thinkingUsed := []string{}
 	usage := &ChatUsage{}
 	generatedImages := []GeneratedImage{}
+	webSources := map[string]string{}
 	toolCallSignatures := map[string]bool{}
 	forceAnswer := false
 	functionCallCount := 0
@@ -1197,6 +1214,14 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 					Content struct {
 						Parts []map[string]any `json:"parts"`
 					} `json:"content"`
+					GroundingMetadata struct {
+						GroundingChunks []struct {
+							Web struct {
+								URI   string `json:"uri"`
+								Title string `json:"title"`
+							} `json:"web"`
+						} `json:"groundingChunks"`
+					} `json:"groundingMetadata"`
 				} `json:"candidates"`
 			}
 			if err := json.Unmarshal(data, &chunk); err != nil {
@@ -1208,6 +1233,11 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 			}
 			if len(chunk.Candidates) == 0 {
 				return nil
+			}
+			for _, groundingChunk := range chunk.Candidates[0].GroundingMetadata.GroundingChunks {
+				if groundingChunk.Web.URI != "" {
+					webSources[groundingChunk.Web.URI] = groundingChunk.Web.Title
+				}
 			}
 			for _, part := range chunk.Candidates[0].Content.Parts {
 				parts = append(parts, part)
@@ -1284,7 +1314,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 		}
 		functionCallCount += len(callsToProcess)
 		if len(functionResponses) == 0 {
-			return &ChatResult{Content: text, ToolsUsed: toolsUsed, Thinking: strings.Join(thinkingUsed, "\n\n"), Usage: usage, GeneratedImages: generatedImages}, nil
+			return &ChatResult{Content: text, ToolsUsed: toolsUsed, Thinking: strings.Join(thinkingUsed, "\n\n"), Usage: usage, GeneratedImages: generatedImages, WebSearchSources: webSearchSources(webSources)}, nil
 		}
 		if functionCallCount >= functionCallLimit || len(callsToProcess) < len(calls) {
 			forceAnswer = true
@@ -1517,20 +1547,7 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 		if len(calls) == 0 {
 			usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 			content := text.String()
-			if len(webSources) > 0 {
-				links := make([]string, 0, len(webSources))
-				for sourceURL, title := range webSources {
-					if title == "" {
-						title = sourceURL
-					}
-					links = append(links, fmt.Sprintf("[%s](%s)", title, sourceURL))
-				}
-				sort.Strings(links)
-				suffix := "\n\nSources: " + strings.Join(links, " · ")
-				content += suffix
-				a.emitChatStream(request, "text", suffix, "")
-			}
-			return &ChatResult{Content: content, Thinking: strings.Join(thinkingUsed, "\n\n"), ToolsUsed: toolsUsed, Usage: usage}, nil
+			return &ChatResult{Content: content, Thinking: strings.Join(thinkingUsed, "\n\n"), ToolsUsed: toolsUsed, Usage: usage, WebSearchSources: webSearchSources(webSources)}, nil
 		}
 		assistantContent := []map[string]any{}
 		thoughtIndexes := make([]int, 0, len(thoughtBlocks))
