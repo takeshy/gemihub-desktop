@@ -70,9 +70,9 @@ func TestListWorkspaceDirectoryFilesScopesTheWalk(t *testing.T) {
 	app := NewApp()
 	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
 	for path, content := range map[string]string{
-		"Dashboards/Timeline/Timeline/2026-07-20.md": "first",
+		"Dashboards/Timeline/Timeline/2026-07-20.md":         "first",
 		"Dashboards/Timeline/Timeline/attachments/image.txt": "attachment",
-		"Notes/unrelated.md": "outside",
+		"Notes/unrelated.md":                                 "outside",
 	} {
 		if err := app.WriteWorkspaceFile(path, content); err != nil {
 			t.Fatal(err)
@@ -95,6 +95,25 @@ func TestListWorkspaceDirectoryFilesScopesTheWalk(t *testing.T) {
 	}
 	if _, err := app.ListWorkspaceDirectoryFiles("../outside"); err == nil {
 		t.Fatal("Workspace path traversal was accepted")
+	}
+}
+
+func TestListWorkspaceDirectoryEntriesIncludesTimestamps(t *testing.T) {
+	workspace := t.TempDir()
+	app := NewApp()
+	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	if err := app.WriteWorkspaceFile("projects/tasks/one.md", "task"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := app.ListWorkspaceDirectoryEntries("projects/tasks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Path != "projects/tasks/one.md" {
+		t.Fatalf("unexpected entries: %#v", entries)
+	}
+	if entries[0].CreatedTime <= 0 || entries[0].ModTime <= 0 {
+		t.Fatalf("timestamps were not populated: %#v", entries[0])
 	}
 }
 
@@ -290,7 +309,7 @@ func TestListTrashDeduplicatesSharedFilesAndWorkspaceBase(t *testing.T) {
 	app, dir := testDirectoryApp(t)
 	app.workspaceState = WorkspaceState{
 		ActiveWorkspaceID: "shared",
-		Workspaces: []Workspace{{ID: "shared", Name: "Shared", Path: dir}},
+		Workspaces:        []Workspace{{ID: "shared", Name: "Shared", Path: dir}},
 	}
 	if err := app.WriteFile("notes/item.md", "one"); err != nil {
 		t.Fatal(err)

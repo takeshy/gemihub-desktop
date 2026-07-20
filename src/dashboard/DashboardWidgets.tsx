@@ -78,7 +78,7 @@ import {
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
-import { fileRef, type FileRef } from "../lib/fileRef";
+import { type FileRef, fileRef } from "../lib/fileRef";
 import {
   decryptFileContent,
   encryptFileContent,
@@ -1683,14 +1683,28 @@ export function KanbanDashboardWidget(
                     : Object.hasOwn(field, "label")
                     ? field.label || ""
                     : key;
-                  return key
-                    ? (
-                      <small key={key}>
-                        {label ? `${label}: ` : ""}
-                        {String(row.frontmatter[key] ?? "")}
-                      </small>
-                    )
-                    : null;
+                  const rawValue = row.cells[key];
+                  const value = Array.isArray(rawValue)
+                    ? rawValue.join(", ")
+                    : String(rawValue ?? "").trim();
+                  if (!key || !value) return null;
+                  const configuredMaxLength = typeof field === "string"
+                    ? undefined
+                    : field.maxLength;
+                  const maxLength = typeof configuredMaxLength === "number" &&
+                      Number.isFinite(configuredMaxLength) &&
+                      configuredMaxLength > 0
+                    ? Math.floor(configuredMaxLength)
+                    : undefined;
+                  const displayed = maxLength && value.length > maxLength
+                    ? `${value.slice(0, maxLength).trimEnd()}...`
+                    : value;
+                  return (
+                    <small key={key}>
+                      {label ? `${label}: ` : ""}
+                      {displayed}
+                    </small>
+                  );
                 })}
               </button>
             ))}

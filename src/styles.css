@@ -9098,6 +9098,93 @@ body.resizing-side-pane * {
 .kanban-card-modal-backdrop.calendar-link-preview-backdrop {
   z-index: 1400;
 }
+/* wysimark-lite renders toolbar menus and their close mask as body portals.
+ * Raise those portal siblings above this modal while its editor is active. */
+body.kanban-card-wysiwyg-open > div:not(#root):not(.kanban-card-modal-backdrop) {
+  z-index: 2100 !important;
+}
+.workspace-file-picker-backdrop {
+  position: fixed;
+  z-index: 3200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 58%);
+  padding: 16px;
+}
+.workspace-file-picker {
+  display: grid;
+  width: min(680px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 32px));
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 45%);
+}
+.workspace-file-picker > header,
+.workspace-file-picker > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-file-picker > header strong {
+  flex: 1;
+}
+.workspace-file-picker button {
+  color: var(--text);
+}
+.workspace-file-picker > header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-raised);
+}
+.workspace-file-picker > label input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+.workspace-file-picker > div {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  padding: 7px;
+}
+.workspace-file-picker > div > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  padding: 8px;
+  text-align: left;
+}
+.workspace-file-picker > div > button:hover {
+  background: var(--surface-raised);
+}
+.workspace-file-picker > div > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-file-picker > div > span {
+  margin: auto;
+  color: var(--text-muted);
+}
 .kanban-card-modal {
   position: fixed;
   display: grid;
@@ -9173,6 +9260,7 @@ body.resizing-side-pane * {
   background: white;
 }
 .kanban-card-modal-body .wysiwyg-host {
+  height: 100%;
   min-height: 100%;
 }
 .kanban-card-modal > footer {

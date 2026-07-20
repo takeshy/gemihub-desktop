@@ -2,7 +2,7 @@ import yaml from "js-yaml";
 import { parseFrontmatter } from "../components/FrontmatterEditor";
 import {
   fileInventory,
-  listWorkspaceDirectoryFiles,
+  listWorkspaceDirectoryEntries,
   listWorkspaceFiles,
   readFile,
   readWorkspaceFile,
@@ -85,13 +85,7 @@ export async function loadDashboardRows(
   const workspace = scope === "workspace";
   const entries =
     (workspace && folder
-      ? (await listWorkspaceDirectoryFiles(folder)).map((path) => ({
-        path,
-        binary: false,
-        modTime: 0,
-        createdTime: 0,
-        size: 0,
-      }))
+      ? await listWorkspaceDirectoryEntries(folder)
       : workspace
       ? await listWorkspaceFiles()
       : await fileInventory()).filter(
@@ -121,6 +115,7 @@ export async function loadDashboardRows(
           ...parsed.frontmatter,
           "file.path": entry.path,
           "file.name": name,
+          "file.content": parsed.body,
           "file.mtime": entry.modTime,
           "file.ctime": entry.createdTime,
           "file.size": entry.size,

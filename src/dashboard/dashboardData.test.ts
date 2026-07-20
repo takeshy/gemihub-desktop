@@ -35,11 +35,23 @@ Deno.test("workspace Kanban rows load from the selected folder", async () => {
   target.go = {
     main: {
       App: {
-        ListWorkspaceDirectoryFiles: async (folder: string) => {
+        ListWorkspaceDirectoryEntries: async (folder: string) => {
           assertEquals(folder, "projects/kanban_test");
           return [
-            "projects/kanban_test/Task 1.md",
-            "projects/kanban_test/Task 2.md",
+            {
+              path: "projects/kanban_test/Task 1.md",
+              binary: false,
+              modTime: 2000,
+              createdTime: 1000,
+              size: 10,
+            },
+            {
+              path: "projects/kanban_test/Task 2.md",
+              binary: false,
+              modTime: 4000,
+              createdTime: 3000,
+              size: 10,
+            },
           ];
         },
         ReadWorkspaceFile: async (path: string) => ({
@@ -57,6 +69,8 @@ Deno.test("workspace Kanban rows load from the selected folder", async () => {
     assertEquals(rows.length, 2);
     assertEquals(rows[0].frontmatter.status, "todo");
     assertEquals(rows[0].cells["file.tags"], ["kanban-test"]);
+    assertEquals(rows[0].cells["file.content"], "Body");
+    assertEquals(rows[0].cells["file.ctime"], 1000);
   } finally {
     target.go = original;
     if (originalWindow === undefined) delete target["window"];

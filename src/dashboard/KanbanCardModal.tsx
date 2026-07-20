@@ -16,6 +16,10 @@ import { readFileRef, writeFileRef } from "../lib/fileRef";
 import type { FileRef } from "../lib/fileRef";
 import { docKindFor } from "./documentKind";
 import { epubToHtml } from "../lib/epub";
+import {
+  resolveWorkspaceMarkdownImage,
+  uploadWorkspaceMarkdownImage,
+} from "../lib/markdownWorkspaceAssets";
 
 type CardMode = "preview" | "wysiwyg" | "raw";
 
@@ -182,6 +186,12 @@ export function KanbanCardModal(
   }, [geometry]);
 
   useEffect(() => {
+    if (mode !== "wysiwyg") return;
+    document.body.classList.add("kanban-card-wysiwyg-open");
+    return () => document.body.classList.remove("kanban-card-wysiwyg-open");
+  }, [mode]);
+
+  useEffect(() => {
     const move = (event: PointerEvent) => {
       const active = interaction.current;
       if (!active) return;
@@ -228,7 +238,12 @@ export function KanbanCardModal(
     kind: "move" | "resize",
     event: ReactPointerEvent,
   ) => {
-    if (kind === "move" && (event.target as HTMLElement).closest("button")) {
+    if (
+      kind === "move" &&
+      (event.target as Element).closest(
+        "button, input, select, textarea, [data-no-modal-drag]",
+      )
+    ) {
       return;
     }
     event.preventDefault();
@@ -282,7 +297,11 @@ export function KanbanCardModal(
         <header onPointerDown={(event) => beginInteraction("move", event)}>
           <strong title={path}>{path.split(/[\\/]/).pop() || path}</strong>
           {!binaryPreview && (
-            <div className="kanban-card-modal-modes">
+            <div
+              className="kanban-card-modal-modes"
+              data-no-modal-drag
+              onPointerDown={(event) => event.stopPropagation()}
+            >
               <button
                 type="button"
                 className={mode === "preview" ? "active" : ""}
@@ -348,11 +367,25 @@ export function KanbanCardModal(
               />
             )
             : mode === "preview"
-            ? <MarkdownPreview content={parsed.body} isDark={isDark} />
+            ? (
+              <MarkdownPreview
+                content={parsed.body}
+                isDark={isDark}
+                resolveImageSrc={file.scope === "workspace"
+                  ? (url) => resolveWorkspaceMarkdownImage(path, url)
+                  : undefined}
+              />
+            )
             : mode === "wysiwyg"
             ? (
               <WysiwygEditor
                 value={parsed.body}
+                workspaceSourcePath={file.scope === "workspace"
+                  ? path
+                  : undefined}
+                onImageChange={file.scope === "workspace"
+                  ? (image) => uploadWorkspaceMarkdownImage(path, image)
+                  : undefined}
                 onChange={(body) =>
                   setContent((current) => replaceBody(current, body))}
               />

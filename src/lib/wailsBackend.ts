@@ -435,6 +435,9 @@ interface WailsAppApi {
   ) => Promise<WorkspaceDirectoryMoveResult>;
   ListWorkspaceFiles: () => Promise<DirectoryFileEntry[]>;
   ListWorkspaceDirectoryFiles: (path: string) => Promise<string[]>;
+  ListWorkspaceDirectoryEntries: (
+    path: string,
+  ) => Promise<DirectoryFileEntry[]>;
   ReadWorkspaceFile: (path: string) => Promise<LocalFileResult>;
   WriteWorkspaceFile: (path: string, content: string) => Promise<void>;
   WriteWorkspaceBinaryFile: (
@@ -719,6 +722,12 @@ export async function listWorkspaceDirectoryFiles(
   path: string,
 ): Promise<string[]> {
   return await appApi()?.ListWorkspaceDirectoryFiles(path) ?? [];
+}
+
+export async function listWorkspaceDirectoryEntries(
+  path: string,
+): Promise<DirectoryFileEntry[]> {
+  return await appApi()?.ListWorkspaceDirectoryEntries(path) ?? [];
 }
 
 export async function readWorkspaceFile(

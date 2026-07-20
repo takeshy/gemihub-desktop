@@ -20,7 +20,7 @@
     "npm:remark-gfm@^4.0.1": "4.0.1",
     "npm:typescript@^6.0.3": "6.0.3",
     "npm:vite@^7.1.7": "7.3.6",
-    "npm:wysimark-lite@~0.27.7": "0.27.7_react@19.2.7_react-dom@19.2.7__react@19.2.7_@types+react@19.2.17"
+    "npm:wysimark-lite@~0.27.12": "0.27.12_react@19.2.7_react-dom@19.2.7__react@19.2.7_@types+react@19.2.17"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -2777,8 +2777,8 @@
       ],
       "bin": true
     },
-    "wysimark-lite@0.27.7_react@19.2.7_react-dom@19.2.7__react@19.2.7_@types+react@19.2.17": {
-      "integrity": "sha512-jS+OZnxc6aEvGV9g680h2i812w4h2dbUVSQJoobahf1WeDzkMLh9HiboQAXRluGOEeXsjnsXnz92y00VekksWQ==",
+    "wysimark-lite@0.27.12_react@19.2.7_react-dom@19.2.7__react@19.2.7_@types+react@19.2.17": {
+      "integrity": "sha512-DGCa8DvfzK/9dV73xKBiZCTdfUNNPg+Td7DJMhA3pSXObxmYpfKB16SOu7QP3I4vO7Reee7zv8MD2eUiUBWHdQ==",
       "dependencies": [
         "@emotion/core",
         "@emotion/react",
@@ -2846,7 +2846,7 @@
         "npm:remark-gfm@^4.0.1",
         "npm:typescript@^6.0.3",
         "npm:vite@^7.1.7",
-        "npm:wysimark-lite@~0.27.7"
+        "npm:wysimark-lite@~0.27.12"
       ]
     }
   }

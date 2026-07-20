@@ -1,6 +1,6 @@
 {
   "name": "gemihub-desktop",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -17,7 +17,7 @@
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "vite": "^7.1.7",
-    "wysimark-lite": "^0.27.7"
+    "wysimark-lite": "^0.27.12"
   },
   "devDependencies": {
     "@types/react": "^19.2.7",

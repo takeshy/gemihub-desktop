@@ -1490,6 +1490,9 @@ export function FileWidgetBody({
           <FileWidgetWysiwygEditor
             value={markdownBody}
             onImageChange={uploadMarkdownImage}
+            workspaceSourcePath={storedFile?.scope === "workspace"
+              ? storedFile.path
+              : undefined}
             onChange={(next) =>
               onConfigChange({
                 ...widget.config,

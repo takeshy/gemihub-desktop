@@ -318,6 +318,58 @@ func (a *App) ListWorkspaceDirectoryFiles(path string) ([]string, error) {
 	return result, nil
 }
 
+// ListWorkspaceDirectoryEntries returns lightweight metadata for files below
+// one Workspace directory. Unlike ListWorkspaceFiles it does not hash or read
+// file contents, so focused data views can obtain timestamps without scanning
+// the entire Workspace.
+func (a *App) ListWorkspaceDirectoryEntries(path string) ([]DirectoryFileEntry, error) {
+	target, err := a.workspacePath(path, true)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(target); err != nil {
+		if os.IsNotExist(err) {
+			return []DirectoryFileEntry{}, nil
+		}
+		return nil, err
+	}
+	base := a.GetWorkspacePath()
+	result := []DirectoryFileEntry{}
+	err = filepath.WalkDir(target, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if current != target && (entry.Name() == ".git" || entry.Name() == ".llm-hub" || entry.Name() == "node_modules") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return nil
+		}
+		relative, relErr := filepath.Rel(base, current)
+		if relErr != nil {
+			return relErr
+		}
+		result = append(result, DirectoryFileEntry{
+			Path: filepath.ToSlash(relative), Size: info.Size(),
+			CreatedTime: fileCreatedTime(current, info), ModTime: info.ModTime().UnixMilli(),
+			Binary: isBinaryFileName(entry.Name()),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Path < result[j].Path })
+	return result, nil
+}
+
 func (a *App) ReadWorkspaceFile(path string) (*LocalFileResult, error) {
 	// Missing files are a valid empty starting point for Timeline entries and
 	// other Workspace data that is created on first write.

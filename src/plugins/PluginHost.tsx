@@ -229,6 +229,26 @@ export function PluginHost({
   }, [settingsOpen]);
 
   useEffect(() => {
+    const handleSelectFile = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: unknown }>).detail?.path;
+      if (typeof path !== "string" || !path.trim()) return;
+      onOpenFile({ scope: "workspace", path });
+      const view = pluginViewForPath(views, path);
+      if (!view) return;
+      handledPluginFileRef.current = `${view.id}\n${path}`;
+      setSelectedPluginId(view.pluginId);
+      setActiveTab("plugins");
+      onOpenPluginWidget({
+        type: pluginMainViewWidgetType(view.id),
+        config: { file: { scope: "workspace", path } },
+      });
+    };
+    window.addEventListener("llm-hub:select-file", handleSelectFile);
+    return () =>
+      window.removeEventListener("llm-hub:select-file", handleSelectFile);
+  }, [onOpenFile, onOpenPluginWidget, views]);
+
+  useEffect(() => {
     loadingConfigRef.current = true;
     setConfigs(storedConfigs(configKey));
   }, [configKey]);
@@ -508,7 +528,9 @@ export function PluginHost({
       if (!activePath || matchesActiveFile) {
         onOpenPluginWidget({
           type: pluginMainViewWidgetType(mainView.id),
-          config: activePath ? { filePath: activePath } : {},
+          config: activePath
+            ? { file: { scope: "workspace", path: activePath } }
+            : {},
         });
       }
     }
@@ -528,7 +550,7 @@ export function PluginHost({
     setActiveTab("plugins");
     onOpenPluginWidget({
       type: pluginMainViewWidgetType(view.id),
-      config: { filePath: path },
+      config: { file: { scope: "workspace", path } },
     });
   }, [activeFile?.path, mainViews, onOpenPluginWidget]);
 
