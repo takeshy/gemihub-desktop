@@ -38,6 +38,7 @@ import {
 import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
 import {
   createDirectory,
+  copyLocalPathIntoWorkspace,
   duplicateFile,
   type FileHistoryEntry,
   type FileSearchResult,
@@ -47,6 +48,7 @@ import {
   listTrash,
   listWorkspaceTree,
   movePathIntoWorkspace,
+  onWailsFileDrop,
   openContainingFolder,
   readFile,
   renameFile,
@@ -426,6 +428,31 @@ export function FileTree({
 
   useEffect(() => {
     void reload();
+  }, [reload]);
+  useEffect(() => {
+    const dispose = onWailsFileDrop((x, y, paths) => {
+      const target = document.elementFromPoint(x, y)?.closest<HTMLElement>(
+        "[data-workspace-drop]",
+      );
+      if (!target || !paths.length) return;
+      const destination = target.dataset.workspaceDrop || "";
+      void (async () => {
+        const errors: string[] = [];
+        for (const path of paths) {
+          const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
+          if (!name) continue;
+          try {
+            await copyLocalPathIntoWorkspace(path, destination, name);
+          } catch (error) {
+            errors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+        await reload();
+        window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+        if (errors.length) alert(errors.join("\n"));
+      })();
+    });
+    return () => dispose?.();
   }, [reload]);
   useEffect(() => {
     setExternalSelection(new Set());

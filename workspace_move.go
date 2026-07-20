@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -88,6 +89,69 @@ func moveRegularFile(source, destination string) error {
 		return fmt.Errorf("move file: %w", err)
 	}
 	return nil
+}
+
+func copyExclusiveRegularFile(source, destination string, mode fs.FileMode) (err error) {
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	output, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := output.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			_ = os.Remove(destination)
+		}
+	}()
+	_, err = io.Copy(output, input)
+	return err
+}
+
+// CopyLocalPathIntoWorkspace copies a file dropped by the operating system
+// into a Workspace directory without removing the original file.
+func (a *App) CopyLocalPathIntoWorkspace(path, destinationDirectory, destinationName string) (*WorkspaceDirectoryMoveResult, error) {
+	name, err := validateWorkspaceDirectoryName(destinationName)
+	if err != nil {
+		return nil, err
+	}
+	source := filepath.Clean(strings.TrimSpace(path))
+	info, err := os.Lstat(source)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("only regular files can be copied into the Workspace")
+	}
+	workspaceBase := a.GetWorkspacePath()
+	if workspaceBase == "" {
+		return nil, fmt.Errorf("active Workspace is not configured")
+	}
+	targetParent, err := a.workspacePath(destinationDirectory, true)
+	if err != nil {
+		return nil, err
+	}
+	parentInfo, err := os.Stat(targetParent)
+	if err != nil || !parentInfo.IsDir() {
+		return nil, fmt.Errorf("Workspace destination is not a directory")
+	}
+	destination := filepath.Join(targetParent, name)
+	if err := requirePathInside(workspaceBase, destination); err != nil {
+		return nil, err
+	}
+	if err := copyExclusiveRegularFile(source, destination, info.Mode()); err != nil {
+		if os.IsExist(err) {
+			return nil, fmt.Errorf("destination already contains %q", name)
+		}
+		return nil, fmt.Errorf("copy file: %w", err)
+	}
+	relative, _ := filepath.Rel(workspaceBase, destination)
+	return &WorkspaceDirectoryMoveResult{WorkspacePath: filepath.ToSlash(relative), OriginalPath: source}, nil
 }
 
 // MovePathIntoWorkspace moves an external file or directory into a Workspace

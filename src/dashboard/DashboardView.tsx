@@ -2000,6 +2000,9 @@ export function DashboardView({
   useEffect(() => {
     if (!hasWailsBackend()) return;
     const dispose = onWailsFileDrop((x, y, paths) => {
+      if (document.elementFromPoint(x, y)?.closest("[data-workspace-drop]")) {
+        return;
+      }
       const path = paths[0];
       if (!path) return;
       void inspectLocalPath(path).then((info) => {

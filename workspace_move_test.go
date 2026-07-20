@@ -153,6 +153,35 @@ func TestMovePathIntoWorkspaceRejectsTraversalAndFileLink(t *testing.T) {
 	}
 }
 
+func TestCopyLocalPathIntoWorkspaceKeepsOriginal(t *testing.T) {
+	app, _, workspace := workspaceMoveTestApp(t)
+	sourceDir := t.TempDir()
+	source := filepath.Join(sourceDir, "dropped.md")
+	if err := os.WriteFile(source, []byte("copied"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(workspace, "Notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := app.CopyLocalPathIntoWorkspace(source, "Notes", "dropped.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WorkspacePath != "Notes/dropped.md" {
+		t.Fatalf("unexpected workspace path: %q", result.WorkspacePath)
+	}
+	if content, err := os.ReadFile(filepath.Join(workspace, "Notes", "dropped.md")); err != nil || string(content) != "copied" {
+		t.Fatalf("unexpected copied file: %q, %v", content, err)
+	}
+	if content, err := os.ReadFile(source); err != nil || string(content) != "copied" {
+		t.Fatalf("source should remain unchanged: %q, %v", content, err)
+	}
+	if _, err := app.CopyLocalPathIntoWorkspace(source, "Notes", "dropped.md"); err == nil {
+		t.Fatal("expected an existing destination to be rejected")
+	}
+}
+
 func TestMoveDirectoryIntoWorkspaceRejectsReservedName(t *testing.T) {
 	app, files, _ := workspaceMoveTestApp(t)
 	if err := os.MkdirAll(filepath.Join(files, "Source"), 0o755); err != nil {

@@ -416,6 +416,11 @@ interface WailsAppApi {
     destinationName: string,
     leaveLink: boolean,
   ) => Promise<WorkspaceDirectoryMoveResult>;
+  CopyLocalPathIntoWorkspace: (
+    path: string,
+    destinationDirectory: string,
+    destinationName: string,
+  ) => Promise<WorkspaceDirectoryMoveResult>;
   ListWorkspaceFiles: () => Promise<DirectoryFileEntry[]>;
   ReadWorkspaceFile: (path: string) => Promise<LocalFileResult>;
   WriteWorkspaceFile: (path: string, content: string) => Promise<void>;
@@ -857,6 +862,22 @@ export async function movePathIntoWorkspace(
   );
 }
 
+export async function copyLocalPathIntoWorkspace(
+  path: string,
+  destinationDirectory: string,
+  destinationName: string,
+): Promise<WorkspaceDirectoryMoveResult> {
+  const api = appApi();
+  if (!api) {
+    throw new Error("Copying into the Workspace requires the desktop app.");
+  }
+  return await api.CopyLocalPathIntoWorkspace(
+    path,
+    destinationDirectory,
+    destinationName,
+  );
+}
+
 export async function renameFile(
   oldPath: string,
   newPath: string,
@@ -1284,11 +1305,27 @@ export async function openExternalEditor(
   await appApi()?.OpenExternalEditor(editorPath, filePath);
 }
 
+type WailsFileDropCallback = (
+  x: number,
+  y: number,
+  paths: string[],
+) => void;
+
+const wailsFileDropCallbacks = new Set<WailsFileDropCallback>();
+
 export function onWailsFileDrop(
-  callback: (x: number, y: number, paths: string[]) => void,
+  callback: WailsFileDropCallback,
 ): (() => void) | null {
   const runtime = window.runtime;
   if (!runtime?.OnFileDrop || !runtime.OnFileDropOff) return null;
-  runtime.OnFileDrop(callback, false);
-  return () => runtime.OnFileDropOff();
+  wailsFileDropCallbacks.add(callback);
+  if (wailsFileDropCallbacks.size === 1) {
+    runtime.OnFileDrop((x, y, paths) => {
+      for (const listener of wailsFileDropCallbacks) listener(x, y, paths);
+    }, false);
+  }
+  return () => {
+    wailsFileDropCallbacks.delete(callback);
+    if (wailsFileDropCallbacks.size === 0) runtime.OnFileDropOff();
+  };
 }
