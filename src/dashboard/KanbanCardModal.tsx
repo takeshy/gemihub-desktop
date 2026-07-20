@@ -20,6 +20,7 @@ import {
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import { docKindFor } from "./documentKind";
+import { epubToHtml } from "../lib/epub";
 
 type CardMode = "preview" | "wysiwyg" | "raw";
 
@@ -77,16 +78,26 @@ function replaceBody(content: string, body: string): string {
 }
 
 export function KanbanCardModal(
-  { path, fileScope = "directory", isDark, onNavigate, onSaved, onClose }: {
+  {
+    path,
+    fileScope = "directory",
+    isDark,
+    backdropClassName = "",
+    onNavigate,
+    onSaved,
+    onClose,
+  }: {
     path: string;
     fileScope?: "directory" | "workspace";
     isDark: boolean;
+    backdropClassName?: string;
     onNavigate: () => void;
     onSaved: () => void;
     onClose: () => void;
   },
 ) {
   const [content, setContent] = useState("");
+  const [epubHtml, setEpubHtml] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [mode, setMode] = useState<CardMode>(sessionMode);
   const [loading, setLoading] = useState(true);
@@ -101,7 +112,7 @@ export function KanbanCardModal(
   >(null);
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
   const kind = docKindFor(path);
-  const binaryPreview = kind === "pdf" || kind === "image";
+  const binaryPreview = kind === "pdf" || kind === "image" || kind === "epub";
   const dirty = content !== savedContent;
 
   useEffect(() => {
@@ -133,6 +144,31 @@ export function KanbanCardModal(
       cancelled = true;
     };
   }, [fileScope, path]);
+
+  useEffect(() => {
+    if (kind !== "epub" || !content.startsWith("data:")) {
+      setEpubHtml("");
+      return;
+    }
+    let cancelled = false;
+    setEpubHtml("");
+    void fetch(content).then((response) => response.blob()).then((blob) =>
+      epubToHtml(
+        new File([blob], path.split(/[\\/]/).pop() || "document.epub", {
+          type: "application/epub+zip",
+        }),
+      )
+    ).then((html) => {
+      if (!cancelled) setEpubHtml(html);
+    }).catch((caught: unknown) => {
+      if (!cancelled) {
+        setError(caught instanceof Error ? caught.message : String(caught));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [content, kind, path]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -244,7 +280,10 @@ export function KanbanCardModal(
   };
 
   return createPortal(
-    <div className="kanban-card-modal-backdrop" onClick={onClose}>
+    <div
+      className={`kanban-card-modal-backdrop ${backdropClassName}`.trim()}
+      onClick={onClose}
+    >
       <section
         className="kanban-card-modal"
         style={{
@@ -301,6 +340,28 @@ export function KanbanCardModal(
             ? <PdfViewer content={content} title={path} scalePercent={100} />
             : kind === "image"
             ? <ImageViewer src={content} alt={path} />
+            : kind === "epub"
+            ? epubHtml
+              ? (
+                <iframe
+                  className="kanban-card-html-preview"
+                  srcDoc={epubHtml}
+                  title={path}
+                  sandbox="allow-same-origin"
+                />
+              )
+              : error
+              ? <div className="dashboard-widget-error">{error}</div>
+              : <div className="dashboard-widget-empty">Loading EPUB…</div>
+            : kind === "html"
+            ? (
+              <iframe
+                className="kanban-card-html-preview"
+                srcDoc={content}
+                title={path}
+                sandbox="allow-same-origin"
+              />
+            )
             : mode === "preview"
             ? <MarkdownPreview content={parsed.body} isDark={isDark} />
             : mode === "wysiwyg"

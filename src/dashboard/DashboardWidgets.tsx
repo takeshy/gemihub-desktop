@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowUpDown,
   ChevronDown,
@@ -44,7 +45,9 @@ import { decodeMemoPath } from "../lib/memoPath";
 import {
   isLocalDocumentHref,
   localHrefToPathCandidates,
+  pathDirName,
   transformWikiLinks,
+  wikiEmbedPathCandidates,
   wikiTargetToPath,
 } from "../lib/wikiLinks";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
@@ -404,6 +407,181 @@ function withoutTimelineTags(body: string): string {
   return body.replace(/(^|[\s([{])#([^\s#.,;:!?()[\]{}'"`<>]+)/gu, "$1")
     .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
+
+function collapsedTimelineBody(
+  body: string,
+  lineLimit: number,
+  charLimit: number,
+): string {
+  const lines = body.split(/\r?\n/);
+  const byLines = lines.length > lineLimit
+    ? lines.slice(0, lineLimit).join("\n").trim()
+    : body.trim();
+  const clipped = byLines.length <= charLimit
+    ? byLines
+    : byLines.slice(0, charLimit).trimEnd();
+  const withoutExpandedArticles = clipped.replace(
+    /!\[\[([^\]\n]+?\.(?:md|markdown)(?:[|#][^\]\n]*)?)\]\]/gi,
+    (_match, target: string) => `[[${target.split("|")[0].trim()}]]`,
+  );
+  return `${withoutExpandedArticles}\n\n...`;
+}
+
+function TimelinePostMarkdown({
+  body,
+  sourcePath,
+  isDark,
+  onLinkClick,
+}: {
+  body: string;
+  sourcePath: string;
+  isDark: boolean;
+  onLinkClick: (
+    href: string,
+    event: ReactMouseEvent<HTMLElement>,
+    sourcePath: string,
+  ) => void;
+}) {
+  const baseDirPath = pathDirName(sourcePath);
+  const [noteEmbeds, setNoteEmbeds] = useState<
+    Record<string, { path: string; content: string } | null>
+  >({});
+  const [imagePreview, setImagePreview] = useState("");
+  const noteTargets = useMemo(
+    () =>
+      [...body.matchAll(
+        /!\[\[([^\]\n]+?\.(?:md|markdown)(?:[|#][^\]\n]*)?)\]\]/gi,
+      )]
+        .map((match) => match[1]),
+    [body],
+  );
+  const resolveImageAt = useCallback(async (src: string, basePath: string) => {
+    if (!src || /^(?:data:|blob:|https?:|\/\/)/i.test(src)) return src;
+    for (const path of wikiEmbedPathCandidates(basePath, src)) {
+      try {
+        const file = await readWorkspaceFile(path);
+        if (file?.content.startsWith("data:")) return file.content;
+      } catch {
+        // Try workspace-root and source-relative candidates in order.
+      }
+    }
+    return src;
+  }, []);
+  const resolveImageSrc = useCallback(
+    (src: string) => resolveImageAt(src, baseDirPath),
+    [baseDirPath, resolveImageAt],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setNoteEmbeds({});
+    void (async () => {
+      for (const target of noteTargets) {
+        let resolved: { path: string; content: string } | null = null;
+        for (const path of wikiEmbedPathCandidates(baseDirPath, target)) {
+          try {
+            const file = await readWorkspaceFile(path);
+            if (file && !file.content.startsWith("data:")) {
+              resolved = {
+                path,
+                content: parseFrontmatter(file.content).body,
+              };
+              break;
+            }
+          } catch {
+            // Try the Workspace-root and source-relative candidates.
+          }
+        }
+        if (!cancelled) {
+          setNoteEmbeds((current) => ({ ...current, [target]: resolved }));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseDirPath, noteTargets]);
+
+  useEffect(() => {
+    if (!imagePreview) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImagePreview("");
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [imagePreview]);
+
+  const parts = body.split(
+    /(!\[\[[^\]\n]+?\.(?:md|markdown)(?:[|#][^\]\n]*)?\]\])/gi,
+  );
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        const noteMatch = part.match(/^!\[\[([^\]\n]+)\]\]$/);
+        if (!noteMatch) {
+          return part
+            ? (
+              <MarkdownPreview
+                key={index}
+                content={transformWikiLinks(part)}
+                isDark={isDark}
+                onLinkClick={(href, event) =>
+                  onLinkClick(href, event, sourcePath)}
+                resolveImageSrc={resolveImageSrc}
+                onImageClick={setImagePreview}
+              />
+            )
+            : null;
+        }
+        const embedded = noteEmbeds[noteMatch[1]];
+        return (
+          <div className="timeline-note-embed" key={index}>
+            {embedded === undefined
+              ? <span>…</span>
+              : embedded === null
+              ? (
+                <MarkdownPreview
+                  content={transformWikiLinks(`[[${noteMatch[1]}]]`)}
+                  isDark={isDark}
+                  onLinkClick={(href, event) =>
+                    onLinkClick(href, event, sourcePath)}
+                />
+              )
+              : (
+                <MarkdownPreview
+                  content={transformWikiLinks(embedded.content)}
+                  isDark={isDark}
+                  onLinkClick={(href, event) =>
+                    onLinkClick(href, event, embedded.path)}
+                  resolveImageSrc={(src) =>
+                    resolveImageAt(src, pathDirName(embedded.path))}
+                  onImageClick={setImagePreview}
+                />
+              )}
+          </div>
+        );
+      })}
+      {imagePreview && createPortal(
+        <div
+          className="timeline-image-lightbox"
+          onClick={() => setImagePreview("")}
+        >
+          <button type="button" onClick={() => setImagePreview("")}>
+            <X size={18} />
+          </button>
+          <img
+            src={imagePreview}
+            alt="Timeline image preview"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 export function TimelineDashboardWidget(
   { config, isDark, settings, onChange, onOpenPath, onExternalPathOpened }: {
     config: Record<string, unknown>;
@@ -434,6 +612,7 @@ export function TimelineDashboardWidget(
     [pinnedOnly, setPinnedOnly] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false),
     [editing, setEditing] = useState<TimelineItem | null>(null),
+    [expandedPosts, setExpandedPosts] = useState<Set<string>>(() => new Set()),
     [editDraft, setEditDraft] = useState(""),
     [aiTarget, setAITarget] = useState<"draft" | "edit" | null>(null),
     [previewPath, setPreviewPath] = useState(""),
@@ -620,17 +799,35 @@ export function TimelineDashboardWidget(
   };
   const hasFilters = !!(word || tag || from || to || pinnedOnly);
   const handleTimelineLinkClick = useCallback(
-    (href: string, event: ReactMouseEvent<HTMLElement>) => {
+    (
+      href: string,
+      event: ReactMouseEvent<HTMLElement>,
+      sourcePath: string,
+    ) => {
       if (!isLocalDocumentHref(href)) return;
       event.preventDefault();
       event.stopPropagation();
-      const path = href.startsWith("#wiki:")
-        ? wikiTargetToPath("", decodeURIComponent(href.slice("#wiki:".length)))
-        : localHrefToPathCandidates(folder, href)[0];
-      if (path) {
-        if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(path)) onExternalPathOpened(path);
-        setPreviewPath(path);
-      }
+      const paths = href.startsWith("#wiki:")
+        ? wikiEmbedPathCandidates(pathDirName(sourcePath), href)
+        : localHrefToPathCandidates(pathDirName(sourcePath) || folder, href);
+      void (async () => {
+        let resolved = paths[0] ?? "";
+        for (const path of paths) {
+          try {
+            if (await readWorkspaceFile(path)) {
+              resolved = path;
+              break;
+            }
+          } catch {
+            // Try the next Workspace-root or source-relative candidate.
+          }
+        }
+        if (!resolved) return;
+        if (/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(resolved)) {
+          onExternalPathOpened(resolved);
+        }
+        setPreviewPath(resolved);
+      })();
     },
     [folder, onExternalPathOpened],
   );
@@ -722,8 +919,21 @@ export function TimelineDashboardWidget(
           : visible.map((item) => {
             const tags = timelineTags(item.body),
               displayBody = withoutTimelineTags(item.body),
-              collapsed = displayBody.length > collapseChars ||
+              hasMarkdownEmbed =
+                /!\[\[[^\]\n]+?\.(?:md|markdown)(?:[|#][^\]\n]*)?\]\]/i
+                  .test(displayBody),
+              collapsed = hasMarkdownEmbed ||
+                displayBody.length > collapseChars ||
                 displayBody.split(/\r?\n/).length > collapseLines,
+              postKey = `${item.path}:${item.id}`,
+              expanded = expandedPosts.has(postKey),
+              visibleBody = collapsed && !expanded
+                ? collapsedTimelineBody(
+                  displayBody,
+                  collapseLines,
+                  collapseChars,
+                )
+                : displayBody,
               isEditing = editing?.id === item.id && editing.path === item.path;
             return (
               <article
@@ -801,24 +1011,12 @@ export function TimelineDashboardWidget(
                   )
                   : (
                     <>
-                      {collapsed
-                        ? (
-                          <details>
-                            <summary>Show post</summary>
-                            <MarkdownPreview
-                              content={transformWikiLinks(displayBody)}
-                              isDark={isDark}
-                              onLinkClick={handleTimelineLinkClick}
-                            />
-                          </details>
-                        )
-                        : (
-                          <MarkdownPreview
-                            content={transformWikiLinks(displayBody)}
-                            isDark={isDark}
-                            onLinkClick={handleTimelineLinkClick}
-                          />
-                        )}
+                      <TimelinePostMarkdown
+                        body={visibleBody}
+                        sourcePath={item.path}
+                        isDark={isDark}
+                        onLinkClick={handleTimelineLinkClick}
+                      />
                       {tags.length > 0 && (
                         <div className="timeline-tags">
                           {tags.map((value) => (
@@ -834,6 +1032,21 @@ export function TimelineDashboardWidget(
                             </button>
                           ))}
                         </div>
+                      )}
+                      {collapsed && (
+                        <button
+                          type="button"
+                          className="timeline-post-toggle"
+                          onClick={() =>
+                            setExpandedPosts((current) => {
+                              const next = new Set(current);
+                              if (next.has(postKey)) next.delete(postKey);
+                              else next.add(postKey);
+                              return next;
+                            })}
+                        >
+                          {expanded ? "Show less" : "Show more"}
+                        </button>
                       )}
                     </>
                   )}
@@ -1117,15 +1330,17 @@ export function KanbanDashboardWidget(
       frontmatter = { ...parsed.frontmatter, [statusKey]: status };
     const previousRows = rows;
     setMoveError("");
-    setRows((current) => current.map((item) =>
-      item.path === row.path
-        ? {
-          ...item,
-          frontmatter: { ...item.frontmatter, [statusKey]: status },
-          cells: { ...item.cells, [statusKey]: status },
-        }
-        : item
-    ));
+    setRows((current) =>
+      current.map((item) =>
+        item.path === row.path
+          ? {
+            ...item,
+            frontmatter: { ...item.frontmatter, [statusKey]: status },
+            cells: { ...item.cells, [statusKey]: status },
+          }
+          : item
+      )
+    );
     const currentOrder = Array.isArray(config.cardOrder)
         ? config.cardOrder.filter((item): item is string =>
           typeof item === "string"

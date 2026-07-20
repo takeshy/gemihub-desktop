@@ -3,12 +3,46 @@ import {
   isLocalDocumentHref,
   localHrefToPathCandidates,
   pathDirName,
+  wikiEmbedPathCandidates,
   wikiTargetToPath,
 } from "./wikiLinks.ts";
 
 Deno.test("wiki links remain relative for logical workspace files", () => {
   assertEquals(wikiTargetToPath("", "Note"), "Note.md");
   assertEquals(wikiTargetToPath("folder", "Note"), "folder/Note.md");
+});
+
+Deno.test("wiki embeds try workspace-root and source-relative paths", () => {
+  assertEquals(
+    wikiEmbedPathCandidates(
+      "Dashboards/Timeline/Timeline",
+      "#wikiembed:Dashboards%2FTimeline%2FTimeline%2Fattachments%2F2026-06-27%2Fimage.png",
+    ),
+    [
+      "Dashboards/Timeline/Timeline/attachments/2026-06-27/image.png",
+      "Dashboards/Timeline/Timeline/Dashboards/Timeline/Timeline/attachments/2026-06-27/image.png",
+    ],
+  );
+  assertEquals(
+    wikiEmbedPathCandidates(
+      "Dashboards/Timeline/Timeline",
+      "#wikiembed:attachments%2F2026-06-27%2Fimage.png",
+    ),
+    [
+      "attachments/2026-06-27/image.png",
+      "Dashboards/Timeline/Timeline/attachments/2026-06-27/image.png",
+    ],
+  );
+  assertEquals(
+    wikiEmbedPathCandidates(
+      "Dashboards/Timeline/Timeline",
+      "#wiki:Articles%2FRelease%20notes",
+    ),
+    [
+      "Articles/Release notes.md",
+      "Dashboards/Timeline/Timeline/Articles/Release notes.md",
+    ],
+  );
 });
 
 Deno.test("wiki links preserve workspace URI roots", () => {

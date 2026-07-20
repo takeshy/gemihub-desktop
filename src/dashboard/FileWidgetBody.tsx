@@ -67,7 +67,7 @@ import {
   localHrefToPathCandidates,
   pathDirName,
   transformWikiLinks,
-  wikiTargetToPath,
+  wikiEmbedPathCandidates,
 } from "../lib/wikiLinks";
 import {
   type MemoDraft,
@@ -546,12 +546,7 @@ export function FileWidgetBody({
   const resolveWikiLinkPath = useCallback(
     async (href: string): Promise<string> => {
       const paths = href.startsWith("#wiki")
-        ? [
-          wikiTargetToPath(
-            wikiBaseDirPath,
-            decodeURIComponent(href.replace(/^#wiki(embed)?:/, "")),
-          ),
-        ]
+        ? wikiEmbedPathCandidates(wikiBaseDirPath, href)
         : localHrefToPathCandidates(wikiBaseDirPath, href);
       for (const path of paths) {
         try {
@@ -572,12 +567,7 @@ export function FileWidgetBody({
     async (src: string): Promise<string> => {
       if (!src || /^(?:data:|blob:|https?:|\/\/)/i.test(src)) return src;
       const paths = src.startsWith("#wikiembed:")
-        ? [
-          wikiTargetToPath(
-            wikiBaseDirPath,
-            decodeURIComponent(src.slice("#wikiembed:".length)),
-          ),
-        ]
+        ? wikiEmbedPathCandidates(wikiBaseDirPath, src)
         : localHrefToPathCandidates(wikiBaseDirPath, src);
       for (const path of paths) {
         try {

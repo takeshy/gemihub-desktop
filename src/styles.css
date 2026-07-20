@@ -7739,6 +7739,18 @@ body.resizing-side-pane * {
   color: var(--accent);
   font-size: 9px;
 }
+.timeline-post-toggle {
+  margin-top: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  padding: 4px 7px;
+  font-size: 9px;
+}
+.timeline-post-toggle:hover {
+  background: var(--accent-soft);
+}
 .timeline-tags {
   display: flex;
   flex-wrap: wrap;
@@ -8679,7 +8691,8 @@ body.resizing-side-pane * {
   color: var(--text-muted);
   font-size: 9px;
 }
-.workspace-move-dialog input {
+.workspace-move-dialog input,
+.workspace-move-dialog select {
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--surface-raised);
@@ -8925,6 +8938,9 @@ body.resizing-side-pane * {
   inset: 0;
   background: rgb(0 0 0 / 55%);
 }
+.kanban-card-modal-backdrop.calendar-link-preview-backdrop {
+  z-index: 1400;
+}
 .kanban-card-modal {
   position: fixed;
   display: grid;
@@ -8992,6 +9008,12 @@ body.resizing-side-pane * {
   background: var(--surface);
   color: var(--text);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.kanban-card-html-preview {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
 }
 .kanban-card-modal-body .wysiwyg-host {
   min-height: 100%;
@@ -12893,11 +12915,14 @@ body.resizing-modal {
 .app-tool-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20000;
+  z-index: 1000;
   display: grid;
   place-items: center;
   background: rgb(9 14 20 / 0.52);
   padding: 24px;
+}
+.ide-frame.tool-modal-open {
+  visibility: hidden;
 }
 
 .app-secret-manager-modal,
@@ -12983,6 +13008,7 @@ body.resizing-modal {
 .app-timeline-body .timeline-filters select,
 .app-timeline-body .timeline-filters .timeline-pinned-only,
 .app-timeline-body .timeline-feed article > details > summary,
+.app-timeline-body .timeline-post-toggle,
 .app-timeline-body .timeline-tags button,
 .app-timeline-body .timeline-load-more,
 .app-timeline-body .timeline-composer-mode span,
@@ -13415,4 +13441,92 @@ body.resizing-modal {
 .calendar-detail-group article > input {
   float: right;
   margin: 0 0 8px 10px;
+}
+.calendar-event-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-bottom: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.calendar-event-actions button {
+  display: inline-grid;
+  place-items: center;
+  padding: 5px;
+}
+.calendar-event-actions button:last-child:hover {
+  color: var(--danger);
+}
+.calendar-detail-group article .markdown-preview {
+  height: auto;
+  overflow: visible;
+  padding: 2px 0 0;
+  line-height: 1.55;
+}
+.calendar-detail-group article .markdown-preview > :first-child {
+  margin-top: 0;
+}
+.calendar-detail-group article .markdown-preview > :last-child {
+  margin-bottom: 0;
+}
+.calendar-detail form.calendar-event-edit-form {
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+}
+
+.timeline-feed .markdown-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 256px;
+  border-radius: 7px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.timeline-note-embed {
+  margin: 10px 0;
+  overflow: auto;
+  max-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 12px;
+}
+.timeline-note-embed > .markdown-preview > :first-child {
+  margin-top: 0;
+}
+.timeline-note-embed > .markdown-preview > :last-child {
+  margin-bottom: 0;
+}
+.timeline-image-lightbox {
+  position: fixed;
+  z-index: 23000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 72%);
+  padding: 24px;
+  cursor: zoom-out;
+}
+.timeline-image-lightbox > button {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+  border-color: rgb(255 255 255 / 35%);
+  background: rgb(0 0 0 / 45%);
+  color: white;
+  padding: 8px;
+}
+.timeline-image-lightbox > img {
+  max-width: min(1200px, 94vw);
+  max-height: 90vh;
+  border-radius: 8px;
+  object-fit: contain;
+  cursor: default;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
 }

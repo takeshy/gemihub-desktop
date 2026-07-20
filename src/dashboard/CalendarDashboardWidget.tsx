@@ -1,32 +1,50 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock3,
   MessageCircle,
+  Pencil,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { useI18n } from "../i18n/context";
 import {
+  isLocalDocumentHref,
+  localHrefToPathCandidates,
+  transformWikiLinks,
+  wikiTargetToPath,
+} from "../lib/wikiLinks";
+import {
   appendCalendarEvent,
+  deleteCalendarEvent,
   loadTimelineCalendarPosts,
   localDayKey,
-  moveCalendarEvent,
   sanitizeTimelineName,
   type TimelineCalendarPost,
+  timelineFolder,
+  updateCalendarEvent,
 } from "./timelineEvents";
+import { KanbanCardModal } from "./KanbanCardModal";
 
 function sameMonth(date: Date, month: Date): boolean {
   return date.getFullYear() === month.getFullYear() &&
     date.getMonth() === month.getMonth();
 }
 
-export function CalendarDashboardWidget({ config, isDark }: {
+export function CalendarDashboardWidget({ config, isDark, onOpenPath }: {
   config: Record<string, unknown>;
   isDark: boolean;
+  onOpenPath?: (path: string) => void;
 }) {
   const { language, t: tr } = useI18n();
   const timelineName = sanitizeTimelineName(
@@ -42,8 +60,15 @@ export function CalendarDashboardWidget({ config, isDark }: {
   const [formOpen, setFormOpen] = useState(false);
   const [eventTime, setEventTime] = useState("");
   const [eventText, setEventText] = useState("");
+  const [editingEvent, setEditingEvent] = useState<TimelineCalendarPost | null>(
+    null,
+  );
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [previewPath, setPreviewPath] = useState("");
   const copy = {
     today: tr("calendar.today"),
     events: tr("calendar.events"),
@@ -55,6 +80,8 @@ export function CalendarDashboardWidget({ config, isDark }: {
     save: tr("common.save"),
     saving: tr("calendar.saving"),
     cancel: tr("common.cancel"),
+    edit: tr("common.edit"),
+    delete: tr("common.delete"),
     previous: tr("calendar.previous"),
     next: tr("calendar.next"),
   };
@@ -87,11 +114,11 @@ export function CalendarDashboardWidget({ config, isDark }: {
   useEffect(() => {
     if (!detailOpen) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetailOpen(false);
+      if (event.key === "Escape" && !previewPath) setDetailOpen(false);
     };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
-  }, [detailOpen]);
+  }, [detailOpen, previewPath]);
 
   const postDays = useMemo(
     () => new Set(posts.map((post) => localDayKey(new Date(post.createdAt)))),
@@ -139,6 +166,18 @@ export function CalendarDashboardWidget({ config, isDark }: {
     weekday: "short",
   }).format(new Date(`${selected}T00:00:00`));
   const today = localDayKey();
+  const handleTimelineLinkClick = useCallback(
+    (href: string, event: ReactMouseEvent<HTMLElement>) => {
+      if (!isLocalDocumentHref(href)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const path = href.startsWith("#wiki:")
+        ? wikiTargetToPath("", decodeURIComponent(href.slice("#wiki:".length)))
+        : localHrefToPathCandidates(timelineFolder(timelineName), href)[0];
+      if (path) setPreviewPath(path);
+    },
+    [timelineName],
+  );
   const save = async () => {
     if (!eventText.trim() || saving) return;
     setSaving(true);
@@ -148,6 +187,50 @@ export function CalendarDashboardWidget({ config, isDark }: {
       setEventTime("");
       setFormOpen(false);
       await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const startEditing = (post: TimelineCalendarPost) => {
+    setEditingEvent(post);
+    setEditDate(post.eventDate);
+    setEditTime(post.eventTime);
+    setEditText(post.eventContent);
+  };
+  const saveEditing = async () => {
+    if (!editingEvent || !editDate || !editText.trim() || saving) return;
+    setSaving(true);
+    try {
+      if (
+        await updateCalendarEvent(
+          timelineName,
+          editingEvent.id,
+          editDate,
+          editTime,
+          editText,
+        )
+      ) {
+        setEditingEvent(null);
+        setSelected(editDate);
+        setMonth(new Date(`${editDate}T00:00:00`));
+        await load();
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const removeEvent = async (post: TimelineCalendarPost) => {
+    if (!confirm(`${copy.delete}: ${post.eventContent || post.id}?`)) return;
+    setSaving(true);
+    try {
+      if (await deleteCalendarEvent(timelineName, post.id)) {
+        if (editingEvent?.id === post.id) setEditingEvent(null);
+        await load();
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -300,23 +383,90 @@ export function CalendarDashboardWidget({ config, isDark }: {
                 </h4>
                 {selectedEvents.map((post) => (
                   <article key={post.id}>
-                    <input
-                      type="date"
-                      value={post.eventDate}
-                      onChange={async (event) => {
-                        if (
-                          await moveCalendarEvent(
-                            timelineName,
-                            post.id,
-                            event.target.value,
-                          )
-                        ) {
-                          await load();
-                          setSelected(event.target.value);
-                        }
-                      }}
-                    />
-                    <MarkdownPreview content={post.content} isDark={isDark} />
+                    {editingEvent?.id === post.id
+                      ? (
+                        <form
+                          className="calendar-event-edit-form"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void saveEditing();
+                          }}
+                        >
+                          <label>
+                            Date
+                            <input
+                              type="date"
+                              required
+                              value={editDate}
+                              onChange={(event) =>
+                                setEditDate(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            {copy.time}
+                            <input
+                              type="time"
+                              value={editTime}
+                              onChange={(event) =>
+                                setEditTime(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            {copy.content}
+                            <textarea
+                              autoFocus
+                              required
+                              value={editText}
+                              onChange={(event) =>
+                                setEditText(event.target.value)}
+                            />
+                          </label>
+                          <footer>
+                            <button
+                              type="button"
+                              onClick={() => setEditingEvent(null)}
+                            >
+                              {copy.cancel}
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={saving || !editDate || !editText.trim()}
+                            >
+                              {saving ? copy.saving : copy.save}
+                            </button>
+                          </footer>
+                        </form>
+                      )
+                      : (
+                        <>
+                          <div className="calendar-event-actions">
+                            <span>
+                              {post.eventDate}
+                              {post.eventTime ? ` ${post.eventTime}` : ""}
+                            </span>
+                            <button
+                              type="button"
+                              title={copy.edit}
+                              onClick={() => startEditing(post)}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              title={copy.delete}
+                              disabled={saving}
+                              onClick={() => void removeEvent(post)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                          <MarkdownPreview
+                            content={transformWikiLinks(post.eventContent)}
+                            isDark={isDark}
+                            onLinkClick={handleTimelineLinkClick}
+                          />
+                        </>
+                      )}
                   </article>
                 ))}
               </div>
@@ -329,13 +479,32 @@ export function CalendarDashboardWidget({ config, isDark }: {
                 </h4>
                 {selectedPosts.map((post) => (
                   <article key={post.id}>
-                    <MarkdownPreview content={post.content} isDark={isDark} />
+                    <MarkdownPreview
+                      content={transformWikiLinks(post.content)}
+                      isDark={isDark}
+                      onLinkClick={handleTimelineLinkClick}
+                    />
                   </article>
                 ))}
               </div>
             )}
           </section>
         </div>
+      )}
+      {previewPath && (
+        <KanbanCardModal
+          path={previewPath}
+          fileScope="workspace"
+          isDark={isDark}
+          backdropClassName="calendar-link-preview-backdrop"
+          onNavigate={() => {
+            const path = previewPath;
+            setPreviewPath("");
+            onOpenPath?.(path);
+          }}
+          onSaved={() => void load()}
+          onClose={() => setPreviewPath("")}
+        />
       )}
     </div>
   );

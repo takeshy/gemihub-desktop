@@ -663,7 +663,13 @@ export function DashboardView({
   openPathRequest: {
     id: number;
     path: string;
-    source?: "local" | "directory" | "filetree" | "memo-list" | "startup";
+    source?:
+      | "local"
+      | "directory"
+      | "filetree"
+      | "filetree-created"
+      | "memo-list"
+      | "startup";
   };
   onHistoryCheckpoint: (reason: "reload") => void;
   onDeferredHistoryCheckpoint: (reason: "reload") => void;
@@ -2276,7 +2282,8 @@ export function DashboardView({
           ? await openMemoSourceMaximized(openPathRequest.path)
           : openPathRequest.source === "startup"
           ? await openKnownPathInLastActiveWidget(openPathRequest.path)
-          : openPathRequest.source === "filetree"
+          : openPathRequest.source === "filetree" ||
+              openPathRequest.source === "filetree-created"
           ? await openDirectoryPathInLastActiveWidget(openPathRequest.path)
           : openPathRequest.source === "directory"
           ? await openDirectoryPathAsWidget(openPathRequest.path)
@@ -2285,10 +2292,24 @@ export function DashboardView({
         else if (
           openPathRequest.source === "memo-list" ||
           openPathRequest.source === "startup" ||
-          openPathRequest.source === "filetree"
+          openPathRequest.source === "filetree" ||
+          openPathRequest.source === "filetree-created"
         ) {
           setActiveWidgetId(widgetId);
           setMaximizedWidgetId(widgetId);
+          if (
+            openPathRequest.source === "filetree-created" &&
+            /\.md$/i.test(openPathRequest.path)
+          ) {
+            onChange((current) => ({
+              ...current,
+              widgets: current.widgets.map((widget) =>
+                widget.id === widgetId
+                  ? { ...widget, config: { ...widget.config, mode: "wysiwyg" } }
+                  : widget
+              ),
+            }));
+          }
         }
       } catch (error) {
         console.error(error);
@@ -3208,6 +3229,8 @@ export function DashboardView({
                       <CalendarDashboardWidget
                         config={widget.config}
                         isDark={isDark}
+                        onOpenPath={(path) =>
+                          void openKnownPathInLastActiveWidget(path)}
                       />
                     )}
                     {widget.type === "kanban" && (

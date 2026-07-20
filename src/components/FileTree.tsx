@@ -113,6 +113,7 @@ function TreeRow({
   expanded,
   onToggle,
   onOpen,
+  onCreateFile,
   onMutated,
   onContextMenu,
   onDragExternal,
@@ -130,6 +131,7 @@ function TreeRow({
   expanded: Set<string>;
   onToggle: (path: string) => void;
   onOpen: (path: string) => void;
+  onCreateFile: (directory: string) => void;
   onMutated: () => void;
   onContextMenu: (node: FileTreeNode, path: string, event: MouseEvent) => void;
   onDragExternal?: (node: FileTreeNode, path: string) => void;
@@ -159,15 +161,8 @@ function TreeRow({
   const mutate = async (kind: "file" | "folder" | "rename" | "delete") => {
     try {
       if (kind === "file") {
-        const name = prompt("New file name", "untitled.md")?.trim();
-        if (name) {
-          await writeFile(
-            scopedPath(
-              joinPath(node.isDir ? node.path : parentPath(node.path), name),
-            ),
-            "",
-          );
-        }
+        onCreateFile(node.isDir ? node.path : parentPath(node.path));
+        return;
       } else if (kind === "folder") {
         const name = prompt("New folder name")?.trim();
         if (name) {
@@ -327,6 +322,7 @@ function TreeRow({
           expanded={expanded}
           onToggle={onToggle}
           onOpen={onOpen}
+          onCreateFile={onCreateFile}
           onMutated={onMutated}
           onContextMenu={onContextMenu}
           onDragExternal={onDragExternal}
@@ -352,7 +348,7 @@ export function FileTree({
 }: {
   directoryBase: string;
   workspacePath: string;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, created?: boolean) => void;
   onDirectoryBaseUnavailable: () => void;
   onCollapse: () => void;
 }) {
@@ -363,6 +359,14 @@ export function FileTree({
     new Set(["files:."])
   );
   const [query, setQuery] = useState("");
+  const [createFileDialog, setCreateFileDialog] = useState<
+    {
+      directory: string;
+      name: string;
+      extension: string;
+      customExtension: string;
+    } | null
+  >(null);
   const [contentResults, setContentResults] = useState<FileSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [externalSelection, setExternalSelection] = useState<Set<string>>(
@@ -867,15 +871,52 @@ export function FileTree({
   };
 
   const createAtRoot = async (kind: "file" | "folder") => {
+    if (kind === "file") {
+      setCreateFileDialog({
+        directory: "",
+        name: "",
+        extension: ".md",
+        customExtension: "",
+      });
+      return;
+    }
     const name = prompt(
-      kind === "file" ? "New file name" : "New folder name",
-      kind === "file" ? "untitled.md" : "folder",
+      "New folder name",
+      "folder",
     )?.trim();
     if (!name) return;
     try {
-      if (kind === "file") await writeFile(`workspace://${name}`, "");
-      else await createDirectory(`workspace://${name}`);
+      await createDirectory(`workspace://${name}`);
       await reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const submitCreateFile = async () => {
+    if (!createFileDialog) return;
+    const baseName = createFileDialog.name.trim();
+    const extension =
+      (createFileDialog.extension === "custom"
+        ? createFileDialog.customExtension
+        : createFileDialog.extension).trim();
+    if (!baseName || !extension) return;
+    const normalizedExtension = extension.startsWith(".")
+      ? extension
+      : `.${extension}`;
+    const name =
+      baseName.toLowerCase().endsWith(normalizedExtension.toLowerCase())
+        ? baseName
+        : `${baseName}${normalizedExtension}`;
+    const path = scopedTreePath(
+      "workspace",
+      joinPath(createFileDialog.directory, name),
+    );
+    try {
+      await writeFile(path, "");
+      setCreateFileDialog(null);
+      await reload();
+      onOpenFile(path, true);
     } catch (error) {
       alert(error instanceof Error ? error.message : String(error));
     }
@@ -997,6 +1038,13 @@ export function FileTree({
                       return next;
                     })}
                   onOpen={openTreeFile}
+                  onCreateFile={(directory) =>
+                    setCreateFileDialog({
+                      directory,
+                      name: "",
+                      extension: ".md",
+                      customExtension: "",
+                    })}
                   onMutated={() => void reload()}
                   onDropExternal={requestExternalDrop}
                   externalDropTarget={externalDropTarget}
@@ -1087,6 +1135,7 @@ export function FileTree({
                       return next;
                     })}
                   onOpen={openTreeFile}
+                  onCreateFile={() => undefined}
                   onMutated={() => void reload()}
                   onDragExternal={beginExternalMove}
                   externalSelection={externalSelection}
@@ -1160,6 +1209,93 @@ export function FileTree({
           <button type="button" onClick={() => void trashFromMenu()}>
             <Trash2 size={14} />Move to Trash
           </button>
+        </div>
+      )}
+      {createFileDialog && (
+        <div
+          className="encrypted-file-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setCreateFileDialog(null);
+          }}
+        >
+          <section className="workspace-move-dialog create-file-dialog">
+            <header>
+              <strong>New file</strong>
+              <button type="button" onClick={() => setCreateFileDialog(null)}>
+                <X size={15} />
+              </button>
+            </header>
+            <div>
+              <label>
+                <span>File name</span>
+                <input
+                  autoFocus
+                  value={createFileDialog.name}
+                  onChange={(event) =>
+                    setCreateFileDialog({
+                      ...createFileDialog,
+                      name: event.target.value,
+                    })}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void submitCreateFile();
+                    if (event.key === "Escape") setCreateFileDialog(null);
+                  }}
+                />
+              </label>
+              <label>
+                <span>Extension</span>
+                <select
+                  value={createFileDialog.extension}
+                  onChange={(event) =>
+                    setCreateFileDialog({
+                      ...createFileDialog,
+                      extension: event.target.value,
+                    })}
+                >
+                  <option value=".md">.md</option>
+                  <option value=".txt">.txt</option>
+                  <option value=".yaml">.yaml</option>
+                  <option value=".json">.json</option>
+                  <option value=".html">.html</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              {createFileDialog.extension === "custom" && (
+                <label>
+                  <span>Custom extension</span>
+                  <input
+                    value={createFileDialog.customExtension}
+                    placeholder=".csv"
+                    onChange={(event) =>
+                      setCreateFileDialog({
+                        ...createFileDialog,
+                        customExtension: event.target.value,
+                      })}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void submitCreateFile();
+                      if (event.key === "Escape") setCreateFileDialog(null);
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            <footer>
+              <button type="button" onClick={() => setCreateFileDialog(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={!createFileDialog.name.trim() ||
+                  !(createFileDialog.extension === "custom"
+                    ? createFileDialog.customExtension.trim()
+                    : createFileDialog.extension)}
+                onClick={() => void submitCreateFile()}
+              >
+                Create
+              </button>
+            </footer>
+          </section>
         </div>
       )}
       {encryptedModalPath && (

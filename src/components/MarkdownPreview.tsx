@@ -1,7 +1,12 @@
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
-import { useEffect, useState, type ImgHTMLAttributes, type MouseEvent } from "react";
+import {
+  type ImgHTMLAttributes,
+  type MouseEvent,
+  useEffect,
+  useState,
+} from "react";
 import { MermaidCodeBlock } from "./MermaidCodeBlock";
 import { isLocalDocumentHref } from "../lib/wikiLinks";
 import { workflowCodeBlockToMermaid } from "../workflow/codeBlock";
@@ -73,7 +78,9 @@ function titleCase(value: string): string {
 }
 
 function parseCalloutMarker(value: string) {
-  const match = value.match(/^\[!([A-Za-z0-9_-]+)\]([+-])?(?:[ \t]+([^\n]*))?(?:\n([\s\S]*))?$/);
+  const match = value.match(
+    /^\[!([A-Za-z0-9_-]+)\]([+-])?(?:[ \t]+([^\n]*))?(?:\n([\s\S]*))?$/,
+  );
   if (!match) return null;
 
   const rawType = match[1].toLowerCase();
@@ -92,7 +99,9 @@ function parseCalloutMarker(value: string) {
 function visitBlockquotes(node: MarkdownNode): void {
   if (node.type === "blockquote") {
     const first = node.children?.[0];
-    const firstText = first?.type === "paragraph" ? first.children?.[0] : undefined;
+    const firstText = first?.type === "paragraph"
+      ? first.children?.[0]
+      : undefined;
     if (firstText?.type === "text" && typeof firstText.value === "string") {
       const callout = parseCalloutMarker(firstText.value);
       if (callout) {
@@ -126,32 +135,47 @@ function remarkCallouts() {
 }
 
 function textFromChildren(value: unknown): string {
-  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
   if (Array.isArray(value)) return value.map(textFromChildren).join("");
   if (value && typeof value === "object" && "props" in value) {
-    return textFromChildren((value as { props?: { children?: unknown } }).props?.children);
+    return textFromChildren(
+      (value as { props?: { children?: unknown } }).props?.children,
+    );
   }
   return "";
 }
 
 function slugify(value: string): string {
-  return value.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s+/g, "-");
+  return value.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(
+    /\s+/g,
+    "-",
+  );
 }
 
 function MarkdownImage({
   src,
   resolveImageSrc,
+  onImageClick,
   ...props
 }: ImgHTMLAttributes<HTMLImageElement> & {
   resolveImageSrc?: (src: string) => Promise<string>;
+  onImageClick?: (src: string) => void;
 }) {
   const source = typeof src === "string" ? src : "";
   const local = !!resolveImageSrc && isLocalDocumentHref(source);
-  const [resolved, setResolved] = useState<{ source: string; value: string }>(() => ({
-    source,
-    value: local ? "" : source,
-  }));
-  const value = resolved.source === source ? resolved.value : local ? "" : source;
+  const [resolved, setResolved] = useState<{ source: string; value: string }>(
+    () => ({
+      source,
+      value: local ? "" : source,
+    }),
+  );
+  const value = resolved.source === source
+    ? resolved.value
+    : local
+    ? ""
+    : source;
 
   useEffect(() => {
     let cancelled = false;
@@ -167,10 +191,18 @@ function MarkdownImage({
       .catch(() => {
         if (!cancelled) setResolved({ source, value: source });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [local, resolveImageSrc, source]);
 
-  return <img {...props} src={value || undefined} />;
+  return (
+    <img
+      {...props}
+      src={value || undefined}
+      onClick={() => value && onImageClick?.(value)}
+    />
+  );
 }
 
 export function MarkdownPreview({
@@ -179,12 +211,14 @@ export function MarkdownPreview({
   onLinkClick,
   onLinkContextMenu,
   resolveImageSrc,
+  onImageClick,
 }: {
   content: string;
   isDark: boolean;
   onLinkClick?: (href: string, event: MouseEvent<HTMLElement>) => void;
   onLinkContextMenu?: (href: string, event: MouseEvent<HTMLElement>) => void;
   resolveImageSrc?: (src: string) => Promise<string>;
+  onImageClick?: (src: string) => void;
 }) {
   return (
     <div className="markdown-preview">
@@ -192,14 +226,32 @@ export function MarkdownPreview({
         remarkPlugins={[remarkGfm, remarkCallouts]}
         rehypePlugins={[rehypeHighlight]}
         components={{
-          h1: ({ children }) => <h1 id={slugify(textFromChildren(children))}>{children}</h1>,
-          h2: ({ children }) => <h2 id={slugify(textFromChildren(children))}>{children}</h2>,
-          h3: ({ children }) => <h3 id={slugify(textFromChildren(children))}>{children}</h3>,
-          h4: ({ children }) => <h4 id={slugify(textFromChildren(children))}>{children}</h4>,
-          h5: ({ children }) => <h5 id={slugify(textFromChildren(children))}>{children}</h5>,
-          h6: ({ children }) => <h6 id={slugify(textFromChildren(children))}>{children}</h6>,
+          h1: ({ children }) => (
+            <h1 id={slugify(textFromChildren(children))}>{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 id={slugify(textFromChildren(children))}>{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 id={slugify(textFromChildren(children))}>{children}</h3>
+          ),
+          h4: ({ children }) => (
+            <h4 id={slugify(textFromChildren(children))}>{children}</h4>
+          ),
+          h5: ({ children }) => (
+            <h5 id={slugify(textFromChildren(children))}>{children}</h5>
+          ),
+          h6: ({ children }) => (
+            <h6 id={slugify(textFromChildren(children))}>{children}</h6>
+          ),
           img: ({ src, alt, ...props }) => (
-            <MarkdownImage src={src} alt={alt} resolveImageSrc={resolveImageSrc} {...props} />
+            <MarkdownImage
+              src={src}
+              alt={alt}
+              resolveImageSrc={resolveImageSrc}
+              onImageClick={onImageClick}
+              {...props}
+            />
           ),
           a: ({ href, children, ...props }) => {
             if (href && onLinkClick && isLocalDocumentHref(href)) {
@@ -234,15 +286,30 @@ export function MarkdownPreview({
             );
           },
           blockquote({ children, ...props }) {
-            const calloutType = String((props as Record<string, unknown>)["data-callout"] || "");
-            if (!calloutType) return <blockquote {...props}>{children}</blockquote>;
+            const calloutType = String(
+              (props as Record<string, unknown>)["data-callout"] || "",
+            );
+            if (!calloutType) {return (
+                <blockquote {...props}>{children}</blockquote>
+              );}
 
-            const title = String((props as Record<string, unknown>)["data-callout-title"] || titleCase(calloutType));
-            const icon = String((props as Record<string, unknown>)["data-callout-icon"] || calloutIcons.note);
-            const isClosed = String((props as Record<string, unknown>)["data-callout-fold"] || "") === "closed";
+            const title = String(
+              (props as Record<string, unknown>)["data-callout-title"] ||
+                titleCase(calloutType),
+            );
+            const icon = String(
+              (props as Record<string, unknown>)["data-callout-icon"] ||
+                calloutIcons.note,
+            );
+            const isClosed = String(
+              (props as Record<string, unknown>)["data-callout-fold"] || "",
+            ) === "closed";
 
             return (
-              <blockquote {...props} className={`callout callout-${calloutType}`}>
+              <blockquote
+                {...props}
+                className={`callout callout-${calloutType}`}
+              >
                 <div className="callout-title">
                   <span className="callout-icon">{icon}</span>
                   <span>{title}</span>
@@ -254,12 +321,29 @@ export function MarkdownPreview({
           code({ className, children, ...props }) {
             const isMermaid = /language-mermaid/.test(className || "");
             if (isMermaid) {
-              return <MermaidCodeBlock code={String(children).replace(/\n$/, "")} isDark={isDark} />;
+              return (
+                <MermaidCodeBlock
+                  code={String(children).replace(/\n$/, "")}
+                  isDark={isDark}
+                />
+              );
             }
-            if (/language-(?:hub-workflow|workflow)(?:\s|$)/.test(className || "")) {
+            if (
+              /language-(?:hub-workflow|workflow)(?:\s|$)/.test(className || "")
+            ) {
               const source = String(children).replace(/\n$/, "");
-              try { return <MermaidCodeBlock code={workflowCodeBlockToMermaid(source)} isDark={isDark} />; }
-              catch (error) { return <pre className="code-block error-block"><code>{error instanceof Error ? error.message : String(error)}{"\n\n"}{source}</code></pre>; }
+              try {
+                return (
+                  <MermaidCodeBlock
+                    code={workflowCodeBlockToMermaid(source)}
+                    isDark={isDark}
+                  />
+                );
+              } catch (error) {
+                return (
+                  <pre className="code-block error-block"><code>{error instanceof Error ? error.message : String(error)}{"\n\n"}{source}</code></pre>
+                );
+              }
             }
             return (
               <code className={className} {...props}>

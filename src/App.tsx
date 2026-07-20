@@ -1134,7 +1134,13 @@ export default function App() {
     {
       id: number;
       path: string;
-      source?: "local" | "directory" | "filetree" | "memo-list" | "startup";
+      source?:
+        | "local"
+        | "directory"
+        | "filetree"
+        | "filetree-created"
+        | "memo-list"
+        | "startup";
     }
   >({ id: 0, path: "" });
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>({
@@ -2190,7 +2196,10 @@ export default function App() {
         </header>
 
         <section
-          className="ide-frame"
+          className={`ide-frame ${
+            timelineOpen || calendarOpen || kanbanOpen ? "tool-modal-open" : ""
+          }`}
+          aria-hidden={timelineOpen || calendarOpen || kanbanOpen}
           style={{
             gridTemplateColumns: [
               `${fileTreeOpen ? fileTreeWidth : 36}px`,
@@ -2210,7 +2219,7 @@ export default function App() {
               directoryBase={directoryBase}
               workspacePath={workspacePath}
               onDirectoryBaseUnavailable={handleDirectoryBaseUnavailable}
-              onOpenFile={(path) => {
+              onOpenFile={(path, created) => {
                 if (
                   !path.startsWith("files://") &&
                   path.toLowerCase().endsWith(".dashboard")
@@ -2218,7 +2227,7 @@ export default function App() {
                 else {setOpenPathRequest((value) => ({
                     id: value.id + 1,
                     path,
-                    source: "filetree",
+                    source: created ? "filetree-created" : "filetree",
                   })
                   );}
               }}
@@ -2643,12 +2652,14 @@ export default function App() {
                   isDark={isDark}
                   settings={chatSettings}
                   onChange={() => {}}
-                  onOpenPath={(path) =>
+                  onOpenPath={(path) => {
+                    setTimelineOpen(false);
                     setOpenPathRequest((value) => ({
                       id: value.id + 1,
                       path,
                       source: "filetree",
-                    }))}
+                    }));
+                  }}
                   onExternalPathOpened={handleExternalPathOpened}
                 />
               </div>
@@ -2679,6 +2690,14 @@ export default function App() {
                 <CalendarDashboardWidget
                   config={{ timelineName: "Timeline" }}
                   isDark={isDark}
+                  onOpenPath={(path) => {
+                    setCalendarOpen(false);
+                    setOpenPathRequest((value) => ({
+                      id: value.id + 1,
+                      path,
+                      source: "filetree",
+                    }));
+                  }}
                 />
               </div>
             </section>
@@ -2721,12 +2740,14 @@ export default function App() {
                   }}
                   isDark={isDark}
                   onChange={() => {}}
-                  onOpenPath={(path) =>
+                  onOpenPath={(path) => {
+                    setKanbanOpen(false);
                     setOpenPathRequest((value) => ({
                       id: value.id + 1,
                       path,
                       source: "filetree",
-                    }))}
+                    }));
+                  }}
                 />
               </div>
             </section>

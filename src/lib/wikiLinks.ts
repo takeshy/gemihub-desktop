@@ -24,6 +24,20 @@ export function wikiTargetToPath(baseDirPath: string, target: string): string {
   return localTargetToPath(baseDirPath, clean);
 }
 
+export function wikiEmbedPathCandidates(
+  baseDirPath: string,
+  src: string,
+): string[] {
+  const marker = /^#wiki(?:embed)?:/.exec(src)?.[0] ?? "";
+  const target = marker
+    ? safeDecodeURIComponent(src.slice(marker.length))
+    : src;
+  return [
+    wikiTargetToPath("", target),
+    wikiTargetToPath(baseDirPath, target),
+  ].filter((path, index, paths) => path && paths.indexOf(path) === index);
+}
+
 export function localTargetToPath(baseDirPath: string, target: string): string {
   const clean = target.split("#")[0].trim();
   if (!clean) return "";

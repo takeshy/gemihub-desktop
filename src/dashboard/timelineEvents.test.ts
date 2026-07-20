@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
-  memoTimelineBody,
   loadTimelineCalendarPosts,
+  memoTimelineBody,
   parseTimelineCalendarPosts,
   sanitizeTimelineName,
   timelineFolder,
@@ -19,18 +19,20 @@ Deno.test("Calendar loads Timeline data without scanning DirectoryBase", async (
           FileInventory: () => {
             throw new Error("DirectoryBase must not be scanned");
           },
-          ListWorkspaceFiles: () => Promise.resolve([{
-            path: "Dashboards/Timeline/Timeline/2026-07-20.md",
-            name: "2026-07-20.md",
-            size: 1,
-            modTime: 1,
-          }]),
-          ReadWorkspaceFile: () => Promise.resolve({
-            path: "Dashboards/Timeline/Timeline/2026-07-20.md",
-            fileName: "2026-07-20.md",
-            content:
-              "2026-07-20T01:02:03.000Z\nid: isolated\n\nWorkspace only\n",
-          }),
+          ListWorkspaceFiles: () =>
+            Promise.resolve([{
+              path: "Dashboards/Timeline/Timeline/2026-07-20.md",
+              name: "2026-07-20.md",
+              size: 1,
+              modTime: 1,
+            }]),
+          ReadWorkspaceFile: () =>
+            Promise.resolve({
+              path: "Dashboards/Timeline/Timeline/2026-07-20.md",
+              fileName: "2026-07-20.md",
+              content:
+                "2026-07-20T01:02:03.000Z\nid: isolated\n\nWorkspace only\n",
+            }),
         },
       },
     },
@@ -71,10 +73,14 @@ id: kanban-history
     id: posts[0].id,
     isEvent: posts[0].isEvent,
     eventDate: posts[0].eventDate,
+    eventTime: posts[0].eventTime,
+    eventContent: posts[0].eventContent,
   }, {
     id: "calendar-event-one",
     isEvent: true,
     eventDate: "2026-07-20",
+    eventTime: "10:00",
+    eventContent: "Demo",
   });
   assertEquals({ id: posts[1].id, isEvent: posts[1].isEvent }, {
     id: "kanban-history",
