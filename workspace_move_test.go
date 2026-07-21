@@ -65,10 +65,11 @@ func workspaceMoveTestApp(t *testing.T) (*App, string, string) {
 	if err := app.initializeWorkspaces(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.SetDirectoryBase(files); err != nil {
+	filesBase, err := app.SetDirectoryBase(files)
+	if err != nil {
 		t.Fatal(err)
 	}
-	return app, files, app.GetWorkspacePath()
+	return app, filesBase, app.GetWorkspacePath()
 }
 
 func TestMoveDirectoryIntoWorkspace(t *testing.T) {

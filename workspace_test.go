@@ -17,7 +17,7 @@ func TestSingleWorkspaceInitializeAndChangeDirectory(t *testing.T) {
 	if len(state.Workspaces) != 1 || state.Workspaces[0].Name != "Workspace" || state.ActiveWorkspaceID != "workspace" {
 		t.Fatalf("unexpected defaults: %#v", state)
 	}
-	if want := filepath.Join(config, "GemiHubWorkspace"); state.Workspaces[0].Path != want {
+	if want := canonicalTestPath(t, filepath.Join(config, "GemiHubWorkspace")); state.Workspaces[0].Path != want {
 		t.Fatalf("default workspace path = %q, want %q", state.Workspaces[0].Path, want)
 	}
 	if app.GetDirectoryBase() != "" {
@@ -36,6 +36,7 @@ func TestSingleWorkspaceInitializeAndChangeDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	workspacePath = canonicalTestPath(t, workspacePath)
 	if len(state.Workspaces) != 1 || app.GetWorkspacePath() != workspacePath || app.GetDirectoryBase() != "" {
 		t.Fatalf("single Workspace directory was not applied: %#v", state)
 	}
@@ -58,7 +59,8 @@ func TestWorkspaceResourcesAreIndependentFromDirectoryBase(t *testing.T) {
 	if err := app.initializeWorkspaces(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.SetDirectoryBase(files); err != nil {
+	filesBase, err := app.SetDirectoryBase(files)
+	if err != nil {
 		t.Fatal(err)
 	}
 	workspace := app.GetWorkspaceState().Workspaces[0]
@@ -127,7 +129,7 @@ func TestWorkspaceResourcesAreIndependentFromDirectoryBase(t *testing.T) {
 	if _, err := app.SetDirectoryBase(files); err != nil {
 		t.Fatal(err)
 	}
-	if got := app.GetDirectoryBase(); got != files {
+	if got := app.GetDirectoryBase(); got != filesBase {
 		t.Fatalf("Workspace resource write changed directory base: %s", got)
 	}
 	if err := os.MkdirAll(filepath.Join(files, "skills", "workspace-only"), 0o755); err != nil {

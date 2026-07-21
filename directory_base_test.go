@@ -14,10 +14,11 @@ func testDirectoryApp(t *testing.T) (*App, string) {
 	t.Helper()
 	dir := t.TempDir()
 	app := NewApp()
-	if _, err := app.SetDirectoryBase(dir); err != nil {
+	base, err := app.SetDirectoryBase(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	return app, dir
+	return app, base
 }
 
 func TestWorkspaceFileAPIUsesEntireWorkspace(t *testing.T) {
@@ -27,7 +28,7 @@ func TestWorkspaceFileAPIUsesEntireWorkspace(t *testing.T) {
 	if _, err := app.SetDirectoryBase(files); err != nil {
 		t.Fatal(err)
 	}
-	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	app.workspaceState = testWorkspaceState(t, workspace)
 	if err := app.WriteWorkspaceFile("notes/readme.md", "Workspace data"); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestWorkspaceFileAPIUsesEntireWorkspace(t *testing.T) {
 func TestListWorkspaceDirectoryFilesScopesTheWalk(t *testing.T) {
 	workspace := t.TempDir()
 	app := NewApp()
-	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	app.workspaceState = testWorkspaceState(t, workspace)
 	for path, content := range map[string]string{
 		"Dashboards/Timeline/Timeline/2026-07-20.md":         "first",
 		"Dashboards/Timeline/Timeline/attachments/image.txt": "attachment",
@@ -101,7 +102,7 @@ func TestListWorkspaceDirectoryFilesScopesTheWalk(t *testing.T) {
 func TestListWorkspaceDirectoryEntriesIncludesTimestamps(t *testing.T) {
 	workspace := t.TempDir()
 	app := NewApp()
-	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	app.workspaceState = testWorkspaceState(t, workspace)
 	if err := app.WriteWorkspaceFile("projects/tasks/one.md", "task"); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +157,7 @@ func TestReadFileReturnsNilForMissingFile(t *testing.T) {
 func TestReadWorkspaceFileReturnsNilForMissingFile(t *testing.T) {
 	workspace := t.TempDir()
 	app := NewApp()
-	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "one", Workspaces: []Workspace{{ID: "one", Name: "One", Path: workspace}}}
+	app.workspaceState = testWorkspaceState(t, workspace)
 	result, err := app.ReadWorkspaceFile("Dashboards/Timeline/Timeline/2026-07-20.md")
 	if err != nil {
 		t.Fatalf("ReadWorkspaceFile returned an error for a missing file: %v", err)
@@ -307,10 +308,7 @@ func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
 
 func TestListTrashDeduplicatesSharedFilesAndWorkspaceBase(t *testing.T) {
 	app, dir := testDirectoryApp(t)
-	app.workspaceState = WorkspaceState{
-		ActiveWorkspaceID: "shared",
-		Workspaces:        []Workspace{{ID: "shared", Name: "Shared", Path: dir}},
-	}
+	app.workspaceState = testWorkspaceState(t, dir)
 	if err := app.WriteFile("notes/item.md", "one"); err != nil {
 		t.Fatal(err)
 	}

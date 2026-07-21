@@ -53,7 +53,9 @@ func TestLooksLikeStalledToolNarration(t *testing.T) {
 func TestApplyPendingAppendCreatesMissingFile(t *testing.T) {
 	base := t.TempDir()
 	app := NewApp()
-	app.directoryBase = base
+	if _, err := app.SetDirectoryBase(base); err != nil {
+		t.Fatal(err)
+	}
 	if err := app.ApplyPendingFileAction(PendingFileAction{Kind: "write", Mode: "append", Path: "new.md", Content: "hello"}); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +122,11 @@ func TestAgentSkillFileToolAliases(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "skills", "review", "SKILL.md"), []byte("instructions"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{directoryBase: t.TempDir(), workspaceState: WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: base}}}}
+	app := NewApp()
+	if _, err := app.SetDirectoryBase(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	app.workspaceState = testWorkspaceState(t, base)
 	value, pending, err := app.executeFileTool("read_note", `{"path":"skills/review/SKILL.md"}`)
 	if err != nil || pending != nil || value.(*LocalFileResult).Content != "instructions" {
 		t.Fatalf("read_note failed: value=%#v pending=%#v error=%v", value, pending, err)
@@ -143,7 +149,11 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(external, "outside.md"), []byte("external needle"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{directoryBase: external, workspaceState: WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: workspace}}}}
+	app := NewApp()
+	if _, err := app.SetDirectoryBase(external); err != nil {
+		t.Fatal(err)
+	}
+	app.workspaceState = testWorkspaceState(t, workspace)
 
 	value, _, err := app.executeFileTool("read_file", `{"path":"inside.md"}`)
 	if err != nil || value.(*LocalFileResult).Content != "workspace needle" {
@@ -207,12 +217,7 @@ func TestGeminiFunctionDeclarationsNoSearch(t *testing.T) {
 
 func TestAppendTimelineToolWritesSystemTimeline(t *testing.T) {
 	workspace := t.TempDir()
-	app := &App{
-		workspaceState: WorkspaceState{
-			ActiveWorkspaceID: "workspace",
-			Workspaces:        []Workspace{{ID: "workspace", Path: workspace}},
-		},
-	}
+	app := &App{workspaceState: testWorkspaceState(t, workspace)}
 	value, pending, err := app.executeChatTool(ChatRequest{}, "append_timeline", `{"content":"回答の要点\n\n- 保存する"}`)
 	if err != nil || pending != nil {
 		t.Fatalf("append_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
@@ -249,7 +254,7 @@ func TestReadTimelineToolReadsRequestedDay(t *testing.T) {
 	if err := os.WriteFile(path, []byte("worked on launcher"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{workspaceState: WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: workspace}}}}
+	app := &App{workspaceState: testWorkspaceState(t, workspace)}
 	value, pending, err := app.executeChatTool(ChatRequest{}, "read_timeline", `{"date":"2026-07-20"}`)
 	if err != nil || pending != nil {
 		t.Fatalf("read_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
@@ -401,7 +406,7 @@ func TestAnthropicThinkingBlocksArePreservedAcrossToolCall(t *testing.T) {
 	app := NewApp()
 	app.workspaceConfigDir = t.TempDir()
 	app.startup(context.Background())
-	app.workspaceState = WorkspaceState{ActiveWorkspaceID: "workspace", Workspaces: []Workspace{{ID: "workspace", Path: directory}}}
+	app.workspaceState = testWorkspaceState(t, directory)
 	result, err := app.chatAnthropic(ChatRequest{Endpoint: "https://anthropic.test", APIKey: "test", Model: "claude-opus-4-8", EnableThinking: true, EnableFileTools: true, FileToolMode: "noSearch", Messages: []ChatMessage{{Role: "user", Content: "read the note"}}})
 	if err != nil {
 		t.Fatal(err)

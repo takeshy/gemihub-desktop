@@ -58,6 +58,7 @@ import {
 import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
 import {
   type MemoPathMove,
+  relocatedMemoSource,
   relocateWorkspaceMemos,
 } from "../lib/memoRelocation";
 import {
@@ -439,6 +440,7 @@ export function FileTree({
     } | null
   >(null);
   const suppressExternalClickUntilRef = useRef(0);
+  const suppressNextRefreshRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<
     { node: FileTreeNode; file: FileRef; x: number; y: number } | null
   >(null);
@@ -523,7 +525,13 @@ export function FileTree({
     setExternalSelection(new Set());
   }, [directoryBase]);
   useEffect(() => {
-    const listener = () => void reload();
+    const listener = () => {
+      if (suppressNextRefreshRef.current) {
+        suppressNextRefreshRef.current = false;
+        return;
+      }
+      void reload();
+    };
     window.addEventListener("llm-hub:file-tree-refresh", listener);
     return () =>
       window.removeEventListener("llm-hub:file-tree-refresh", listener);
@@ -1034,6 +1042,8 @@ export function FileTree({
       setNodes((current) => withoutMoved(current));
       setWorkspaceMove(null);
       setExternalSelection(new Set());
+      const focusedExternalMoved = !!externalFocusPath &&
+        relocatedMemoSource(externalFocusPath, memoMoves) !== null;
       try {
         await relocateWorkspaceMemos(memoMoves);
       } catch (memoError) {
@@ -1045,6 +1055,10 @@ export function FileTree({
         );
       }
       await reload();
+      if (focusedExternalMoved) {
+        await onExternalDirectoryChange("", "");
+        suppressNextRefreshRef.current = true;
+      }
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
     } catch (error) {
       setWorkspaceMove((current) =>
