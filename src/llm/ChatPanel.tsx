@@ -903,7 +903,11 @@ export function ChatPanel({
   }, [activeFile, dismissedAutomaticPath]);
 
   useEffect(() => {
-    if (!externalAttachments?.id || !externalAttachments.files.length) return;
+    const scope = workspaceBase || "__session__";
+    if (
+      loadedHistoryScope !== scope || sessionsLocked ||
+      !externalAttachments?.id || !externalAttachments.files.length
+    ) return;
     setAttachedFiles((current) => {
       const retained = externalAttachments.files.some((file) => file.rag)
         ? current.filter((file) => !file.rag)
@@ -914,7 +918,12 @@ export function ChatPanel({
         ...externalAttachments.files.filter((file) => !paths.has(file.path)),
       ];
     });
-  }, [externalAttachments?.id]);
+  }, [
+    externalAttachments?.id,
+    loadedHistoryScope,
+    sessionsLocked,
+    workspaceBase,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
