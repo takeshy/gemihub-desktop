@@ -1,8 +1,10 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
   absoluteFilesPath,
+  canMoveWorkspacePath,
   isProtectedWorkspaceRoot,
   scopedTreeRef,
+  workspaceMoveTarget,
 } from "../lib/fileTreePaths.ts";
 import type { FileTreeNode } from "../lib/wailsBackend.ts";
 
@@ -49,4 +51,20 @@ Deno.test("workspace files retain their filesystem scope", () => {
     scope: "files",
     path: "readme.md",
   });
+});
+
+Deno.test("workspace drag targets preserve the item name", () => {
+  assertEquals(
+    workspaceMoveTarget("notes/today.md", "archive"),
+    "archive/today.md",
+  );
+  assertEquals(workspaceMoveTarget("notes/today.md", ""), "today.md");
+});
+
+Deno.test("workspace drag rejects no-op and recursive directory moves", () => {
+  assertEquals(canMoveWorkspacePath("notes/today.md", false, "archive"), true);
+  assertEquals(canMoveWorkspacePath("notes/today.md", false, "notes"), false);
+  assertEquals(canMoveWorkspacePath("notes", true, "notes/old"), false);
+  assertEquals(canMoveWorkspacePath("notes", true, "notes"), false);
+  assertEquals(canMoveWorkspacePath("notes", true, ""), false);
 });

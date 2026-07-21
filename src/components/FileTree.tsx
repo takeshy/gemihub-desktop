@@ -33,8 +33,10 @@ import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import { isEncryptedFile } from "../lib/hybridEncryption";
 import {
   absoluteFilesPath,
+  canMoveWorkspacePath,
   type FileTreeScope,
   isProtectedWorkspaceRoot,
+  workspaceMoveTarget,
 } from "../lib/fileTreePaths";
 import {
   createDirectoryRef,
@@ -222,7 +224,11 @@ function TreeRow({
         style={{ paddingLeft: 8 + depth * 14 }}
         draggable={false}
         onPointerDown={(event) => {
-          if (scope === "files") {
+          if (
+            !protectedWorkspaceRoot &&
+            !event.currentTarget.querySelector(".file-tree-row-actions")
+              ?.contains(event.target as Node)
+          ) {
             onPointerDragStart?.(
               node,
               ref(node.path),
@@ -268,7 +274,7 @@ function TreeRow({
           draggable={false}
           className="file-tree-entry"
           onClick={(event) => {
-            if (scope === "files" && shouldSuppressClick?.()) return;
+            if (shouldSuppressClick?.()) return;
             node.isDir
               ? onToggle(node.path)
               : scope === "files" && onExternalFileClick
@@ -346,6 +352,7 @@ function TreeRow({
           onPointerDragStart={onPointerDragStart}
           shouldSuppressClick={shouldSuppressClick}
           externalDropTarget={externalDropTarget}
+          isTreeRoot={false}
           scope={scope}
         />
       ))}
@@ -396,6 +403,12 @@ export function FileTree({
   const draggedExternalRef = useRef<
     Array<{ node: FileTreeNode; file: FileRef }>
   >([]);
+  const [draggedWorkspace, setDraggedWorkspace] = useState<
+    { node: FileTreeNode; file: FileRef } | null
+  >(null);
+  const draggedWorkspaceRef = useRef<
+    { node: FileTreeNode; file: FileRef } | null
+  >(null);
   const pointerDragRef = useRef<
     {
       node: FileTreeNode;
@@ -593,6 +606,45 @@ export function FileTree({
     setDraggedExternal([]);
     setExternalDropTarget(null);
   };
+  const beginWorkspaceMove = (node: FileTreeNode, file: FileRef) => {
+    const item = { node, file };
+    draggedWorkspaceRef.current = item;
+    setDraggedWorkspace(item);
+  };
+  const clearWorkspaceMove = () => {
+    draggedWorkspaceRef.current = null;
+    setDraggedWorkspace(null);
+    setExternalDropTarget(null);
+  };
+  const requestWorkspaceDrop = async (destination: string) => {
+    const dragged = draggedWorkspaceRef.current;
+    if (
+      !dragged ||
+      !canMoveWorkspacePath(
+        dragged.file.path,
+        dragged.node.isDir,
+        destination,
+      )
+    ) {
+      clearWorkspaceMove();
+      return;
+    }
+    const target = workspaceMoveTarget(dragged.file.path, destination);
+    clearWorkspaceMove();
+    try {
+      await renameFileRef(dragged.file, fileRef("workspace", target));
+      if (destination) {
+        setExpanded((current) =>
+          new Set(current).add(`workspace:${destination}`)
+        );
+      }
+      await reload();
+      window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : String(error));
+      await reload();
+    }
+  };
   useEffect(() => {
     const dragOver = (event: DragEvent) => {
       if (!draggedExternalRef.current.length) return;
@@ -695,14 +747,27 @@ export function FileTree({
       ) {
         drag.active = true;
         suppressExternalClickUntilRef.current = Date.now() + 300;
-        beginExternalMove(drag.node, drag.file);
+        if (drag.file.scope === "workspace") {
+          beginWorkspaceMove(drag.node, drag.file);
+        } else beginExternalMove(drag.node, drag.file);
       }
       if (!drag.active) return;
       event.preventDefault();
       const target = document.elementFromPoint(event.clientX, event.clientY)
         ?.closest<HTMLElement>("[data-workspace-drop]");
       const destination = target?.dataset.workspaceDrop ?? "";
-      setExternalDropTarget(target ? destination : null);
+      const workspaceDrag = draggedWorkspaceRef.current;
+      setExternalDropTarget(
+        target &&
+          (!workspaceDrag ||
+            canMoveWorkspacePath(
+              workspaceDrag.file.path,
+              workspaceDrag.node.isDir,
+              destination,
+            ))
+          ? destination
+          : null,
+      );
     };
     const finish = (event: PointerEvent) => {
       const drag = pointerDragRef.current;
@@ -716,10 +781,13 @@ export function FileTree({
         draggedExternalRef.current = [];
         setDraggedExternal([]);
         setExternalDropTarget(null);
+        clearWorkspaceMove();
         return;
       }
       const destination = target.dataset.workspaceDrop || "";
-      requestExternalDrop(destination);
+      if (drag.file.scope === "workspace") {
+        void requestWorkspaceDrop(destination);
+      } else requestExternalDrop(destination);
     };
     document.addEventListener("pointermove", move, true);
     document.addEventListener("pointerup", finish, true);
@@ -960,7 +1028,7 @@ export function FileTree({
   return (
     <aside
       className={`file-tree-panel ${
-        draggedExternal.length ? "file-move-active" : ""
+        draggedExternal.length || draggedWorkspace ? "file-move-active" : ""
       } ${externalDropTarget !== null ? "file-move-can-drop" : ""}`}
     >
       <div className="file-tree-mode-bar">
@@ -1033,7 +1101,9 @@ export function FileTree({
           </label>
           <div
             className={`file-tree-scroll ${
-              draggedExternal.length ? "accept-external-drop" : ""
+              draggedExternal.length || draggedWorkspace
+                ? "accept-external-drop"
+                : ""
             }`}
             onDragOver={(event) => {
               event.preventDefault();
@@ -1041,10 +1111,15 @@ export function FileTree({
             }}
             onDrop={(event) => {
               event.preventDefault();
-              requestExternalDrop(
-                "",
-                event.dataTransfer.getData("application/x-gemihub-tree-item"),
-              );
+              if (draggedWorkspaceRef.current) void requestWorkspaceDrop("");
+              else {
+                requestExternalDrop(
+                  "",
+                  event.dataTransfer.getData(
+                    "application/x-gemihub-tree-item",
+                  ),
+                );
+              }
             }}
           >
             <section
@@ -1056,10 +1131,16 @@ export function FileTree({
               onDrop={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                requestExternalDrop(
-                  "",
-                  event.dataTransfer.getData("application/x-gemihub-tree-item"),
-                );
+                if (draggedWorkspaceRef.current) {
+                  void requestWorkspaceDrop("");
+                } else {
+                  requestExternalDrop(
+                    "",
+                    event.dataTransfer.getData(
+                      "application/x-gemihub-tree-item",
+                    ),
+                  );
+                }
               }}
             >
               {filtered.map((node) => (
@@ -1087,6 +1168,9 @@ export function FileTree({
                   onMutated={() => void reload()}
                   onDropExternal={requestExternalDrop}
                   externalDropTarget={externalDropTarget}
+                  onPointerDragStart={startPointerDrag}
+                  shouldSuppressClick={() =>
+                    Date.now() < suppressExternalClickUntilRef.current}
                   onContextMenu={(node, file, event) => {
                     event.preventDefault();
                     setContextMenu({
@@ -1106,7 +1190,7 @@ export function FileTree({
               )}
               <div
                 className={`workspace-tree-drop-zone ${
-                  draggedExternal.length ? "active" : ""
+                  draggedExternal.length || draggedWorkspace ? "active" : ""
                 } ${externalDropTarget === "" ? "external-drop-target" : ""}`}
                 data-workspace-drop=""
                 onDragOver={(event) => {
@@ -1116,15 +1200,21 @@ export function FileTree({
                 onDrop={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  requestExternalDrop(
-                    "",
-                    event.dataTransfer.getData(
-                      "application/x-gemihub-tree-item",
-                    ),
-                  );
+                  if (draggedWorkspaceRef.current) {
+                    void requestWorkspaceDrop("");
+                  } else {
+                    requestExternalDrop(
+                      "",
+                      event.dataTransfer.getData(
+                        "application/x-gemihub-tree-item",
+                      ),
+                    );
+                  }
                 }}
               >
-                {draggedExternal.length ? tr("files.moveToRoot") : ""}
+                {draggedExternal.length || draggedWorkspace
+                  ? tr("files.moveToRoot")
+                  : ""}
               </div>
             </section>
             {query.trim() && visibleContentResults.some((item) =>

@@ -36,3 +36,32 @@ export function absoluteFilesPath(base: string, relative: string): string {
     ? `${normalizedBase}/${normalizedRelative}`
     : normalizedBase;
 }
+
+function normalizedTreePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+export function workspaceMoveTarget(
+  sourcePath: string,
+  destinationDirectory: string,
+): string {
+  const source = normalizedTreePath(sourcePath);
+  const destination = normalizedTreePath(destinationDirectory);
+  const name = source.split("/").pop() ?? "";
+  return destination ? `${destination}/${name}` : name;
+}
+
+export function canMoveWorkspacePath(
+  sourcePath: string,
+  sourceIsDirectory: boolean,
+  destinationDirectory: string,
+): boolean {
+  const source = normalizedTreePath(sourcePath).toLocaleLowerCase();
+  const destination = normalizedTreePath(destinationDirectory)
+    .toLocaleLowerCase();
+  const target = workspaceMoveTarget(sourcePath, destinationDirectory)
+    .toLocaleLowerCase();
+  if (!source || !target || source === target) return false;
+  return !sourceIsDirectory ||
+    (destination !== source && !destination.startsWith(`${source}/`));
+}

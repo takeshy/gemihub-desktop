@@ -5790,6 +5790,9 @@ body.resizing-side-pane * {
   touch-action: none;
   user-select: none;
 }
+.file-tree-row:not(.external) {
+  touch-action: none;
+}
 .file-tree-row.external:active {
   cursor: grabbing;
   opacity: 0.65;
