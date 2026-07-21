@@ -1163,6 +1163,7 @@ export default function App() {
         | "directory"
         | "filetree"
         | "filetree-new-widget"
+        | "workflow-ai-new-widget"
         | "filetree-created"
         | "memo-list"
         | "startup";
@@ -2576,11 +2577,13 @@ export default function App() {
                 })
                 );}
             }}
-            onOpenFileInNewWidget={(file) => {
+            onOpenFileInNewWidget={(file, options) => {
               setOpenPathRequest((value) => ({
                 id: value.id + 1,
                 file,
-                source: "filetree-new-widget",
+                source: options?.maximize
+                  ? "workflow-ai-new-widget"
+                  : "filetree-new-widget",
               }));
             }}
           />

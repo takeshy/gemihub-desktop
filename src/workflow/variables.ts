@@ -76,11 +76,21 @@ export function evaluateWorkflowCondition(
   expression: string,
   variables: WorkflowVariables,
 ): boolean {
-  const replaced = replaceWorkflowVariables(expression, variables).trim();
-  const match = replaced.match(/^(.*?)\s*(==|!=|<=|>=|<|>|contains)\s*(.*?)$/);
+  // Identify the operator before interpolation. Values may contain newlines or
+  // operator-looking text (HTML, Markdown, translated prose), which must stay
+  // data rather than becoming part of the condition grammar.
+  const match = expression.trim().match(
+    /^([\s\S]*?)\s*(==|!=|<=|>=|<|>|contains)\s*([\s\S]*?)$/,
+  );
   if (!match) throw new Error(`Invalid condition format: ${expression}`);
-  const left = match[1].trim().replace(/^['"]|['"]$/g, "");
-  const right = match[3].trim().replace(/^['"]|['"]$/g, "");
+  const left = replaceWorkflowVariables(match[1], variables).trim().replace(
+    /^['"]|['"]$/g,
+    "",
+  );
+  const right = replaceWorkflowVariables(match[3], variables).trim().replace(
+    /^['"]|['"]$/g,
+    "",
+  );
   const leftNumber = Number.parseFloat(left),
     rightNumber = Number.parseFloat(right);
   const numeric = !Number.isNaN(leftNumber) && !Number.isNaN(rightNumber);

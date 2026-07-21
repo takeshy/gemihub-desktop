@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 import {
+  buildWorkflowGenerationSpec,
   documentedWorkflowNodeTypes,
   getWorkflowNodeSpec,
   getWorkflowSpecTool,
@@ -56,4 +57,22 @@ Deno.test("workflow generation treats infographics as structured text by default
     spec,
     "Do not assume it means a bitmap image",
   );
+});
+
+Deno.test("workflow generation spec includes runtime names and correctness examples", () => {
+  const spec = buildWorkflowGenerationSpec({
+    models: ["configured-model"],
+    ragSettings: ["docs"],
+    mcpServers: ["Browser"],
+  });
+  assertStringIncludes(spec, "source: responseBody");
+  assertStringIncludes(spec, 'const text = "{{value:json}}"');
+  assertStringIncludes(spec, "throwOnError: false");
+  assertStringIncludes(spec, "Build the smallest connected workflow");
+  assertStringIncludes(spec, "ragSetting: __websearch__");
+  assertStringIncludes(spec, "http: reserved for APIs, webhooks");
+  assertStringIncludes(spec, "Keep the YAML as concise and simple as possible");
+  assertStringIncludes(spec, "configured-model");
+  assertStringIncludes(spec, "Configured RAG settings: docs");
+  assertStringIncludes(spec, "Enabled MCP servers");
 });

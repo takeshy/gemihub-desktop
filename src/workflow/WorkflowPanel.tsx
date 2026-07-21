@@ -217,7 +217,10 @@ export function WorkflowPanel({
   settings: ChatSettings;
   activeFile: { path: string; content: string } | null;
   onOpenFile: (file: FileRef) => void;
-  onOpenFileInNewWidget: (file: FileRef) => void;
+  onOpenFileInNewWidget: (
+    file: FileRef,
+    options?: { maximize?: boolean },
+  ) => void;
 }) {
   const [paths, setPaths] = useState<string[]>([]);
   const [path, setPath] = useState("");
@@ -1328,7 +1331,9 @@ export function WorkflowPanel({
               setPaths((current) => [...new Set([...current, target])].sort());
               setPath(target);
               setMarkdown(nextMarkdown);
-              onOpenFileInNewWidget(fileRef("workspace", target));
+              onOpenFileInNewWidget(fileRef("workspace", target), {
+                maximize: true,
+              });
             } else {
               const replaced = replaceWorkflowDefinition(
                 markdown,

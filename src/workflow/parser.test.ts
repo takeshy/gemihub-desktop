@@ -190,6 +190,13 @@ Deno.test("replaces nested values and evaluates conditions and arithmetic", () =
   );
   assertEquals(evaluateWorkflowCondition("{{count}} >= 2", variables), true);
   assertEquals(evaluateWorkflowCondition("02 == 2", variables), true);
+  variables.set("multiline", "first line\nsecond == embedded");
+  assertEquals(
+    evaluateWorkflowCondition("{{multiline}} == ", variables),
+    false,
+  );
+  variables.set("empty", "");
+  assertEquals(evaluateWorkflowCondition("{{empty}} == ", variables), true);
   assertEquals(
     evaluateWorkflowCondition('\'["one","two"]\' contains two', variables),
     true,

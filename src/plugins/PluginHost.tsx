@@ -180,7 +180,10 @@ export function PluginHost({
   onOpenChatSettings: () => void;
   onOpenRAGSettings: () => void;
   onOpenFile: (file: FileRef) => void;
-  onOpenFileInNewWidget: (file: FileRef) => void;
+  onOpenFileInNewWidget: (
+    file: FileRef,
+    options?: { maximize?: boolean },
+  ) => void;
 }) {
   const configKey = useMemo(() => workspaceConfigKey(workspaceBase), [
     workspaceBase,

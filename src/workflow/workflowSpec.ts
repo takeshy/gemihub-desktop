@@ -34,7 +34,7 @@ Supported nodes:
 - if / while: condition using ==, !=, <, >, <=, >=, contains; required trueNext and optional falseNext
 - command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/none), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo. When using saveImageTo, model must explicitly name a configured image-generation model (for example gemini-3.1-flash-image-preview); a text model cannot create image data.
 - gemihub-command: command (encrypt, duplicate, convert-to-html, rename), path, optional text, metadata JSON, saveTo. PDF conversion is unavailable; publish/unpublish require Web.
-- http: url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers JSON; body; saveTo; saveStatus; throwOnError. Binary input/output uses FileExplorerData.
+- http: reserved for APIs, webhooks, explicit file downloads/binary transfer, or requests that must inspect status/headers; url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers JSON; body; saveTo; saveStatus; throwOnError. Binary input/output uses FileExplorerData. Do not use http to read an ordinary public webpage for summarization, translation, extraction, or infographic generation; use command with __websearch__ instead.
 - json: source (bare variable name), saveTo
 - note: path, content, mode (overwrite/append/create), confirm (true by default), history
 - note-read: path, saveTo
@@ -64,7 +64,119 @@ For a standalone interactive workflow, acquire every required user value with pr
 Interpret "infographic" as a readable, visually structured Markdown or HTML document by default. Use headings, short sections, emoji/icons, callouts, cards, tables, timelines, and restrained colors as appropriate. Do not assume it means a bitmap image. Use saveImageTo and an image-generation model only when the user explicitly asks for an image, illustration, PNG, JPEG, or other raster output. For HTML infographic output, have a command return the complete HTML to saveTo and then write it with a note node or another appropriate text-file output.
 
 Prefer Workspace file nodes (note, note-read, note-search, note-list) and never call them vault operations in names or descriptions. Use confirm: true for writes. Keep the graph connected and finite; only while nodes may be loop targets. Always specify saveTo for output-producing nodes. Use one task per command node and add a comment property when its purpose is not obvious.
+
+Simplicity is a primary design requirement:
+- Build the smallest connected workflow that fulfills the explicit request. Prefer one clear happy-path chain.
+- Do not add validation, empty-result checks, status branches, retry loops, normalization scripts, or custom error-result nodes unless the user explicitly requests that behavior or the next node cannot operate safely without it. Runtime errors already surface to the user.
+- For reading and transforming a public webpage, use a command node with \`ragSetting: __websearch__\` and the URL in its prompt. Do not use http or fetch raw HTML, and do not write a custom extraction script. The http node is for APIs, webhooks, downloads/binary transfer, or explicitly requested low-level HTTP behavior.
+- Prefer high-level Workspace nodes over script or shell. Use script only for deterministic transformation that ordinary nodes cannot express.
+- Do not split one natural LLM task across multiple command nodes unless the intermediate result is independently useful or the user requested separate stages.
+- A normal interactive workflow usually needs only: acquire required input, perform the task, choose/derive an output path if needed, save, and optionally open or return the path.
+
+Critical data-flow rules and examples:
+- \`json.source\` is a bare variable name. Correct: \`source: responseBody\`. Wrong: \`source: "{{responseBody}}"\` or \`source: "[{{responseBody}}]"\`.
+- \`{{value:json}}\` only escapes characters and never adds quotes. In JavaScript use \`const text = "{{value:json}}"\`; bare \`const text = {{value:json}}\` is invalid for ordinary strings.
+- A JSON array/object already stored in a variable can be embedded as a JavaScript literal with \`const items = {{items}}\`; alternatively parse a string with \`JSON.parse("{{items:json}}")\`.
+- HTTP errors throw by default. Set \`throwOnError: false\` only when \`saveStatus\` is checked by a downstream \`if\` branch that handles non-success status codes. Do not turn failures into ordinary result strings.
+- All values used later must first come from variable/set, a caller input, a system variable, or a node save property. Property names in \`saveTo\` are variable names, not \`{{...}}\` expressions.
+- Backward edges may target only a while node. Increment a loop counter with set, then use \`next\` to return to the while node.
+
+Common result shapes:
+- note-search saves a JSON array of matching note records.
+- note-list saves \`{notes: [...], count, totalCount, hasMore}\`. Iterate with \`{{list.notes[index].path}}\` and stop with \`{{index}} < {{list.count}}\`.
+- folder-list saves \`{folders: [{name, path}], count}\`.
+- dialog saves JSON containing \`button\`, \`selected\`, and \`input\`.
+- prompt-file can save file content with \`saveTo\` and file metadata/path with \`saveFileTo\`.
+- file-explorer and binary HTTP responses use FileExplorerData. Pass the variable name, without braces, to file-save.source or command.attachments.
+- http saves the response in saveTo and the numeric status in saveStatus.
+- shell can save stdout, stderr, and exit code separately. Keep throwOnError true unless the graph explicitly handles a non-zero exit.
+
+Examples:
+\`\`\`yaml
+name: summarize-note
+nodes:
+  - id: choose-note
+    type: file-explorer
+    mode: select
+    extensions: md
+    saveTo: selectedFile
+    savePathTo: selectedPath
+    next: summarize
+  - id: summarize
+    type: command
+    prompt: "Summarize the attached note."
+    attachments: selectedFile
+    saveTo: summary
+    next: save-summary
+  - id: save-summary
+    type: note
+    path: "Summaries/{{selectedPath}}.md"
+    content: "{{summary}}"
+    mode: overwrite
+    confirm: true
+    next: end
+\`\`\`
+
+\`\`\`yaml
+name: webpage-to-markdown
+nodes:
+  - id: ask-url
+    type: prompt-value
+    title: Webpage URL
+    saveTo: url
+    next: create-markdown
+  - id: create-markdown
+    type: command
+    ragSetting: __websearch__
+    vaultTools: none
+    prompt: |
+      Read {{url}} and create a concise Markdown infographic from its main content.
+      Preserve facts and include the source URL. Return Markdown only.
+    saveTo: markdown
+    next: choose-output
+  - id: choose-output
+    type: file-explorer
+    mode: create
+    default: webpage-infographic.md
+    extensions: md
+    savePathTo: outputPath
+    next: save-output
+  - id: save-output
+    type: note
+    path: "{{outputPath}}"
+    content: "{{markdown}}"
+    mode: overwrite
+    confirm: true
+    next: end
+\`\`\`
 `.trim();
+
+export interface WorkflowGenerationContext {
+  models?: string[];
+  ragSettings?: string[];
+  mcpServers?: string[];
+}
+
+export function buildWorkflowGenerationSpec(
+  context?: WorkflowGenerationContext,
+): string {
+  const configured = [
+    context?.models?.length
+      ? `Configured models (use an exact name when setting command.model): ${
+        context.models.join(", ")
+      }`
+      : "No configured model names were supplied. Omit command.model to use the selected workflow model.",
+    context?.ragSettings?.length
+      ? `Configured RAG settings: ${context.ragSettings.join(", ")}`
+      : "No named RAG settings are configured. Use __none__ or omit ragSetting; __websearch__ is available only when the selected provider supports it.",
+    context?.mcpServers?.length
+      ? `Enabled MCP servers (command.mcpServers uses these exact names): ${
+        context.mcpServers.join(", ")
+      }`
+      : "No MCP servers are enabled. Do not invent command.mcpServers values.",
+  ].join("\n");
+  return `${workflowGenerationSpec}\n\nRuntime configuration:\n${configured}\n\nFINAL AUTHORING PRIORITY: Keep the YAML as concise and simple as possible while fulfilling the explicit request. Use the fewest necessary nodes and one clear happy path. Do not add validation, branching, scripts, retries, or error-reporting nodes unless the user explicitly requested them or they are essential to the requested operation.`;
+}
 
 export const getWorkflowSpecTool: ChatToolDefinition = {
   name: "get_workflow_spec",
@@ -165,22 +277,12 @@ export function getWorkflowNodeSpec(
   },
 ): string {
   const requested = requestedNodeTypes(rawNodeTypes);
-  const contextLines = [
-    context?.models?.length
-      ? `Configured models: ${context.models.join(", ")}`
-      : "",
-    context?.ragSettings?.length
-      ? `Configured RAG settings: ${context.ragSettings.join(", ")}`
-      : "",
-    context?.mcpServers?.length
-      ? `Configured MCP servers: ${context.mcpServers.join(", ")}`
-      : "",
-  ].filter(Boolean).join("\n");
   if (!requested.length) {
-    return `${workflowGenerationSpec}${
-      contextLines ? `\n\n${contextLines}` : ""
-    }`;
+    return buildWorkflowGenerationSpec(context);
   }
+  const contextLines = buildWorkflowGenerationSpec(context).split(
+    "\n\nRuntime configuration:\n",
+  )[1] ?? "";
   const sections = requested.map((name) =>
     workflowNodeDocumentation[name as WorkflowNodeType] ??
       `- ${name}: unknown node type; verify the name against the full workflow specification.`

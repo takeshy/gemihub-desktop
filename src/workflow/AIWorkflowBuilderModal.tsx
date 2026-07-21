@@ -25,7 +25,7 @@ import {
   serializeWorkflowData,
 } from "./parser";
 import type { WorkflowRun } from "./types";
-import { workflowGenerationSpec } from "./workflowSpec";
+import { buildWorkflowGenerationSpec } from "./workflowSpec";
 import yaml from "js-yaml";
 import { UnifiedDiff } from "../components/UnifiedDiff";
 
@@ -99,18 +99,22 @@ export function parseReviewResponse(text: string): ReviewResult | null {
     try {
       const value = JSON.parse(candidate) as Partial<ReviewResult>;
       if (value.verdict !== "pass" && value.verdict !== "fail") continue;
+      const issues = Array.isArray(value.issues)
+        ? value.issues.filter((issue): issue is ReviewIssue =>
+          !!issue && typeof issue.message === "string"
+        )
+        : [];
       return {
-        verdict: value.verdict,
+        verdict: value.verdict === "fail" ||
+            issues.some((issue) => issue.severity === "high")
+          ? "fail"
+          : "pass",
         summary: typeof value.summary === "string" && value.summary.trim()
           ? value.summary.trim()
           : value.verdict === "pass"
           ? "Review passed."
           : "Review found issues.",
-        issues: Array.isArray(value.issues)
-          ? value.issues.filter((issue): issue is ReviewIssue =>
-            !!issue && typeof issue.message === "string"
-          )
-          : [],
+        issues,
       };
     } catch {
       // Try the next possible JSON section. Some providers wrap JSON in prose.
@@ -171,6 +175,116 @@ export function workflowBuilderModelOptions(
       ...chatModelChoices[provider],
     ]),
   ].filter(Boolean).map((value) => ({ value, label: value }));
+}
+
+export function workflowGenerationContext(
+  settings: ChatSettings,
+  selectedModel = settings.model,
+) {
+  return {
+    models: [
+      ...new Set([
+        selectedModel,
+        settings.model,
+        ...settings.modelProfiles.filter((profile) => profile.enabled).flatMap(
+          (profile) => profile.enabledModels,
+        ),
+      ].filter(Boolean)),
+    ],
+    ragSettings: Object.keys(settings.ragSettings),
+    mcpServers: settings.mcpServers.filter((server) => server.enabled).map(
+      (server) => server.name,
+    ),
+  };
+}
+
+export function buildWorkflowReviewSystemPrompt(spec: string): string {
+  return `You are a precise GemiHub Desktop workflow quality reviewer. Evaluate the complete workflow primarily against the user's original request. The approved plan is implementation guidance, not an independent source of new requirements.
+
+Requirement priority and severity:
+- Treat behavior explicitly requested by the user or additional requirements as mandatory.
+- Use the approved plan to understand the intended implementation, but do not turn optional suggestions, illustrative edge cases, or planner-invented features into mandatory requirements.
+- Do not require retry loops, alternate URL prompts, pasted-content fallbacks, multiple output formats, or extra dialogs unless the original request explicitly asks for them.
+- Do not require explicit empty-value checks, HTTP status branches, URL normalization scripts, or custom error-result nodes for ordinary happy-path workflows. Runtime failures may surface directly.
+- Accept a simple command with __websearch__ as the preferred way to read and transform a public webpage; do not demand raw HTTP fetching or HTML extraction scripts.
+- Gracefully ending with a clear error result is valid handling for an inaccessible external resource unless recovery behavior was explicitly requested.
+- High severity is reserved for a guaranteed runtime failure, unsafe data loss, or failure to deliver behavior explicitly requested by the user. A quality improvement or unrequested enhancement is medium/low and must not cause a fail verdict.
+- If the workflow itself asks the user for an option but ignores that option, report the inconsistency. Prefer suggesting removal of the unused option when the original request did not require it.
+- Report an issue only when changing the workflow is necessary to satisfy an explicit request or prevent a concrete, likely execution failure.
+- Do not report speculative robustness concerns based on hypothetical provider behavior, rare network states, alternative wording, cosmetic distinctions, or features that merely could be added.
+- Omit low-severity polish entirely. Use medium only for a concrete output mismatch that a typical run can reach. If the main request is fulfilled and the graph is structurally executable, return pass with an empty issues array.
+
+Check all of the following:
+1. Completeness: every requested behavior, input, output, and edge case is implemented.
+2. Graph correctness: node types exist, IDs are unique, targets exist, only while nodes receive backward edges, and all branches terminate.
+3. Data flow: every referenced variable is initialized by caller input, variable/set, a system variable, or a save property before use; output-producing nodes use saveTo where needed.
+4. Interactive versus headless execution: standalone workflows prompt for required values; skill, event, hotkey, and dashboard workflows do not depend on unavailable dialogs or pickers. Skills return meaningful non-underscore variables instead of displaying a final dialog.
+5. JavaScript interpolation: {{var:json}} used as a string has surrounding quotes. Flag bare uses such as const value = {{var:json}}.
+6. JSON nodes: json.source is exactly a bare variable name, never {{var}}, a quoted interpolation, or wrapped JSON.
+7. HTTP and shell errors: throwOnError remains true unless status/exit code is explicitly saved and handled by a downstream branch. Returning an error-looking string is not error handling.
+8. File safety: writes use the correct Desktop note/file nodes and confirmation unless the request explicitly requires unattended execution.
+9. Runtime configuration: model, RAG, and MCP names exist in the supplied configuration; do not accept invented names.
+
+Return exactly one JSON object with no Markdown fences:
+{"verdict":"pass|fail","summary":"...","issues":[{"severity":"high|medium|low","nodeId":"...","message":"...","suggestion":"..."}]}
+Use fail only when a high-severity issue meets the calibration above. Do not manufacture suggestions to make the review look thorough. A clean pass with no issues is preferred when the requested workflow should work. Do not repeat the workflow YAML.
+
+AUTHORITATIVE DESKTOP SPECIFICATION:
+${spec}`;
+}
+
+export function buildWorkflowPlanSystemPrompt(): string {
+  return "Plan the shortest practical Workspace workflow in plain language. Cover the goal, only the necessary ordered steps, required inputs, and outputs. Prefer direct high-level operations; for a public webpage, one AI step can read and transform the URL. Do not invent validation stages, optional input fields, output formats, retry loops, fallback interactions, or other features the user did not request. Runtime failures may surface directly instead of requiring custom recovery steps. Do not mention YAML or node types. Keep it concise.";
+}
+
+export function buildWorkflowRefinementPrompt(options: {
+  request: string;
+  plan: string;
+  previous: string;
+  review: ReviewResult | null;
+  feedback: string;
+  artifactKind: "skill" | "workflow";
+}): string {
+  const issues =
+    options.review?.issues.map((issue) =>
+      `- [${issue.severity || "issue"}]${
+        issue.nodeId ? ` ${issue.nodeId}:` : ""
+      } ${issue.message || ""}${
+        issue.suggestion ? ` Fix: ${issue.suggestion}` : ""
+      }`
+    ).join("\n") ||
+    "- No structured issues were returned; perform a full correctness audit.";
+  return `Repair the previously generated ${options.artifactKind}. Preserve behavior that already satisfies the request and return the complete corrected artifact, never a partial patch.
+
+ORIGINAL REQUEST:
+${options.request}
+${options.plan ? `\nAPPROVED PLAN:\n${options.plan}\n` : ""}
+REVIEW SUMMARY:
+${
+    options.review?.summary ||
+    "Review could not be parsed and must be treated as a failure."
+  }
+
+REVIEW ISSUES:
+${issues}
+${options.feedback ? `\nUSER REFINEMENT:\n${options.feedback}\n` : ""}
+PREVIOUS GENERATED ${options.artifactKind.toUpperCase()}:
+${options.previous}
+
+Fix every high-severity issue, re-check variable initialization and every connection, and obey the output contract from the system specification.`;
+}
+
+export function invalidWorkflowReview(): ReviewResult {
+  return {
+    verdict: "fail",
+    summary:
+      "The AI review could not be parsed, so the workflow was not accepted as verified.",
+    issues: [{
+      severity: "high",
+      message: "The reviewer did not return the required structured result.",
+      suggestion: "Refine the workflow to run a fresh correctness review.",
+    }],
+  };
 }
 
 export function AIWorkflowBuilderModal({
@@ -249,6 +363,11 @@ export function AIWorkflowBuilderModal({
   const [selectedSteps, setSelectedSteps] = useState<Record<string, string[]>>(
     {},
   );
+  const authoringSpec = useMemo(
+    () =>
+      buildWorkflowGenerationSpec(workflowGenerationContext(settings, model)),
+    [settings, model],
+  );
   const streamRef = useRef("");
   const requestRef = useRef<HTMLTextAreaElement>(null);
   const configured = configuredChatProviders(settings);
@@ -322,7 +441,7 @@ export function AIWorkflowBuilderModal({
         ? "Return exactly two fenced blocks and no other text: first a `skill-instructions` Markdown block, then one complete `hub-workflow` YAML block."
         : "Return exactly one complete `hub-workflow` fenced YAML block and no other text.";
       setExternalPrompt(
-        `You are a workflow author for GemiHub Desktop. Follow the complete specification below.\n\n${workflowGenerationSpec}\n\nOUTPUT CONTRACT:\n${outputContract}\n\n${
+        `You are a workflow author for GemiHub Desktop. Follow the complete specification below.\n\n${authoringSpec}\n\nOUTPUT CONTRACT:\n${outputContract}\n\n${
           mode === "create" ? "Create" : "Modify"
         } the ${artifactKind} named "${name}".\n\nUSER REQUEST:\n${request}${
           additionalInstructions
@@ -482,7 +601,7 @@ export function AIWorkflowBuilderModal({
     try {
       const references = await referenceInputs();
       const text = await call(
-        "Plan a Workspace workflow in plain language. Cover goal, ordered steps, inputs, outputs, and edge cases. Do not mention YAML or node types. Keep it concise.",
+        buildWorkflowPlanSystemPrompt(),
         `Workflow name: ${name}\nRequest: ${request}${
           additionalInstructions
             ? `\nAdditional requirements:\n${additionalInstructions}`
@@ -506,6 +625,11 @@ export function AIWorkflowBuilderModal({
     setAcceptReviewIssues(false);
     const historyText = historyContext();
     const references = await referenceInputs();
+    const completeRequest = `${request}${
+      additionalInstructions
+        ? `\n\nAdditional requirements:\n${additionalInstructions}`
+        : ""
+    }`;
     const basePrompt = `${
       mode === "create" ? "Create" : "Modify"
     } the ${artifactKind} named "${name}".\n\nUser request:\n${request}\n${
@@ -518,22 +642,33 @@ export function AIWorkflowBuilderModal({
       mode === "modify"
         ? `\nCurrent ${artifactKind}:\n${currentMarkdown}\n`
         : ""
-    }${historyText ? `\nSelected execution history:\n${historyText}\n` : ""}${
-      feedback
-        ? `\nRevision instructions:\n${feedback}\n\nPrevious generated ${artifactKind}:\n${
-          skillInstructions
-            ? `\`\`\`skill-instructions\n${skillInstructions}\n\`\`\`\n`
-            : ""
-        }${generatedBlock}`
-        : ""
-    }`;
+    }${historyText ? `\nSelected execution history:\n${historyText}\n` : ""}`;
     try {
       const skillSpec = artifactKind === "skill"
         ? "\nYou are authoring an Agent Skill. Return exactly two fenced blocks: first `skill-instructions` containing concise Markdown instructions for the chat model, then one `hub-workflow` block. Do not put frontmatter or skill-capabilities in the instructions block. The workflow must save meaningful results to variables; the caller automatically receives them."
         : "";
+      const previousArtifact = `${
+        skillInstructions
+          ? `\`\`\`skill-instructions\n${skillInstructions}\n\`\`\`\n`
+          : ""
+      }${generatedBlock}`;
+      const generationPrompt = feedback
+        ? buildWorkflowRefinementPrompt({
+          request: completeRequest,
+          plan,
+          previous: previousArtifact,
+          review,
+          feedback,
+          artifactKind,
+        })
+        : basePrompt;
       let response = await call(
-        `You are a workflow author. ${workflowGenerationSpec}${skillSpec}`,
-        basePrompt,
+        `${
+          feedback
+            ? "You repair a GemiHub Desktop workflow after a quality review."
+            : "You are a GemiHub Desktop workflow author."
+        } ${authoringSpec}${skillSpec}`,
+        generationPrompt,
         references.attachments,
       );
       let block = findWorkflowBlocks(response)[0];
@@ -547,7 +682,7 @@ export function AIWorkflowBuilderModal({
         attempt++
       ) {
         response = await call(
-          `You repair workflow YAML. ${workflowGenerationSpec}${skillSpec}`,
+          `You repair invalid GemiHub Desktop workflow output. ${authoringSpec}${skillSpec}`,
           `The previous output is invalid. ${
             artifactKind === "skill"
               ? "Return one skill-instructions block followed by one complete valid hub-workflow block."
@@ -591,10 +726,9 @@ export function AIWorkflowBuilderModal({
 
   const reviewGenerated = async (block: string, originalRequest: string) => {
     setPhase("reviewing");
-    const systemPrompt =
-      'Review a workflow for correctness, valid connections, finite control flow, required properties, safe file writes, and whether it fulfills the request. Return one JSON object only. Never repeat the workflow or use Markdown fences. Schema: {"verdict":"pass|fail","summary":"...","issues":[{"severity":"high|medium|low","nodeId":"...","message":"...","suggestion":"..."}]}';
+    const systemPrompt = buildWorkflowReviewSystemPrompt(authoringSpec);
     const prompt =
-      `Request:\n${originalRequest}\n\nWorkflow:\n${block}\n\nSpecification:\n${workflowGenerationSpec}`;
+      `ORIGINAL REQUEST AND CONTEXT:\n${originalRequest}\n\nWORKFLOW TO REVIEW:\n${block}`;
     let response = await call(systemPrompt, prompt);
     let parsed = parseReviewResponse(response);
     if (!parsed) {
@@ -606,15 +740,7 @@ export function AIWorkflowBuilderModal({
       );
       parsed = parseReviewResponse(response);
     }
-    setReview(
-      parsed ??
-        {
-          verdict: "pass",
-          summary:
-            "AI review returned an unsupported format. Local workflow validation passed, so no unstructured review text was treated as an issue.",
-          issues: [],
-        },
-    );
+    setReview(parsed ?? invalidWorkflowReview());
     setPhase("result");
   };
 
@@ -1044,16 +1170,37 @@ export function AIWorkflowBuilderModal({
                   : "Review found issues"}
               </strong>
               <p>{review?.summary}</p>
-              {review?.issues.map((issue, index) => (
-                <article key={index}>
-                  <b>
-                    {issue.severity || "issue"}
-                    {issue.nodeId ? ` · ${issue.nodeId}` : ""}
-                  </b>
-                  <span>{issue.message}</span>
-                  {issue.suggestion && <small>{issue.suggestion}</small>}
-                </article>
-              ))}
+              {review?.verdict === "pass" && review.issues.length > 0
+                ? (
+                  <details className="ai-workflow-improvements">
+                    <summary>
+                      {review.issues.length}{" "}
+                      optional improvement{review.issues.length === 1
+                        ? ""
+                        : "s"}
+                    </summary>
+                    {review.issues.map((issue, index) => (
+                      <article key={index}>
+                        <b>
+                          {issue.severity || "suggestion"}
+                          {issue.nodeId ? ` · ${issue.nodeId}` : ""}
+                        </b>
+                        <span>{issue.message}</span>
+                        {issue.suggestion && <small>{issue.suggestion}</small>}
+                      </article>
+                    ))}
+                  </details>
+                )
+                : review?.issues.map((issue, index) => (
+                  <article key={index}>
+                    <b>
+                      {issue.severity || "issue"}
+                      {issue.nodeId ? ` · ${issue.nodeId}` : ""}
+                    </b>
+                    <span>{issue.message}</span>
+                    {issue.suggestion && <small>{issue.suggestion}</small>}
+                  </article>
+                ))}
               {review?.verdict === "fail" && (
                 <label className="ai-workflow-risk">
                   <input

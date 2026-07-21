@@ -4640,6 +4640,20 @@ body.resizing-side-pane * {
 .ai-workflow-result > section article small {
   color: var(--text-muted);
 }
+.ai-workflow-improvements {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.ai-workflow-improvements > summary {
+  width: fit-content;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.ai-workflow-result > section.pass .ai-workflow-improvements article b {
+  color: var(--text-muted);
+  font-weight: 500;
+}
 .ai-workflow-risk {
   display: flex;
   align-items: flex-start;

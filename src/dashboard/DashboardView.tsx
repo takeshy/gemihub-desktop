@@ -665,6 +665,7 @@ export function DashboardView({
       | "directory"
       | "filetree"
       | "filetree-new-widget"
+      | "workflow-ai-new-widget"
       | "filetree-created"
       | "memo-list"
       | "startup";
@@ -2407,13 +2408,20 @@ export function DashboardView({
           await onOpenDashboard(requestedFile.path);
           return;
         }
-        const widgetId = openPathRequest.source === "filetree-new-widget"
+        const opensNewWidget =
+          openPathRequest.source === "filetree-new-widget" ||
+          openPathRequest.source === "workflow-ai-new-widget";
+        const widgetId = opensNewWidget
           ? await openFileRefAsNewWidget(requestedFile)
           : await openFileRefInLastActiveWidget(requestedFile);
         if (!widgetId) alert(tr("alert.openFileFailed"));
-        else if (openPathRequest.source === "filetree-new-widget") {
+        else if (opensNewWidget) {
           setActiveWidgetId(widgetId);
-          setMaximizedWidgetId(null);
+          setMaximizedWidgetId(
+            openPathRequest.source === "workflow-ai-new-widget"
+              ? widgetId
+              : null,
+          );
         } else if (
           openPathRequest.source === "memo-list" ||
           openPathRequest.source === "startup" ||
