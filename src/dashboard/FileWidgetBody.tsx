@@ -9,12 +9,16 @@ import {
 } from "react";
 import {
   Bot,
+  ChevronDown,
   ChevronsRight,
+  ChevronUp,
   Copy,
   ExternalLink,
   FileArchive,
   FilePlus2,
+  Search,
   SquarePen,
+  X,
 } from "lucide-react";
 import { useI18n } from "../i18n/context";
 import { MarkdownPreview } from "../components/MarkdownPreview";
@@ -45,6 +49,8 @@ import {
   clearMemoHighlights,
   ensureHighlightStyles,
   findQuoteMatch,
+  findTextMatches,
+  findTextMatchStarts,
   normalizeAnchorText,
   selectionContextFor,
   setHighlight,
@@ -248,6 +254,7 @@ export function FileWidgetBody({
   aiAvailable,
   onAskAI,
   onAskMemoAI,
+  active,
 }: {
   widget: DashboardWidget;
   kanbanEditRequest?: number;
@@ -265,6 +272,7 @@ export function FileWidgetBody({
   aiAvailable: boolean;
   onAskAI: (selection: ActiveSelection) => void;
   onAskMemoAI: (draft: string) => void;
+  active: boolean;
 }) {
   const { t: tr } = useI18n();
   const storedFile = isFileRef(widget.config.file) ? widget.config.file : null;
@@ -365,8 +373,14 @@ export function FileWidgetBody({
   const [frameLoadTick, setFrameLoadTick] = useState(0);
   const [pdfPagesTick, setPdfPagesTick] = useState(0);
   const [pdfReloadVersion, setPdfReloadVersion] = useState(0);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchCount, setSearchCount] = useState(0);
+  const [searchIndex, setSearchIndex] = useState(0);
 
   const contentWrapRef = useRef<HTMLDivElement | null>(null);
+  const searchRootRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const previewRootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
@@ -379,6 +393,9 @@ export function FileWidgetBody({
   const flashTimerRef = useRef(0);
   const memoEntriesRef = useRef<MemoEntry[]>([]);
   const recoveredPdfPathRef = useRef("");
+  const searchMatchesRef = useRef<Array<{ range: Range; win: Window }>>([]);
+  const pdfSearchPagesRef = useRef<number[]>([]);
+  const searchRunRef = useRef(0);
   memoEntriesRef.current = memoEntries;
 
   useEffect(() => {
@@ -1230,6 +1247,217 @@ export function FileWidgetBody({
     tr,
   ]);
 
+  const clearDocumentSearch = useCallback(() => {
+    clearHighlight(window, "mdwys-search");
+    clearHighlight(window, "mdwys-search-current");
+    const frameWindow = frameRef.current?.contentWindow;
+    if (frameWindow) {
+      clearHighlight(frameWindow, "mdwys-search");
+      clearHighlight(frameWindow, "mdwys-search-current");
+    }
+    pdfRef.current?.clearSearch();
+    searchMatchesRef.current = [];
+    pdfSearchPagesRef.current = [];
+  }, []);
+
+  const showSearchResult = useCallback((requestedIndex: number) => {
+    const count = kind === "pdf"
+      ? pdfSearchPagesRef.current.length
+      : searchMatchesRef.current.length ||
+        ((kind === "text" ||
+            (kind === "markdown" && markdownMode === "raw"))
+          ? findTextMatchStarts(documentContent, searchQuery).length
+          : 0);
+    if (!count) return;
+    const nextIndex = (requestedIndex % count + count) % count;
+    setSearchIndex(nextIndex);
+
+    if (kind === "pdf") {
+      void pdfRef.current?.showSearchMatch(
+        searchQuery,
+        pdfSearchPagesRef.current,
+        nextIndex,
+      );
+      return;
+    }
+
+    const textarea = textareaRef.current;
+    if (
+      textarea &&
+      (kind === "text" || (kind === "markdown" && markdownMode === "raw"))
+    ) {
+      const starts = findTextMatchStarts(documentContent, searchQuery);
+      const start = starts[nextIndex];
+      if (start === undefined) return;
+      textarea.setSelectionRange(start, start + searchQuery.length);
+      const lineHeight =
+        Number.parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+      const line = documentContent.slice(0, start).split("\n").length - 1;
+      textarea.scrollTop = Math.max(
+        0,
+        line * lineHeight - textarea.clientHeight / 2,
+      );
+      return;
+    }
+
+    const matches = searchMatchesRef.current;
+    const current = matches[nextIndex];
+    if (!current) return;
+    const byWindow = new Map<Window, Range[]>();
+    matches.forEach((match) => {
+      const ranges = byWindow.get(match.win) ?? [];
+      ranges.push(match.range);
+      byWindow.set(match.win, ranges);
+    });
+    byWindow.forEach((ranges, win) =>
+      setHighlight(win, "mdwys-search", ranges)
+    );
+    byWindow.forEach((_ranges, win) =>
+      setHighlight(
+        win,
+        "mdwys-search-current",
+        win === current.win ? [current.range] : [],
+      )
+    );
+    scrollRangeIntoView(current.range);
+  }, [documentContent, kind, markdownMode, scrollRangeIntoView, searchQuery]);
+
+  const runSearch = useCallback(async (query: string, requestedIndex = 0) => {
+    const run = ++searchRunRef.current;
+    clearDocumentSearch();
+    const normalizedQuery = normalizeAnchorText(query);
+    if (!normalizedQuery) {
+      setSearchCount(0);
+      setSearchIndex(0);
+      return;
+    }
+
+    if (kind === "pdf") {
+      const pages = await pdfRef.current?.search(normalizedQuery) ?? [];
+      if (run !== searchRunRef.current) return;
+      pdfSearchPagesRef.current = pages;
+      setSearchCount(pages.length);
+      const nextIndex = pages.length
+        ? (requestedIndex % pages.length + pages.length) % pages.length
+        : 0;
+      setSearchIndex(nextIndex);
+      if (pages.length) {
+        await pdfRef.current?.showSearchMatch(
+          normalizedQuery,
+          pages,
+          nextIndex,
+        );
+      }
+      return;
+    }
+
+    if (
+      kind === "text" || (kind === "markdown" && markdownMode === "raw")
+    ) {
+      const starts = findTextMatchStarts(documentContent, normalizedQuery);
+      if (run !== searchRunRef.current) return;
+      setSearchCount(starts.length);
+      const nextIndex = starts.length
+        ? (requestedIndex % starts.length + starts.length) % starts.length
+        : 0;
+      setSearchIndex(nextIndex);
+      if (starts.length) {
+        const textarea = textareaRef.current;
+        const start = starts[nextIndex];
+        textarea?.setSelectionRange(start, start + normalizedQuery.length);
+        if (textarea) {
+          const lineHeight =
+            Number.parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+          const line = documentContent.slice(0, start).split("\n").length - 1;
+          textarea.scrollTop = Math.max(
+            0,
+            line * lineHeight - textarea.clientHeight / 2,
+          );
+        }
+      }
+      return;
+    }
+
+    const frameWindow = (kind === "html" || kind === "epub")
+      ? frameRef.current?.contentWindow
+      : null;
+    const root = frameWindow?.document.body ?? searchRootRef.current;
+    if (!root) {
+      setSearchCount(0);
+      return;
+    }
+    ensureHighlightStyles(root.ownerDocument);
+    const win = frameWindow ?? window;
+    const ranges = findTextMatches(buildTextIndex(root), normalizedQuery);
+    if (run !== searchRunRef.current) return;
+    searchMatchesRef.current = ranges.map((range) => ({ range, win }));
+    setSearchCount(ranges.length);
+    const nextIndex = ranges.length
+      ? (requestedIndex % ranges.length + ranges.length) % ranges.length
+      : 0;
+    setSearchIndex(nextIndex);
+    if (ranges.length) {
+      setHighlight(win, "mdwys-search", ranges);
+      setHighlight(win, "mdwys-search-current", [ranges[nextIndex]]);
+      scrollRangeIntoView(ranges[nextIndex]);
+    }
+  }, [
+    clearDocumentSearch,
+    documentContent,
+    kind,
+    markdownMode,
+    scrollRangeIntoView,
+  ]);
+
+  const openSearch = useCallback(() => {
+    setSearchOpen(true);
+    window.setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+      if (searchQuery) void runSearch(searchQuery, searchIndex);
+    }, 0);
+  }, [runSearch, searchIndex, searchQuery]);
+
+  const closeSearch = useCallback(() => {
+    searchRunRef.current += 1;
+    clearDocumentSearch();
+    setSearchOpen(false);
+    setSearchCount(0);
+    setSearchIndex(0);
+  }, [clearDocumentSearch]);
+
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        openSearch();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, openSearch]);
+
+  useEffect(() => {
+    if (!active || (kind !== "html" && kind !== "epub")) return;
+    const doc = frameRef.current?.contentDocument;
+    if (!doc) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        openSearch();
+      }
+    };
+    doc.addEventListener("keydown", onKeyDown);
+    return () => doc.removeEventListener("keydown", onKeyDown);
+  }, [active, frameLoadTick, kind, openSearch]);
+
+  useEffect(() => {
+    closeSearch();
+  }, [selectionPath]);
+
+  useEffect(() => () => clearDocumentSearch(), [clearDocumentSearch]);
+
   // ---- content rendering ----------------------------------------------------
 
   const renderContent = () => {
@@ -1453,6 +1681,7 @@ export function FileWidgetBody({
     }
     return (
       <textarea
+        ref={textareaRef}
         className="raw-editor widget-raw-editor"
         value={documentContent}
         onChange={(event) =>
@@ -1539,7 +1768,65 @@ export function FileWidgetBody({
           : undefined}
         onMouseLeave={() => setHover(null)}
       >
-        {renderContent()}
+        {searchOpen && (
+          <div className="file-widget-search" role="search">
+            <Search size={14} />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              placeholder={tr("search.placeholder")}
+              aria-label={tr("search.placeholder")}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSearchQuery(value);
+                void runSearch(value, 0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeSearch();
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  showSearchResult(searchIndex + (event.shiftKey ? -1 : 1));
+                }
+              }}
+            />
+            <span className="file-widget-search-count">
+              {searchCount
+                ? `${searchIndex + 1} / ${searchCount}`
+                : tr("search.noResults")}
+            </span>
+            <button
+              type="button"
+              onClick={() => showSearchResult(searchIndex - 1)}
+              disabled={!searchCount}
+              title={tr("search.previous")}
+              aria-label={tr("search.previous")}
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => showSearchResult(searchIndex + 1)}
+              disabled={!searchCount}
+              title={tr("search.next")}
+              aria-label={tr("search.next")}
+            >
+              <ChevronDown size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={closeSearch}
+              title={tr("common.close")}
+              aria-label={tr("common.close")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        <div ref={searchRootRef} className="file-widget-search-content">
+          {renderContent()}
+        </div>
 
         {selPopup && selectionActionsAvailable && (
           <div

@@ -7,3 +7,10 @@ export function sameFileReference(left: string, right: string): boolean {
   return windowsPath.test(leftPath) && windowsPath.test(rightPath) &&
     leftPath.toLocaleLowerCase() === rightPath.toLocaleLowerCase();
 }
+
+export function shouldApplyFileResult(
+  currentPath: string,
+  expectedPath?: string,
+): boolean {
+  return !expectedPath || sameFileReference(currentPath, expectedPath);
+}

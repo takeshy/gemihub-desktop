@@ -89,7 +89,7 @@ import {
   rememberedFilePassword,
 } from "../lib/fileEncryption";
 import { isEncryptedFile, reencryptFileContent } from "../lib/hybridEncryption";
-import { sameFileReference } from "./fileReference";
+import { sameFileReference, shouldApplyFileResult } from "./fileReference";
 import {
   type FileRef,
   fileRef,
@@ -895,8 +895,7 @@ export function DashboardView({
       );
       if (!widget) return;
       if (
-        expectedFilePath &&
-        !sameFileReference(
+        !shouldApplyFileResult(
           fileReadPathFromConfig(widget.config),
           expectedFilePath,
         )
@@ -1492,6 +1491,7 @@ export function DashboardView({
       mode: MarkdownMode,
       filePath?: string,
       extraConfig: Record<string, unknown> = {},
+      expectedFilePath?: string,
     ) => {
       const targetWidget = data.widgets.find((widget) =>
         widget.id === widgetId
@@ -1499,15 +1499,19 @@ export function DashboardView({
       const nextMode = isEditMode(targetWidget?.config.mode)
         ? targetWidget.config.mode
         : mode;
-      updateFileWidget(widgetId, {
-        fileName,
-        ...normalizedFileReference(filePath),
-        content,
-        mode: nextMode,
-        encrypted: false,
-        encryptedSourceContent: undefined,
-        ...extraConfig,
-      });
+      updateFileWidget(
+        widgetId,
+        {
+          fileName,
+          ...normalizedFileReference(filePath),
+          content,
+          mode: nextMode,
+          encrypted: false,
+          encryptedSourceContent: undefined,
+          ...extraConfig,
+        },
+        expectedFilePath,
+      );
       setActiveWidgetId(widgetId);
       revealGenericFileWidget(widgetId);
     },
@@ -1610,6 +1614,7 @@ export function DashboardView({
             readFileMode(opened.fileName),
             opened.filePath,
             opened.extraConfig,
+            readPath,
           );
         } catch (error) {
           console.warn("Could not restore local file content.", error);
@@ -1652,6 +1657,7 @@ export function DashboardView({
             readFileMode(opened.fileName),
             opened.filePath,
             opened.extraConfig,
+            readPath,
           );
         } catch (error) {
           console.warn(
@@ -3292,6 +3298,7 @@ export function DashboardView({
                           configuredChatProviders(chatSettings).length > 0}
                         onAskAI={onAskAI}
                         onAskMemoAI={onAskMemoAI}
+                        active={activeWidgetId === widget.id}
                       />
                     )}
                     {widget.type === "workflow" && (

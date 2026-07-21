@@ -104,6 +104,12 @@ export interface TranslationStrings {
   "widget.forward": string;
   "wiki.openNewWidget": string;
 
+  // In-document search
+  "search.placeholder": string;
+  "search.noResults": string;
+  "search.previous": string;
+  "search.next": string;
+
   // File picker
   "picker.searchRecent": string;
   "picker.searchFiles": string;
@@ -357,6 +363,11 @@ const en: TranslationStrings = {
   "widget.forward": "Forward",
   "wiki.openNewWidget": "Open in new widget",
 
+  "search.placeholder": "Find in file",
+  "search.noResults": "No results",
+  "search.previous": "Previous match",
+  "search.next": "Next match",
+
   "picker.searchRecent": "Search recent files",
   "picker.searchFiles": "Search the Workspace by name or path",
   "picker.files": "Workspace",
@@ -609,6 +620,11 @@ const ja: TranslationStrings = {
   "widget.back": "戻る",
   "widget.forward": "進む",
   "wiki.openNewWidget": "新しいWidgetで開く",
+
+  "search.placeholder": "ファイル内を検索",
+  "search.noResults": "一致なし",
+  "search.previous": "前の一致",
+  "search.next": "次の一致",
 
   "picker.searchRecent": "最近のファイルを検索",
   "picker.searchFiles": "Workspaceをファイル名またはパスで検索",

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getDocument, GlobalWorkerOptions, TextLayer, type PDFDocumentProxy } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useI18n } from "../i18n/context";
+import { buildTextIndex, clearHighlight, findTextMatches, findTextMatchStarts, normalizeAnchorText, setHighlight } from "../lib/textAnchor";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -12,6 +13,9 @@ export interface PdfViewerHandle {
   getScrollContainer: () => HTMLElement | null;
   getPageCount: () => number;
   getCurrentPage: () => number;
+  search: (query: string) => Promise<number[]>;
+  showSearchMatch: (query: string, pages: number[], index: number) => Promise<void>;
+  clearSearch: () => void;
 }
 
 interface PageSlot {
@@ -277,13 +281,66 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
     void renderPage(pageNumber);
   }, [renderPage]);
 
+  const ensurePageRendered = useCallback(async (pageNumber: number) => {
+    await renderPage(pageNumber);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const slot = pagesRef.current.get(pageNumber);
+      if (slot?.renderedScale && slot.textLayer.childElementCount) return slot;
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    }
+    return pagesRef.current.get(pageNumber) ?? null;
+  }, [renderPage]);
+
+  const search = useCallback(async (query: string) => {
+    const needle = normalizeAnchorText(query);
+    if (!needle) return [];
+    for (let attempt = 0; attempt < 100 && !docRef.current; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+    }
+    const doc = docRef.current;
+    if (!doc) return [];
+    const pages: number[] = [];
+    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+      const page = await doc.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = content.items.map((item) => "str" in item ? item.str : "").join(" ");
+      findTextMatchStarts(normalizeAnchorText(text), needle).forEach(() => pages.push(pageNumber));
+    }
+    return pages;
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    clearHighlight(window, "mdwys-search");
+    clearHighlight(window, "mdwys-search-current");
+  }, []);
+
+  const showSearchMatch = useCallback(async (query: string, pages: number[], index: number) => {
+    clearSearch();
+    const pageNumber = pages[index];
+    if (!pageNumber) return;
+    scrollToPage(pageNumber);
+    const slot = await ensurePageRendered(pageNumber);
+    if (!slot) return;
+    const ranges = findTextMatches(buildTextIndex(slot.textLayer), query);
+    const occurrence = pages.slice(0, index).filter((page) => page === pageNumber).length;
+    setHighlight(window, "mdwys-search", ranges);
+    const current = ranges[occurrence];
+    if (current) {
+      setHighlight(window, "mdwys-search-current", [current]);
+      current.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [clearSearch, ensurePageRendered, scrollToPage]);
+
   useImperativeHandle(ref, () => ({
     scrollToPage,
     getTextLayer: (page: number) => pagesRef.current.get(page)?.textLayer ?? null,
     getScrollContainer: () => containerRef.current,
     getPageCount: () => pageCount,
     getCurrentPage: () => currentPageRef.current,
-  }), [scrollToPage, pageCount]);
+    search,
+    showSearchMatch,
+    clearSearch,
+  }), [clearSearch, scrollToPage, pageCount, search, showSearchMatch]);
 
   const pageLabel = useMemo(() => (pageCount ? `${currentPage} / ${pageCount}` : ""), [currentPage, pageCount]);
 

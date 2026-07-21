@@ -12920,6 +12920,79 @@ body.resizing-modal {
   min-height: 0;
 }
 
+.file-widget-search-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-widget-search-content > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.file-widget-search {
+  position: absolute;
+  z-index: 20;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: min(390px, calc(100% - 16px));
+  min-height: 34px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.2);
+  color: var(--muted);
+}
+
+.file-widget-search input {
+  flex: 1;
+  min-width: 60px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.file-widget-search-count {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.file-widget-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.file-widget-search button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.file-widget-search button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* Timeline panel opens on the left side of the widget (§7.1). */
 .memo-panel {
   display: flex;

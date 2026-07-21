@@ -22,7 +22,8 @@ function shouldSkip(node: Node): boolean {
   const element = node.parentElement;
   if (!element) return false;
   const tag = element.tagName;
-  return tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "TEXTAREA";
+  return tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" ||
+    tag === "TEXTAREA";
 }
 
 // Builds a normalized text index over a container: whitespace runs collapse
@@ -62,7 +63,11 @@ export function buildTextIndex(root: Node): TextIndex {
   return { text, nodes, nodeIndexes, offsets };
 }
 
-function rangeFromIndex(index: TextIndex, start: number, end: number): Range | null {
+function rangeFromIndex(
+  index: TextIndex,
+  start: number,
+  end: number,
+): Range | null {
   if (start < 0 || end <= start || end > index.text.length) return null;
   const startNode = index.nodes[index.nodeIndexes[start]];
   const endNode = index.nodes[index.nodeIndexes[end - 1]];
@@ -73,6 +78,27 @@ function rangeFromIndex(index: TextIndex, start: number, end: number): Range | n
   range.setStart(startNode, index.offsets[start]);
   range.setEnd(endNode, index.offsets[end - 1] + 1);
   return range;
+}
+
+export function findTextMatchStarts(text: string, query: string): number[] {
+  const needle = normalizeAnchorText(query).toLocaleLowerCase();
+  if (!needle) return [];
+  const haystack = text.toLocaleLowerCase();
+  const starts: number[] = [];
+  for (
+    let at = haystack.indexOf(needle);
+    at !== -1;
+    at = haystack.indexOf(needle, at + Math.max(1, needle.length))
+  ) starts.push(at);
+  return starts;
+}
+
+export function findTextMatches(index: TextIndex, query: string): Range[] {
+  const needle = normalizeAnchorText(query);
+  return findTextMatchStarts(index.text, needle).flatMap((start) => {
+    const range = rangeFromIndex(index, start, start + needle.length);
+    return range ? [range] : [];
+  });
 }
 
 export interface QuoteMatch {
@@ -93,7 +119,11 @@ export function findQuoteMatch(
   if (!needle) return null;
 
   const starts: number[] = [];
-  for (let at = index.text.indexOf(needle); at !== -1; at = index.text.indexOf(needle, at + 1)) {
+  for (
+    let at = index.text.indexOf(needle);
+    at !== -1;
+    at = index.text.indexOf(needle, at + 1)
+  ) {
     starts.push(at);
   }
   if (!starts.length) return null;
@@ -101,12 +131,19 @@ export function findQuoteMatch(
   let candidates = starts;
   if (candidates.length > 1 && quotePrefix) {
     const prefix = normalizeAnchorText(quotePrefix);
-    const narrowed = candidates.filter((at) => index.text.slice(Math.max(0, at - prefix.length - 1), at).includes(prefix));
+    const narrowed = candidates.filter((at) =>
+      index.text.slice(Math.max(0, at - prefix.length - 1), at).includes(prefix)
+    );
     if (narrowed.length) candidates = narrowed;
   }
   if (candidates.length > 1 && quoteSuffix) {
     const suffix = normalizeAnchorText(quoteSuffix);
-    const narrowed = candidates.filter((at) => index.text.slice(at + needle.length, at + needle.length + suffix.length + 1).includes(suffix));
+    const narrowed = candidates.filter((at) =>
+      index.text.slice(
+        at + needle.length,
+        at + needle.length + suffix.length + 1,
+      ).includes(suffix)
+    );
     if (narrowed.length) candidates = narrowed;
   }
 
@@ -123,12 +160,20 @@ export interface SelectionContext {
 const CONTEXT_CHARS = 30;
 
 // §7.2: ~30 normalized chars before/after a selection, for disambiguation.
-export function selectionContextFor(index: TextIndex, selectedText: string, range: Range): SelectionContext {
+export function selectionContextFor(
+  index: TextIndex,
+  selectedText: string,
+  range: Range,
+): SelectionContext {
   const needle = normalizeAnchorText(selectedText);
   if (!needle) return { prefix: "", suffix: "" };
   // Locate the selection inside the index by comparing range start positions.
   let best: number | null = null;
-  for (let at = index.text.indexOf(needle); at !== -1; at = index.text.indexOf(needle, at + 1)) {
+  for (
+    let at = index.text.indexOf(needle);
+    at !== -1;
+    at = index.text.indexOf(needle, at + 1)
+  ) {
     const candidate = rangeFromIndex(index, at, at + needle.length);
     if (!candidate) continue;
     if (
@@ -143,7 +188,10 @@ export function selectionContextFor(index: TextIndex, selectedText: string, rang
   if (best === null) return { prefix: "", suffix: "" };
   return {
     prefix: index.text.slice(Math.max(0, best - CONTEXT_CHARS), best).trim(),
-    suffix: index.text.slice(best + needle.length, best + needle.length + CONTEXT_CHARS).trim(),
+    suffix: index.text.slice(
+      best + needle.length,
+      best + needle.length + CONTEXT_CHARS,
+    ).trim(),
   };
 }
 
@@ -162,7 +210,8 @@ export function highlightApiAvailable(win: Window): boolean {
 export function setHighlight(win: Window, name: string, ranges: Range[]): void {
   const w = win as HighlightWindow;
   if (!highlightApiAvailable(win)) return;
-  const registry = (w.CSS as unknown as { highlights: Map<string, unknown> }).highlights;
+  const registry =
+    (w.CSS as unknown as { highlights: Map<string, unknown> }).highlights;
   if (!ranges.length) {
     registry.delete(name);
     return;
@@ -188,7 +237,11 @@ function recomputeMemoHighlight(win: Window): void {
   setHighlight(win, "mdwys-memo", union);
 }
 
-export function setMemoHighlights(contributorId: string, win: Window, ranges: Range[]): void {
+export function setMemoHighlights(
+  contributorId: string,
+  win: Window,
+  ranges: Range[],
+): void {
   let byWindow = memoContributions.get(contributorId);
   if (!byWindow) {
     byWindow = new Map();
@@ -222,6 +275,12 @@ export const MEMO_HIGHLIGHT_CSS = `
 }
 ::highlight(mdwys-memo-flash) {
   background-color: rgb(217 119 6 / 0.58);
+}
+::highlight(mdwys-search) {
+  background-color: rgb(250 204 21 / 0.42);
+}
+::highlight(mdwys-search-current) {
+  background-color: rgb(249 115 22 / 0.72);
 }
 .textLayer::highlight(mdwys-memo),
 .textLayer *::highlight(mdwys-memo) {

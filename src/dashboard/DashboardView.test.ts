@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { sameFileReference } from "./fileReference.ts";
+import { sameFileReference, shouldApplyFileResult } from "./fileReference.ts";
 
 Deno.test("memo source matching recognizes open file widget paths", () => {
   assertEquals(
@@ -17,4 +17,16 @@ Deno.test("memo source matching recognizes open file widget paths", () => {
     ),
     false,
   );
+});
+
+Deno.test("stale file restoration does not replace a newly opened file", () => {
+  assertEquals(
+    shouldApplyFileResult("C:\\Notes\\new.md", "C:\\Notes\\old.md"),
+    false,
+  );
+  assertEquals(
+    shouldApplyFileResult("C:\\Notes\\old.md", "c:/notes/old.md"),
+    true,
+  );
+  assertEquals(shouldApplyFileResult("C:\\Notes\\new.md"), true);
 });
