@@ -1129,7 +1129,7 @@ export function DashboardView({
       const availableHeight = gridRef.current?.parentElement?.clientHeight ||
         configuredRowHeight * 6;
       const targetRows = Math.max(
-        2,
+        primarySlots * 2,
         Math.floor((availableHeight + gap) / (configuredRowHeight + gap)),
       );
 
@@ -2492,7 +2492,7 @@ export function DashboardView({
           onClick={() => setActiveWidgetId(null)}
           style={{
             gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-            gridAutoRows: `${gridRowHeight}px`,
+            gridAutoRows: `minmax(${gridRowHeight}px, 1fr)`,
             gap,
           }}
         >

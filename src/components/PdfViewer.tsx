@@ -42,9 +42,10 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
   title: string;
   scalePercent: number;
   onTextLayerRendered?: (page: number, root: HTMLElement) => void;
+  onPagesReady?: (root: HTMLElement) => void;
   onCurrentPageChange?: (page: number) => void;
   onLoadError?: () => void;
-}>(function PdfViewer({ content, title, scalePercent, onTextLayerRendered, onCurrentPageChange, onLoadError }, ref) {
+}>(function PdfViewer({ content, title, scalePercent, onTextLayerRendered, onPagesReady, onCurrentPageChange, onLoadError }, ref) {
   const { t: tr } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pagesRef = useRef(new Map<number, PageSlot>());
@@ -53,6 +54,8 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
   const baseWidthRef = useRef(0);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const currentPageRef = useRef(1);
+  const layoutScaleRef = useRef(0);
+  const renderPageRef = useRef<(page: number) => Promise<void>>(async () => undefined);
   const [docVersion, setDocVersion] = useState(0);
   const [pageCount, setPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,6 +63,8 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
 
   const onTextLayerRenderedRef = useRef(onTextLayerRendered);
   onTextLayerRenderedRef.current = onTextLayerRendered;
+  const onPagesReadyRef = useRef(onPagesReady);
+  onPagesReadyRef.current = onPagesReady;
   const onCurrentPageChangeRef = useRef(onCurrentPageChange);
   onCurrentPageChangeRef.current = onCurrentPageChange;
   const onLoadErrorRef = useRef(onLoadError);
@@ -73,7 +78,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
   const effectiveScale = useCallback(() => {
     const container = containerRef.current;
     const baseWidth = baseWidthRef.current;
-    if (!container || !baseWidth) return scalePercentRef.current / 100;
+    if (!container || !baseWidth || container.clientWidth <= 32) return scalePercentRef.current / 100;
     const fitWidth = Math.max(0.25, (container.clientWidth - 32) / baseWidth);
     return fitWidth * (scalePercentRef.current / 100);
   }, []);
@@ -126,8 +131,13 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
       console.warn(`Could not render PDF page ${pageNumber}.`, renderError);
     } finally {
       slot.rendering = false;
+      const desiredScale = effectiveScale();
+      if (slot.renderedScale > 0 && Math.abs(slot.renderedScale - desiredScale) > 0.001) {
+        window.setTimeout(() => void renderPageRef.current(pageNumber), 0);
+      }
     }
   }, [effectiveScale]);
+  renderPageRef.current = renderPage;
 
   // Load the document whenever the content changes.
   useEffect(() => {
@@ -137,6 +147,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
     setError("");
     setPageCount(0);
     pagesRef.current.clear();
+    layoutScaleRef.current = 0;
     if (container) container.textContent = "";
     docRef.current?.loadingTask.destroy().catch(() => undefined);
     docRef.current = null;
@@ -202,6 +213,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
     container.textContent = "";
     pagesRef.current.clear();
     const scale = effectiveScale();
+    layoutScaleRef.current = scale;
     const baseWidth = baseWidthRef.current || 600;
     const estimatedHeight = Math.floor(baseWidth * scale * 1.4);
 
@@ -218,6 +230,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
       container.appendChild(wrapper);
       pagesRef.current.set(pageNumber, { wrapper, canvas, textLayer, renderedScale: 0, rendering: false });
     }
+    onPagesReadyRef.current?.(container);
 
     observerRef.current?.disconnect();
     const observer = new IntersectionObserver((observedEntries) => {
@@ -233,16 +246,60 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
     return () => observer.disconnect();
   }, [docVersion, pageCount, effectiveScale, renderPage]);
 
-  // Re-render already-rendered pages when the zoom changes.
-  useEffect(() => {
-    const scale = effectiveScale();
+  const relayoutPages = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || !pagesRef.current.size) return;
+    const nextScale = effectiveScale();
+    const previousScale = layoutScaleRef.current || nextScale;
+    if (!Number.isFinite(nextScale) || nextScale <= 0 || Math.abs(previousScale - nextScale) < 0.001) return;
+
+    const top = container.scrollTop + 8;
+    let anchorPage = pagesRef.current.get(1) ?? null;
+    for (const slot of pagesRef.current.values()) {
+      if (slot.wrapper.offsetTop > top) break;
+      anchorPage = slot;
+    }
+    const anchorOffset = anchorPage
+      ? Math.max(0, Math.min(1, (top - anchorPage.wrapper.offsetTop) / Math.max(1, anchorPage.wrapper.offsetHeight)))
+      : 0;
+    const factor = nextScale / previousScale;
+    const rerenders: Promise<void>[] = [];
     pagesRef.current.forEach((slot, pageNumber) => {
-      if (slot.renderedScale && slot.renderedScale !== scale) {
+      const width = Number.parseFloat(slot.wrapper.style.width);
+      const height = Number.parseFloat(slot.wrapper.style.height);
+      if (Number.isFinite(width)) slot.wrapper.style.width = `${Math.max(1, Math.floor(width * factor))}px`;
+      if (Number.isFinite(height)) slot.wrapper.style.height = `${Math.max(1, Math.floor(height * factor))}px`;
+      if (slot.renderedScale && Math.abs(slot.renderedScale - nextScale) > 0.001) {
         slot.renderedScale = 0;
-        void renderPage(pageNumber);
+        rerenders.push(renderPage(pageNumber));
       }
     });
-  }, [scalePercent, effectiveScale, renderPage]);
+    layoutScaleRef.current = nextScale;
+
+    const restoreAnchor = () => {
+      if (!anchorPage) return;
+      container.scrollTop = Math.max(
+        0,
+        anchorPage.wrapper.offsetTop - 8 + anchorPage.wrapper.offsetHeight * anchorOffset,
+      );
+    };
+    restoreAnchor();
+    void Promise.all(rerenders).then(() => window.requestAnimationFrame(restoreAnchor));
+  }, [effectiveScale, renderPage]);
+
+  // Keep fit-to-widget width current after the dashboard grid has settled or
+  // the widget is resized. The semantic page anchor prevents zoom jumps.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => relayoutPages());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [relayoutPages]);
+
+  useEffect(() => {
+    relayoutPages();
+  }, [scalePercent, docVersion, relayoutPages]);
 
   const updateCurrentPage = useCallback(() => {
     const container = containerRef.current;

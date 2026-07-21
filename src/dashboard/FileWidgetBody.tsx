@@ -95,9 +95,104 @@ import {
   openFileRefDefault,
   readFileRef,
 } from "../lib/fileRef";
+import {
+  type FileViewPosition,
+  parseFileViewPosition,
+  restoredScrollTop,
+} from "../lib/fileViewPosition";
 
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
+const VIEW_POSITION_SAVE_DELAY_MS = 350;
+
+function scrollTargetPath(root: HTMLElement, target: HTMLElement): number[] {
+  const path: number[] = [];
+  let current: HTMLElement | null = target;
+  while (current && current !== root) {
+    const parent: HTMLElement | null = current.parentElement;
+    if (!parent) return [];
+    path.unshift(Array.prototype.indexOf.call(parent.children, current));
+    current = parent;
+  }
+  return current === root ? path : [];
+}
+
+function scrollTargetAt(
+  root: HTMLElement,
+  path: number[],
+): HTMLElement | null {
+  let current = root;
+  for (const index of path) {
+    const child = current.children.item(index);
+    if (!(child instanceof HTMLElement)) return null;
+    current = child;
+  }
+  return current;
+}
+
+function scrollLineHeight(target: HTMLElement): number {
+  const style = getComputedStyle(target);
+  const explicit = Number.parseFloat(style.lineHeight);
+  if (Number.isFinite(explicit)) return explicit;
+  return (Number.parseFloat(style.fontSize) || 14) * 1.65;
+}
+
+function scrollAnchorFor(
+  target: HTMLElement,
+): FileViewPosition["anchor"] {
+  if (target.classList.contains("pdf-viewer-pages")) {
+    const pages = [...target.querySelectorAll<HTMLElement>("[data-pdf-page]")];
+    if (!pages.length) return undefined;
+    const top = target.scrollTop + 8;
+    let page = pages[0];
+    for (const candidate of pages) {
+      if (candidate.offsetTop > top) break;
+      page = candidate;
+    }
+    return {
+      kind: "pdf-page",
+      page: Number(page.dataset.pdfPage) || 1,
+      offset: Math.max(
+        0,
+        Math.min(1, (top - page.offsetTop) / Math.max(1, page.offsetHeight)),
+      ),
+    };
+  }
+  if (target instanceof HTMLTextAreaElement) {
+    return {
+      kind: "text-line",
+      line: target.scrollTop / Math.max(1, scrollLineHeight(target)),
+    };
+  }
+  return undefined;
+}
+
+function restoredTargetScrollTop(
+  position: FileViewPosition,
+  target: HTMLElement,
+): number {
+  if (position.anchor?.kind === "pdf-page") {
+    const page = target.querySelector<HTMLElement>(
+      `[data-pdf-page="${position.anchor.page}"]`,
+    );
+    if (page) {
+      return Math.max(
+        0,
+        page.offsetTop - 8 + page.offsetHeight * position.anchor.offset,
+      );
+    }
+  }
+  if (
+    position.anchor?.kind === "text-line" &&
+    target instanceof HTMLTextAreaElement
+  ) {
+    return position.anchor.line * scrollLineHeight(target);
+  }
+  return restoredScrollTop(
+    position,
+    Math.max(0, target.scrollHeight - target.clientHeight),
+  );
+}
 
 const FileWidgetWysiwygEditor = memo(
   WysiwygEditor,
@@ -305,6 +400,10 @@ export function FileWidgetBody({
   const memoPanelVisible = memoPanelOpen && !memoPanelCollapsed;
   const kind = docKindFor(fileName);
   const selectionPath = effectiveFilePath || fileName;
+  const viewPositionKey = `${
+    storedFile?.scope || "legacy"
+  }:${selectionPath}:${kind}:${kind === "markdown" ? markdownMode : "default"}`;
+  const viewPositionStorageKey = `gemihub:file-view-position:${widget.id}`;
   const downloadPath = storedFile ? fileRefBackendPath(storedFile) : filePath;
 
   const uploadMarkdownImage = useCallback(
@@ -400,7 +499,165 @@ export function FileWidgetBody({
   const handledSearchRequestRef = useRef(searchRequest);
   const pdfSearchPagesRef = useRef<number[]>([]);
   const searchRunRef = useRef(0);
+  const viewPositionSaveTimerRef = useRef(0);
+  const pendingViewPositionRef = useRef<FileViewPosition | null>(null);
   memoEntriesRef.current = memoEntries;
+
+  const persistPendingViewPosition = useCallback(() => {
+    const position = pendingViewPositionRef.current;
+    if (!position) return;
+    pendingViewPositionRef.current = null;
+    try {
+      localStorage.setItem(viewPositionStorageKey, JSON.stringify(position));
+    } catch {
+      // View restoration is best-effort when storage is unavailable.
+    }
+  }, [viewPositionStorageKey]);
+
+  const scheduleViewPositionSave = useCallback((
+    targetPath: number[] | "frame",
+    target: HTMLElement,
+  ) => {
+    const maxScrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    const top = Math.max(0, target.scrollTop);
+    pendingViewPositionRef.current = {
+      key: viewPositionKey,
+      targetPath,
+      top,
+      ratio: maxScrollTop > 0 ? Math.min(1, top / maxScrollTop) : 0,
+      anchor: scrollAnchorFor(target),
+    };
+    window.clearTimeout(viewPositionSaveTimerRef.current);
+    viewPositionSaveTimerRef.current = window.setTimeout(
+      persistPendingViewPosition,
+      VIEW_POSITION_SAVE_DELAY_MS,
+    );
+  }, [persistPendingViewPosition, viewPositionKey]);
+
+  const restorePdfViewPosition = useCallback((target: HTMLElement) => {
+    let stored: FileViewPosition | null = null;
+    try {
+      stored = parseFileViewPosition(
+        localStorage.getItem(viewPositionStorageKey),
+        viewPositionKey,
+      );
+    } catch {
+      stored = null;
+    }
+    if (stored?.anchor?.kind !== "pdf-page") return;
+    // PDF pages are created asynchronously, so restore only after their
+    // placeholders exist instead of relying on startup timers.
+    target.scrollTop = restoredTargetScrollTop(stored, target);
+  }, [viewPositionKey, viewPositionStorageKey]);
+
+  useEffect(() => () => {
+    window.clearTimeout(viewPositionSaveTimerRef.current);
+    persistPendingViewPosition();
+  }, [persistPendingViewPosition, viewPositionKey]);
+
+  useEffect(() => {
+    if (kind === "html" || kind === "epub") return;
+    const root = searchRootRef.current;
+    if (!root) return;
+    let userScrolled = false;
+    let suppressScrollUntil = 0;
+    const onScroll = (event: Event) => {
+      if (performance.now() < suppressScrollUntil) return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !root.contains(target)) return;
+      userScrolled = true;
+      scheduleViewPositionSave(scrollTargetPath(root, target), target);
+    };
+    root.addEventListener("scroll", onScroll, true);
+
+    let stored: FileViewPosition | null = null;
+    try {
+      stored = parseFileViewPosition(
+        localStorage.getItem(viewPositionStorageKey),
+        viewPositionKey,
+      );
+    } catch {
+      stored = null;
+    }
+    const timers: number[] = [];
+    if (stored && Array.isArray(stored.targetPath)) {
+      for (const delay of [0, 80, 240, 600, 1200, 2500]) {
+        timers.push(window.setTimeout(() => {
+          if (userScrolled || !stored || !Array.isArray(stored.targetPath)) {
+            return;
+          }
+          const target = scrollTargetAt(root, stored.targetPath);
+          if (!target) return;
+          const maxScrollTop = Math.max(
+            0,
+            target.scrollHeight - target.clientHeight,
+          );
+          if (maxScrollTop === 0 && stored.top > 0) return;
+          suppressScrollUntil = performance.now() + 120;
+          target.scrollTop = restoredTargetScrollTop(stored, target);
+        }, delay));
+      }
+    }
+    return () => {
+      root.removeEventListener("scroll", onScroll, true);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [
+    kind,
+    scheduleViewPositionSave,
+    viewPositionKey,
+    viewPositionStorageKey,
+  ]);
+
+  useEffect(() => {
+    if (kind !== "html" && kind !== "epub") return;
+    const frameWindow = frameRef.current?.contentWindow;
+    const doc = frameRef.current?.contentDocument;
+    const target = doc?.scrollingElement as HTMLElement | null;
+    if (!frameWindow || !target) return;
+    let userScrolled = false;
+    let suppressScrollUntil = 0;
+    const onScroll = () => {
+      if (performance.now() < suppressScrollUntil) return;
+      userScrolled = true;
+      scheduleViewPositionSave("frame", target);
+    };
+    frameWindow.addEventListener("scroll", onScroll, { passive: true });
+    let stored: FileViewPosition | null = null;
+    try {
+      stored = parseFileViewPosition(
+        localStorage.getItem(viewPositionStorageKey),
+        viewPositionKey,
+      );
+    } catch {
+      stored = null;
+    }
+    const timers: number[] = [];
+    if (stored?.targetPath === "frame") {
+      for (const delay of [0, 100, 400, 1000, 2500]) {
+        timers.push(window.setTimeout(() => {
+          if (userScrolled || !stored) return;
+          const maxScrollTop = Math.max(
+            0,
+            target.scrollHeight - target.clientHeight,
+          );
+          if (maxScrollTop === 0 && stored.top > 0) return;
+          suppressScrollUntil = performance.now() + 120;
+          target.scrollTop = restoredTargetScrollTop(stored, target);
+        }, delay));
+      }
+    }
+    return () => {
+      frameWindow.removeEventListener("scroll", onScroll);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [
+    frameLoadTick,
+    kind,
+    scheduleViewPositionSave,
+    viewPositionKey,
+    viewPositionStorageKey,
+  ]);
 
   useEffect(() => {
     recoveredPdfPathRef.current = "";
@@ -1583,6 +1840,7 @@ export function FileWidgetBody({
           content={documentContent}
           title={fileName}
           scalePercent={viewFontScale}
+          onPagesReady={restorePdfViewPosition}
           onTextLayerRendered={() => setPdfPagesTick((value) => value + 1)}
           onLoadError={recoverPdfFromDisk}
         />

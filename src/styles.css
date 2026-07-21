@@ -10564,6 +10564,7 @@ body.resizing-modal {
 .dashboard-grid {
   position: relative;
   display: grid;
+  height: 100%;
   min-height: 100%;
 }
 
