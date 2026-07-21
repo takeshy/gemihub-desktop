@@ -90,6 +90,11 @@ jobs:
       - name: Test frontend
         run: deno task test
 
+      # main.go embeds dist at compile time, so a clean checkout must produce
+      # the frontend assets before any Go package can be compiled or tested.
+      - name: Build frontend assets
+        run: deno task build
+
       - name: Test backend
         run: go test ./...
 
