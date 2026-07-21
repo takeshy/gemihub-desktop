@@ -78,6 +78,7 @@ import {
   isDashboardWidgetConfigured,
 } from "./widgetRegistry";
 import { shouldPersistFileWidgetText } from "./fileWidgetPersistence";
+import { resetFileHydrationForDashboard } from "./fileWidgetHydration";
 import {
   docKindFor,
   isBinaryDocumentFileName,
@@ -742,6 +743,12 @@ export function DashboardView({
   const handledSplitWidgetRequestRef = useRef(0);
   const handledPluginWidgetRequestRef = useRef(0);
   const hydratedFilePathsRef = useRef(new Set<string>());
+  const hydratedDashboardPathRef = useRef(dashboardPath);
+  hydratedDashboardPathRef.current = resetFileHydrationForDashboard(
+    hydratedFilePathsRef.current,
+    hydratedDashboardPathRef.current,
+    dashboardPath,
+  );
   const previousWorkspaceBaseRef = useRef(workspaceBase);
   const handledStartupFilesRef = useRef(false);
   const navigationHistoryRef = useRef(

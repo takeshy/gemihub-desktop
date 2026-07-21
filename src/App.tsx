@@ -216,26 +216,7 @@ function readStoredWidth(key: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-const initialMarkdown = `# GemiHub Desktop
-
-Bring DirectoryBase files, LLM chat, dashboards, and plugins together in one desktop workspace.
-
-> [!note] Preview
-> GFM, tables, task lists, code highlight, callouts, and Mermaid diagrams are supported.
-
-## Modes
-
-- Preview
-- WYSIWYG
-- Raw
-
-\`\`\`mermaid
-flowchart LR
-  Raw --> Preview
-  Raw --> WYSIWYG
-  WYSIWYG --> Preview
-\`\`\`
-`;
+const initialMarkdown = "";
 
 function readStored(key: string, fallback: string): string {
   try {
@@ -3724,8 +3705,9 @@ export default function App() {
                           <strong>Slash commands</strong>
                           <p>
                             Type <code>/command</code> in Chat. Use{" "}
-                            <code>{"{input}"}</code> in the template for the
-                            text entered after the command.
+                            <code>{"{input}"}</code>{" "}
+                            in the template for the text entered after the
+                            command.
                           </p>
                         </div>
                       </section>

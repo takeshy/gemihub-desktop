@@ -6,6 +6,11 @@ import {
   safeDashboardPath,
   serializeDashboard,
 } from "./dashboardFile.ts";
+import { defaultDashboard } from "./types.ts";
+
+Deno.test("the default dashboard starts without a placeholder widget", () => {
+  assertEquals(defaultDashboard().widgets, []);
+});
 
 Deno.test("GemiHub dashboard YAML preserves unknown keys and widget configs", () => {
   const source =

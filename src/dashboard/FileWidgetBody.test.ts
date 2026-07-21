@@ -1,6 +1,40 @@
 import { assertEquals } from "jsr:@std/assert";
 import { docKindFor, isFileWidgetFileName } from "./documentKind.ts";
 import { memoChatDraft, memoEntryChatDraft } from "./memoChat.ts";
+import {
+  resetFileHydrationForDashboard,
+  resolvedFileWidgetContent,
+} from "./fileWidgetHydration.ts";
+
+Deno.test("file-backed widgets do not show the local document while hydration is pending", () => {
+  assertEquals(
+    resolvedFileWidgetContent(undefined, "Books/example.epub", "# Default"),
+    "",
+  );
+  assertEquals(
+    resolvedFileWidgetContent(undefined, "", "# Default"),
+    "# Default",
+  );
+});
+
+Deno.test("switching dashboards clears file hydration state", () => {
+  const hydrated = new Set(["widget-1:Books/example.epub"]);
+  let previous = resetFileHydrationForDashboard(
+    hydrated,
+    "Dashboards/first.dashboard",
+    "Dashboards/second.dashboard",
+  );
+  assertEquals(hydrated.size, 0);
+
+  hydrated.add("widget-1:Books/example.epub");
+  previous = resetFileHydrationForDashboard(
+    hydrated,
+    previous,
+    "Dashboards/first.dashboard",
+  );
+  assertEquals(previous, "Dashboards/first.dashboard");
+  assertEquals(hydrated.size, 0);
+});
 
 Deno.test("File widgets route .base files to the Base editor", () => {
   assertEquals(docKindFor("Dashboards/Bases/Projects.base"), "base");

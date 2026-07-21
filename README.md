@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="build/appicon.png" alt="GemiHub Desktop icon" width="128">
+</p>
+
 # GemiHub Desktop
 
 > **As AI gets smarter, the value of your data keeps growing.**<br> **GemiHub

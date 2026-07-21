@@ -437,6 +437,15 @@ func TestNativeWebSearchEndpointResolution(t *testing.T) {
 	}
 }
 
+func TestTerraChatCompletionsDisablesReasoningWithTools(t *testing.T) {
+	if !chatCompletionsRequiresDisabledReasoning("gpt-5.6-terra") {
+		t.Fatal("Terra models must disable reasoning when using Chat Completions tools")
+	}
+	if chatCompletionsRequiresDisabledReasoning("gpt-5.6") {
+		t.Fatal("non-Terra models must not receive the compatibility override")
+	}
+}
+
 func TestWebSearchSourcesAreSortedAndUseURLAsFallbackTitle(t *testing.T) {
 	sources := webSearchSources(map[string]string{
 		"https://z.example/source": "",

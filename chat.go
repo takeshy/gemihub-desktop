@@ -612,15 +612,20 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 	if endpoint == "" {
 		endpoint = "https://api.openai.com/v1"
 	}
+	endpointHost := providerEndpointHost(endpoint)
+	tools := chatToolDefinitions(request)
 	if request.EnableWebSearch {
 		lowerModel := strings.ToLower(request.Model)
 		if strings.HasPrefix(lowerModel, "dall-e") || strings.HasPrefix(lowerModel, "gpt-image") || strings.HasPrefix(lowerModel, "grok-imagine-image") || strings.HasPrefix(lowerModel, "grok-imagine-video") {
 			return nil, fmt.Errorf("native web search is unavailable for media-generation models")
 		}
-		if host := providerEndpointHost(endpoint); host == "api.openai.com" || host == "api.x.ai" {
+		if endpointHost == "api.openai.com" || endpointHost == "api.x.ai" {
 			return a.chatOpenAIResponses(request, endpoint)
 		}
 		return nil, fmt.Errorf("native web search requires the official OpenAI or xAI endpoint")
+	}
+	if endpointHost == "api.openai.com" && request.EnableThinking && len(tools) > 0 {
+		return a.chatOpenAIResponses(request, endpoint)
 	}
 	if !strings.HasSuffix(endpoint, "/chat/completions") {
 		endpoint += "/chat/completions"
@@ -638,10 +643,12 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 
 	for iteration := 0; iteration < 8; iteration++ {
 		payload := map[string]any{"model": request.Model, "messages": messages, "stream": true, "stream_options": map[string]any{"include_usage": true}}
-		tools := chatToolDefinitions(request)
 		if len(tools) > 0 {
 			payload["tools"] = tools
 			payload["tool_choice"] = "auto"
+			if chatCompletionsRequiresDisabledReasoning(request.Model) {
+				payload["reasoning_effort"] = "none"
+			}
 		}
 		headers := map[string]string{}
 		if request.APIKey != "" {
@@ -744,6 +751,10 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 	return nil, fmt.Errorf("tool iteration limit exceeded")
 }
 
+func chatCompletionsRequiresDisabledReasoning(model string) bool {
+	return strings.Contains(strings.ToLower(model), "terra")
+}
+
 func providerEndpointHost(endpoint string) string {
 	parsed, err := url.Parse(endpoint)
 	if err != nil {
@@ -779,7 +790,12 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 		}
 		input = append(input, map[string]any{"role": message.Role, "content": content})
 	}
-	tools := []map[string]any{{"type": "web_search"}}
+	tools := []map[string]any{}
+	toolsUsed := []string{}
+	if request.EnableWebSearch {
+		tools = append(tools, map[string]any{"type": "web_search"})
+		toolsUsed = append(toolsUsed, "web_search")
+	}
 	for _, definition := range chatToolDefinitions(request) {
 		function, _ := definition["function"].(map[string]any)
 		if function == nil {
@@ -791,7 +807,6 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 		})
 	}
 	headers := map[string]string{"Authorization": "Bearer " + request.APIKey}
-	toolsUsed := []string{"web_search"}
 	usage := &ChatUsage{}
 	for iteration := 0; iteration < 20; iteration++ {
 		payload := map[string]any{

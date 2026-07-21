@@ -100,6 +100,7 @@ import {
   parseFileViewPosition,
   restoredScrollTop,
 } from "../lib/fileViewPosition";
+import { resolvedFileWidgetContent } from "./fileWidgetHydration";
 
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
@@ -378,9 +379,11 @@ export function FileWidgetBody({
   const fileName = typeof widget.config.fileName === "string"
     ? widget.config.fileName
     : effectiveFilePath.split("/").pop() || fallbackFileName;
-  const documentContent = typeof widget.config.content === "string"
-    ? widget.config.content
-    : fallbackContent;
+  const documentContent = resolvedFileWidgetContent(
+    widget.config.content,
+    effectiveFilePath,
+    fallbackContent,
+  );
   const markdownMode: MarkdownMode =
     widget.config.mode === "preview" || widget.config.mode === "wysiwyg" ||
       widget.config.mode === "raw"
