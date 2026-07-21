@@ -2482,77 +2482,61 @@ export default function App() {
               onDoubleClick={() => setChatViewWidth(DEFAULT_CHAT_VIEW_WIDTH)}
             />
           )}
-          {chatViewOpen
-            ? (
-              <PluginHost
-                directoryBase={directoryBase}
-                workspaceBase={workspacePath}
-                language={language}
-                isDark={isDark}
-                aiEnabled={aiEnabled}
-                pluginViewRequest={pluginViewRequest}
-                chatOpenRequest={chatOpenRequest}
-                chatDraftRequest={chatDraftRequest}
-                settingsOpen={settingsOpen && settingsSection === "plugins"}
-                onCollapse={() => setChatViewOpen(false)}
-                onOpenPluginView={() => {
-                  setSettingsOpen(false);
-                  setChatViewOpen(true);
-                }}
-                onOpenPluginWidget={(request) => {
-                  setDashboardRawMode(false);
-                  setPluginWidgetRequest((current) => ({
-                    id: current.id + 1,
-                    type: request.type,
-                    config: request.config,
-                  }));
-                }}
-                onOpenPluginSettings={() => {
-                  setSettingsSection("plugins");
-                  setSettingsOpen(true);
-                }}
-                chatSettings={chatSettings}
-                onChatSettingsChange={setChatSettings}
-                activeFile={activeChatFile}
-                activeSelection={activeChatSelection}
-                onOpenChatSettings={() => {
-                  setSettingsSection(
-                    chatSettings.provider === "cli" ? "cli" : "ai",
-                  );
-                  setSettingsOpen(true);
-                }}
-                onOpenRAGSettings={() => {
-                  setSettingsSection("rag");
-                  setSettingsOpen(true);
-                }}
-                onOpenFile={(file) => {
-                  if (
-                    file.scope === "workspace" &&
-                    file.path.toLowerCase().endsWith(".dashboard")
-                  ) void openDashboardFile(file.path);
-                  else {setOpenPathRequest((value) => ({
-                      id: value.id + 1,
-                      file,
-                      source: "directory",
-                    })
-                    );}
-                }}
-              />
-            )
-            : aiEnabled
-            ? (
-              <aside className="side-rail right">
-                <button
-                  type="button"
-                  onClick={() => setChatViewOpen(true)}
-                  title="Expand ChatView"
-                >
-                  <ChevronsLeft size={18} />
-                </button>
-                <span>Chat</span>
-              </aside>
-            )
-            : null}
+          <PluginHost
+            directoryBase={directoryBase}
+            workspaceBase={workspacePath}
+            language={language}
+            isDark={isDark}
+            aiEnabled={aiEnabled}
+            pluginViewRequest={pluginViewRequest}
+            chatOpenRequest={chatOpenRequest}
+            chatDraftRequest={chatDraftRequest}
+            collapsed={!chatViewOpen}
+            settingsOpen={settingsOpen && settingsSection === "plugins"}
+            onCollapse={() => setChatViewOpen((open) => !open)}
+            onOpenPluginView={() => {
+              setSettingsOpen(false);
+              setChatViewOpen(true);
+            }}
+            onOpenPluginWidget={(request) => {
+              setDashboardRawMode(false);
+              setPluginWidgetRequest((current) => ({
+                id: current.id + 1,
+                type: request.type,
+                config: request.config,
+              }));
+            }}
+            onOpenPluginSettings={() => {
+              setSettingsSection("plugins");
+              setSettingsOpen(true);
+            }}
+            chatSettings={chatSettings}
+            onChatSettingsChange={setChatSettings}
+            activeFile={activeChatFile}
+            activeSelection={activeChatSelection}
+            onOpenChatSettings={() => {
+              setSettingsSection(
+                chatSettings.provider === "cli" ? "cli" : "ai",
+              );
+              setSettingsOpen(true);
+            }}
+            onOpenRAGSettings={() => {
+              setSettingsSection("rag");
+              setSettingsOpen(true);
+            }}
+            onOpenFile={(file) => {
+              if (
+                file.scope === "workspace" &&
+                file.path.toLowerCase().endsWith(".dashboard")
+              ) void openDashboardFile(file.path);
+              else {setOpenPathRequest((value) => ({
+                  id: value.id + 1,
+                  file,
+                  source: "directory",
+                })
+                );}
+            }}
+          />
         </section>
 
         {launcherOpen && (

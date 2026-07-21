@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   Bot,
   ChevronRight,
+  ChevronsLeft,
   ChevronsRight,
   Download,
   Loader2,
@@ -96,7 +97,8 @@ function PluginMainViewWidget(
       ? (config as { file: FileRef }).file
       : null;
   const file = configuredFile &&
-      (!view.extensions?.length || pluginViewForPath([view], configuredFile.path))
+      (!view.extensions?.length ||
+        pluginViewForPath([view], configuredFile.path))
     ? configuredFile
     : null;
   const filePath = file?.path || "";
@@ -143,6 +145,7 @@ export function PluginHost({
   pluginViewRequest,
   chatOpenRequest,
   chatDraftRequest,
+  collapsed,
   settingsOpen,
   onCollapse,
   onOpenPluginView,
@@ -164,6 +167,7 @@ export function PluginHost({
   pluginViewRequest: number;
   chatOpenRequest: number;
   chatDraftRequest: { id: number; text: string };
+  collapsed: boolean;
   settingsOpen: boolean;
   onCollapse: () => void;
   onOpenPluginView: () => void;
@@ -756,139 +760,156 @@ export function PluginHost({
           />
         </>
       )}
-      <aside className="plugin-host">
-        <header className="plugin-host-tabs">
-          <button
-            type="button"
-            onClick={onCollapse}
-            title={aiEnabled ? "Collapse ChatView" : "Collapse Plugin view"}
-          >
-            <ChevronsRight size={17} />
-          </button>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
+      {collapsed
+        ? (aiEnabled || pluginChoices.length > 0) && (
+          <aside className="side-rail right">
+            <button
+              type="button"
+              onClick={onCollapse}
+              title={aiEnabled ? "Expand ChatView" : "Expand Plugin view"}
+            >
+              <ChevronsLeft size={18} />
+            </button>
+            <span>{aiEnabled ? "Chat" : "Plugins"}</span>
+          </aside>
+        )
+        : (
+          <aside className="plugin-host">
+            <header className="plugin-host-tabs">
               <button
-                key={tab.id}
                 type="button"
-                className={activeTab === tab.id ? "active" : ""}
-                onClick={() =>
-                  tab.id === "plugins"
-                    ? activatePlugin(activePluginId)
-                    : setActiveTab(tab.id)}
-                title={tab.name}
+                onClick={onCollapse}
+                title={aiEnabled ? "Collapse ChatView" : "Collapse Plugin view"}
               >
-                <Icon size={17} />
+                <ChevronsRight size={17} />
               </button>
-            );
-          })}
-        </header>
-
-        <div className="plugin-host-body">
-          {aiEnabled && activeTab === "chat"
-            ? (
-              <ChatPanel
-                isDark={isDark}
-                directoryBase={directoryBase}
-                workspaceBase={workspaceBase}
-                settings={chatSettings}
-                onSettingsChange={onChatSettingsChange}
-                activeFile={activeFile}
-                activeSelection={activeSelection}
-                draftRequest={chatDraftRequest}
-                externalAttachments={chatAttachmentRequest}
-                pluginCommands={slashCommands}
-                onOpenSettings={onOpenChatSettings}
-                onOpenFile={onOpenFile}
-                onOpenWorkflow={(file) => {
-                  onOpenFile(file);
-                  setActiveTab("workflow");
-                }}
-              />
-            )
-            : aiEnabled && activeTab === "rag-search"
-            ? (
-              <RAGSearchPanel
-                directoryBase={directoryBase}
-                settings={chatSettings}
-                onSettingsChange={onChatSettingsChange}
-                onOpenSettings={onOpenRAGSettings}
-                onOpenFile={onOpenFile}
-                onChatWithResults={(files) => {
-                  setChatAttachmentRequest((current) => ({
-                    id: current.id + 1,
-                    files,
-                  }));
-                  setActiveTab("chat");
-                }}
-              />
-            )
-            : aiEnabled && activeTab === "workflow"
-            ? (
-              <WorkflowPanel
-                directoryBase={workspaceBase}
-                settings={chatSettings}
-                activeFile={activeFile}
-                onOpenFile={onOpenFile}
-              />
-            )
-            : activeTab === "plugins" && activePluginId
-            ? (
-              <section className="plugin-sidebar-view">
-                <header>
-                  <select
-                    value={activePluginId}
-                    onChange={(event) => activatePlugin(event.target.value)}
-                    aria-label="Plugin view"
-                  >
-                    {pluginChoices.map((choice) => (
-                      <option key={choice.pluginId} value={choice.pluginId}>
-                        {choice.name}
-                      </option>
-                    ))}
-                  </select>
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
                   <button
+                    key={tab.id}
                     type="button"
-                    disabled={!settingsTabs.some((tab) =>
-                      tab.pluginId === activePluginId
-                    )}
-                    onClick={() => openPluginSettings(activePluginId)}
-                    title="Plugin settings"
+                    className={activeTab === tab.id ? "active" : ""}
+                    onClick={() =>
+                      tab.id === "plugins"
+                        ? activatePlugin(activePluginId)
+                        : setActiveTab(tab.id)}
+                    title={tab.name}
                   >
-                    <Settings size={15} />
+                    <Icon size={17} />
                   </button>
-                </header>
-                <div className="plugin-sidebar-view-body">
-                  {ActiveViewComponent && activeApi
-                    ? (
-                      <ActiveViewComponent
-                        api={activeApi}
-                        language={language}
-                        fileId={activeFile?.path}
-                        filePath={activeFile?.path}
-                        fileName={activeFile?.path.split(/[\\/]/).pop()}
-                        fileContent={activeFileMatchesPlugin
-                          ? activeFile?.content || undefined
-                          : undefined}
-                      />
-                    )
-                    : (
-                      <section className="chat-placeholder">
-                        <Puzzle size={24} />
-                        <span>The plugin view is open in the Dashboard.</span>
-                      </section>
-                    )}
-                </div>
-              </section>
-            )
-            : (
-              <section className="chat-placeholder">
-                <Plug size={24} />
-                <span>Select a plugin view.</span>
-              </section>
-            )}
-        </div>
-      </aside>
+                );
+              })}
+            </header>
+
+            <div className="plugin-host-body">
+              {aiEnabled && activeTab === "chat"
+                ? (
+                  <ChatPanel
+                    isDark={isDark}
+                    directoryBase={directoryBase}
+                    workspaceBase={workspaceBase}
+                    settings={chatSettings}
+                    onSettingsChange={onChatSettingsChange}
+                    activeFile={activeFile}
+                    activeSelection={activeSelection}
+                    draftRequest={chatDraftRequest}
+                    externalAttachments={chatAttachmentRequest}
+                    pluginCommands={slashCommands}
+                    onOpenSettings={onOpenChatSettings}
+                    onOpenFile={onOpenFile}
+                    onOpenWorkflow={(file) => {
+                      onOpenFile(file);
+                      setActiveTab("workflow");
+                    }}
+                  />
+                )
+                : aiEnabled && activeTab === "rag-search"
+                ? (
+                  <RAGSearchPanel
+                    directoryBase={directoryBase}
+                    settings={chatSettings}
+                    onSettingsChange={onChatSettingsChange}
+                    onOpenSettings={onOpenRAGSettings}
+                    onOpenFile={onOpenFile}
+                    onChatWithResults={(files) => {
+                      setChatAttachmentRequest((current) => ({
+                        id: current.id + 1,
+                        files,
+                      }));
+                      setActiveTab("chat");
+                    }}
+                  />
+                )
+                : aiEnabled && activeTab === "workflow"
+                ? (
+                  <WorkflowPanel
+                    directoryBase={workspaceBase}
+                    settings={chatSettings}
+                    activeFile={activeFile}
+                    onOpenFile={onOpenFile}
+                  />
+                )
+                : activeTab === "plugins" && activePluginId
+                ? (
+                  <section className="plugin-sidebar-view">
+                    <header>
+                      <select
+                        value={activePluginId}
+                        onChange={(event) => activatePlugin(event.target.value)}
+                        aria-label="Plugin view"
+                      >
+                        {pluginChoices.map((choice) => (
+                          <option key={choice.pluginId} value={choice.pluginId}>
+                            {choice.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!settingsTabs.some((tab) =>
+                          tab.pluginId === activePluginId
+                        )}
+                        onClick={() => openPluginSettings(activePluginId)}
+                        title="Plugin settings"
+                      >
+                        <Settings size={15} />
+                      </button>
+                    </header>
+                    <div className="plugin-sidebar-view-body">
+                      {ActiveViewComponent && activeApi
+                        ? (
+                          <ActiveViewComponent
+                            api={activeApi}
+                            language={language}
+                            fileId={activeFile?.path}
+                            filePath={activeFile?.path}
+                            fileName={activeFile?.path.split(/[\\/]/).pop()}
+                            fileContent={activeFileMatchesPlugin
+                              ? activeFile?.content || undefined
+                              : undefined}
+                          />
+                        )
+                        : (
+                          <section className="chat-placeholder">
+                            <Puzzle size={24} />
+                            <span>
+                              The plugin view is open in the Dashboard.
+                            </span>
+                          </section>
+                        )}
+                    </div>
+                  </section>
+                )
+                : (
+                  <section className="chat-placeholder">
+                    <Plug size={24} />
+                    <span>Select a plugin view.</span>
+                  </section>
+                )}
+            </div>
+          </aside>
+        )}
       {settingsContainer && createPortal(
         <section className="plugin-manager settings-plugin-manager">
           <header>
