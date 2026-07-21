@@ -5,6 +5,7 @@ import {
   Code,
   Database,
   FileText,
+  FolderOpen,
   LayoutGrid,
   Pencil,
   PenLine,
@@ -16,11 +17,10 @@ import {
 } from "lucide-react";
 import {
   chat,
-  fileInventory,
   listWorkspaceDirectoryFiles,
-  listWorkspaceFiles,
   readFile,
   readWorkspaceFile,
+  selectLocalFilePath,
   writeFile,
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
@@ -48,6 +48,7 @@ import { WidgetDialog } from "./WidgetDialog";
 import { BaseConfigEditor } from "./BaseConfigEditor";
 import { WorkspaceFolderPicker } from "./WorkspaceFolderPicker";
 import { fileRef, isFileRef } from "../lib/fileRef";
+import { useI18n } from "../i18n/context";
 
 function text(config: Record<string, unknown>, key: string): string {
   if ((key === "path" || key === "filePath") && isFileRef(config.file)) {
@@ -286,6 +287,7 @@ function SearchableFileSelect({
   placeholder,
   filter,
   displayPath,
+  loading = false,
   onChange,
 }: {
   value: string;
@@ -293,6 +295,7 @@ function SearchableFileSelect({
   placeholder: string;
   filter?: { test: (path: string) => boolean };
   displayPath: (path: string) => string;
+  loading?: boolean;
   onChange: (path: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -381,7 +384,7 @@ function SearchableFileSelect({
                   <span>{displayPath(path)}</span>
                 </button>
               ))
-              : <p>No matching files</p>}
+              : <p>{loading ? "Loading…" : "No matching files"}</p>}
           </div>
         </div>
       )}
@@ -415,6 +418,7 @@ export function WidgetSettingsPanel({
     nextConfig: Record<string, unknown>,
   ) => void;
 }) {
+  const { t: tr } = useI18n();
   const definition = dashboardWidgetDefinition(widget.type);
   const PluginConfig = definition?.ConfigEditor ?? definition?.configComponent;
   const workflowCard =
@@ -422,7 +426,16 @@ export function WidgetSettingsPanel({
       !Array.isArray(widget.config.card)
       ? widget.config.card as Record<string, unknown>
       : {};
-  const [files, setFiles] = useState<string[]>([]);
+  const [files, setFiles] = useState<string[]>(() => {
+    const configuredPath =
+      (widget.type === "file" || widget.type === "markdown") &&
+        (!isFileRef(widget.config.file) ||
+          widget.config.file.scope === "workspace")
+        ? text(widget.config, "path") || text(widget.config, "filePath")
+        : "";
+    return configuredPath ? [configuredPath] : [];
+  });
+  const [filesLoading, setFilesLoading] = useState(true);
   const [workspaceFilePaths, setWorkspaceFilePaths] = useState<Set<string>>(
     () => new Set(),
   );
@@ -452,6 +465,11 @@ export function WidgetSettingsPanel({
   const [fileSourceMode, setFileSourceMode] = useState<"import" | "create">(
       "import",
     ),
+    [fileImportScope, setFileImportScope] = useState<"workspace" | "outside">(
+      isFileRef(widget.config.file) && widget.config.file.scope !== "workspace"
+        ? "outside"
+        : "workspace",
+    ),
     [newFileName, setNewFileName] = useState("");
   const [kanbanName, setKanbanName] = useState(""),
     [kanbanDefinition, setKanbanDefinition] = useState<KanbanDefinition | null>(
@@ -470,29 +488,34 @@ export function WidgetSettingsPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   useEffect(() => {
+    let cancelled = false;
+    setFilesLoading(true);
     if (widget.type === "kanban") {
       void listWorkspaceDirectoryFiles("Dashboards/Kanbans").then((paths) =>
-        setFiles(paths.sort())
-      );
-      return;
+        !cancelled && setFiles(paths.sort())
+      ).finally(() => !cancelled && setFilesLoading(false));
+      return () => {
+        cancelled = true;
+      };
     }
-    void Promise.allSettled([listWorkspaceFiles(), fileInventory()]).then(
-      ([workspace, external]) => {
-        const paths = new Set<string>();
-        if (workspace.status === "fulfilled") {
-          const workspacePaths = new Set(workspace.value.map((item) => item.path));
-          setWorkspaceFilePaths(workspacePaths);
-          workspacePaths.forEach((path) => paths.add(path));
-        }
-        if (external.status === "fulfilled") {
-          external.value.forEach((item) =>
-            paths.add(displayFilePath(item.path, filesBase))
-          );
-        }
-        setFiles([...paths].sort());
-      },
-    );
-  }, []);
+    const configuredPath = widget.type === "file" || widget.type === "markdown"
+      ? (!isFileRef(widget.config.file) ||
+          widget.config.file.scope === "workspace")
+        ? text(widget.config, "path") || text(widget.config, "filePath")
+        : ""
+      : "";
+    setFiles(configuredPath ? [configuredPath] : []);
+    setWorkspaceFilePaths(new Set());
+    void listWorkspaceDirectoryFiles("").then((paths) => {
+      if (cancelled) return;
+      const workspacePaths = new Set(paths);
+      setWorkspaceFilePaths(workspacePaths);
+      setFiles((current) => [...new Set([...current, ...paths])].sort());
+    }).catch(() => {}).finally(() => !cancelled && setFilesLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [directoryBase, filesBase, widget.id, widget.type]);
   useEffect(() => {
     let cancelled = false;
     void loadWorkflowHistory(directoryBase).then((records) => {
@@ -573,8 +596,7 @@ export function WidgetSettingsPanel({
   const set = (key: string, value: unknown) =>
     onChange({ ...widget.config, [key]: value });
   const fileList = useMemo(
-    () =>
-      files.filter((path) => !path.startsWith(".llm-hub/")),
+    () => files.filter((path) => !path.startsWith(".llm-hub/")),
     [files],
   );
   const labels: Record<string, string> = {
@@ -628,12 +650,15 @@ export function WidgetSettingsPanel({
         placeholder={placeholder}
         filter={extension}
         displayPath={(path) => displayFilePath(path, filesBase)}
+        loading={filesLoading}
         onChange={(path) => {
           if (
             key === "path" &&
             (widget.type === "file" || widget.type === "markdown")
           ) {
-            const scope = workspaceFilePaths.has(path) ? "workspace" : "absolute";
+            const scope = workspaceFilePaths.has(path)
+              ? "workspace"
+              : "absolute";
             onChange({ ...widget.config, file: fileRef(scope, path) });
             return;
           }
@@ -656,6 +681,55 @@ export function WidgetSettingsPanel({
     setNewFileName("");
     window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
   };
+  const browseOutsideFile = async () => {
+    const path = await selectLocalFilePath();
+    if (!path) return;
+    onChange({
+      ...widget.config,
+      file: fileRef("absolute", path),
+      path: "",
+      filePath: "",
+    });
+  };
+  const fileImportPicker = (
+    <>
+      <div className="file-source-switch file-location-switch">
+        <button
+          type="button"
+          className={fileImportScope === "workspace" ? "active" : ""}
+          onClick={() => setFileImportScope("workspace")}
+        >
+          Workspace
+        </button>
+        <button
+          type="button"
+          className={fileImportScope === "outside" ? "active" : ""}
+          onClick={() => setFileImportScope("outside")}
+        >
+          {tr("files.workspaceExternal")}
+        </button>
+      </div>
+      {fileImportScope === "workspace"
+        ? fileSelect(
+          "path",
+          "Select a file",
+          /\.(?:md|markdown|txt|html?|pdf|epub|png|jpe?g|gif|webp|svg)$/i,
+        )
+        : (
+          <div className="settings-file-field">
+            <span>File</span>
+            <button
+              type="button"
+              className="settings-file-picker-trigger"
+              onClick={() => void browseOutsideFile()}
+            >
+              <FolderOpen size={15} />
+              <span>{tr("picker.localFiles")}</span>
+            </button>
+          </div>
+        )}
+    </>
+  );
   const createBaseFile = async () => {
     const stem =
       (newBaseName.trim() || widget.title || "Base").replace(/\.base$/i, "")
@@ -915,21 +989,20 @@ export function WidgetSettingsPanel({
                       </span>
                       <button
                         type="button"
-                        onClick={() =>
-                          onChange({
-                            ...widget.config,
-                            path: "",
-                            filePath: "",
-                          })}
+                        onClick={() => {
+                          const {
+                            file: _file,
+                            path: _path,
+                            filePath: _filePath,
+                            ...rest
+                          } = widget.config;
+                          onChange(rest);
+                        }}
                       >
                         <X size={12} />
                       </button>
                     </div>
-                    {fileSelect(
-                      "path",
-                      "notes/example.md",
-                      /\.(?:md|markdown|txt|html?|pdf|epub|png|jpe?g|gif|webp|svg)$/i,
-                    )}
+                    {fileImportPicker}
                   </>
                 )
                 : (
@@ -950,31 +1023,25 @@ export function WidgetSettingsPanel({
                         Create
                       </button>
                     </div>
-                    {fileSourceMode === "import"
-                      ? fileSelect(
-                        "path",
-                        "Select a file",
-                        /\.(?:md|markdown|txt|html?|pdf|epub|png|jpe?g|gif|webp|svg)$/i,
-                      )
-                      : (
-                        <label>
-                          <span>Create a Markdown file</span>
-                          <div className="file-create-row">
-                            <input
-                              value={newFileName}
-                              onChange={(event) =>
-                                setNewFileName(event.target.value)}
-                              placeholder="New Note"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => void createMarkdownFile()}
-                            >
-                              Create
-                            </button>
-                          </div>
-                        </label>
-                      )}
+                    {fileSourceMode === "import" ? fileImportPicker : (
+                      <label>
+                        <span>Create a Markdown file</span>
+                        <div className="file-create-row">
+                          <input
+                            value={newFileName}
+                            onChange={(event) =>
+                              setNewFileName(event.target.value)}
+                            placeholder="New Note"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void createMarkdownFile()}
+                          >
+                            Create
+                          </button>
+                        </div>
+                      </label>
+                    )}
                   </>
                 )}
               <label className="check">
