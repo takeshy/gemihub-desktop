@@ -98,7 +98,12 @@ jobs:
       - name: Test backend
         run: go test -count=1 ./...
 
-      - name: Build binary
+      - name: Build Windows binary with application resources
+        if: runner.os == 'Windows'
+        run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build -devtools -clean -platform ${{ matrix.platform }} -o ${{ matrix.artifact }}
+
+      - name: Build non-Windows binary
+        if: runner.os != 'Windows'
         run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build -devtools -clean -nopackage -platform ${{ matrix.platform }} -o ${{ matrix.artifact }}
 
       - name: Upload artifact

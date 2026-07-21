@@ -7,7 +7,7 @@ command from the project root in the WSL host environment, outside the sandbox:
 
 ```bash
 go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build \
-  -devtools -clean -nopackage -platform windows/arm64 \
+  -devtools -clean -platform windows/arm64 \
   -o gemihub-desktop-windows-arm64.exe
 ```
 
