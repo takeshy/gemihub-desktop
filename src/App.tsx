@@ -1150,6 +1150,7 @@ export default function App() {
     workspaces: [],
   });
   const [directoryBase, setDirectoryBaseState] = useState("");
+  const [externalTreeFocusPath, setExternalTreeFocusPath] = useState("");
   const [recentDirectories, setRecentDirectories] = useState(() =>
     parseRecentDirectories(readStored(RECENT_DIRECTORIES_KEY, "[]"))
   );
@@ -1183,12 +1184,16 @@ export default function App() {
       const directory = isDirectory ? path : parentFilesystemPath(path);
       if (!directory) return;
       if (isDirectory) {
+        setExternalTreeFocusPath("");
         void setDirectoryBase(directory).then((selected) => {
           setDirectoryBaseState(selected || directory);
         }).catch((error) =>
           alert(error instanceof Error ? error.message : String(error))
         );
-      } else setDirectoryBaseState(directory);
+      } else {
+        setExternalTreeFocusPath(path);
+        setDirectoryBaseState(directory);
+      }
     },
     [workspacePath],
   );
@@ -1201,6 +1206,7 @@ export default function App() {
       const selected = path || await selectDirectoryBase();
       if (!selected) return;
       if (path) await setDirectoryBase(selected);
+      setExternalTreeFocusPath("");
       setDirectoryBaseState(selected);
       setAppMenuOpen(false);
     } catch (error) {
@@ -1565,6 +1571,7 @@ export default function App() {
         if (initialDirectory) await setDirectoryBase(initialDirectory);
         if (cancelled) return;
         setDirectoryBaseState(initialDirectory);
+        setExternalTreeFocusPath(startupFile);
         setStartupPaths(paths);
         setDirectoryContextLoaded(true);
       },
@@ -2213,6 +2220,12 @@ export default function App() {
             <FileTree
               directoryBase={directoryBase}
               workspacePath={workspacePath}
+              externalFocusPath={externalTreeFocusPath}
+              onExternalDirectoryChange={async (nextBase, focusPath) => {
+                const selected = await setDirectoryBase(nextBase);
+                setDirectoryBaseState(selected || nextBase);
+                setExternalTreeFocusPath(focusPath);
+              }}
               onDirectoryBaseUnavailable={handleDirectoryBaseUnavailable}
               onOpenFile={(file, created) => {
                 if (

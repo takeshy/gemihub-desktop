@@ -37,6 +37,36 @@ export function absoluteFilesPath(base: string, relative: string): string {
     : normalizedBase;
 }
 
+export function filesystemParentPath(path: string): string {
+  const separator = path.includes("\\") && !path.includes("/") ? "\\" : "/";
+  const trimmed = path.replace(/[\\/]+$/, "");
+  if (!trimmed || /^[a-z]:$/i.test(trimmed)) return "";
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (index < 0) return "";
+  if (index === 0) return separator;
+  if (index === 2 && /^[a-z]:/i.test(trimmed)) {
+    return `${trimmed.slice(0, 2)}${separator}`;
+  }
+  return trimmed.slice(0, index);
+}
+
+export function focusedExternalTree(
+  nodes: FileTreeNode[],
+  directoryBase: string,
+  focusPath: string,
+): FileTreeNode[] {
+  if (!focusPath) return nodes;
+  const normalize = (value: string) =>
+    value.replace(/\\/g, "/").replace(/\/+$/, "").toLocaleLowerCase();
+  const base = normalize(directoryBase);
+  const focus = normalize(focusPath);
+  if (!base || !focus.startsWith(`${base}/`)) return nodes;
+  const relative = focus.slice(base.length + 1);
+  if (!relative || relative.includes("/")) return nodes;
+  const match = nodes.filter((node) => normalize(node.path) === relative);
+  return match.length ? match : nodes;
+}
+
 function normalizedTreePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 }

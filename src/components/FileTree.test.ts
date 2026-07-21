@@ -2,6 +2,8 @@ import { assertEquals } from "jsr:@std/assert";
 import {
   absoluteFilesPath,
   canMoveWorkspacePath,
+  filesystemParentPath,
+  focusedExternalTree,
   isProtectedWorkspaceRoot,
   scopedTreeRef,
   workspaceMoveTarget,
@@ -25,6 +27,25 @@ Deno.test("outside Workspace drag paths are pinned to their absolute Files path"
     absoluteFilesPath("C:\\Users\\takes\\Documents\\", "."),
     "C:\\Users\\takes\\Documents",
   );
+});
+
+Deno.test("outside Workspace can reveal one selected file and climb its parents", () => {
+  const files = [node("one.md", false), node("two.md", false)];
+  assertEquals(
+    focusedExternalTree(
+      files,
+      "C:\\Users\\me\\docs",
+      "C:\\Users\\me\\docs\\two.md",
+    ),
+    [files[1]],
+  );
+  assertEquals(
+    filesystemParentPath("C:\\Users\\me\\docs\\two.md"),
+    "C:\\Users\\me\\docs",
+  );
+  assertEquals(filesystemParentPath("C:\\Users\\me\\docs"), "C:\\Users\\me");
+  assertEquals(filesystemParentPath("/Users/me/docs"), "/Users/me");
+  assertEquals(filesystemParentPath("/"), "");
 });
 
 Deno.test("only managed workspace roots are protected", () => {

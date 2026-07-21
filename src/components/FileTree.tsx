@@ -34,7 +34,9 @@ import { isEncryptedFile } from "../lib/hybridEncryption";
 import {
   absoluteFilesPath,
   canMoveWorkspacePath,
+  filesystemParentPath,
   type FileTreeScope,
+  focusedExternalTree,
   isProtectedWorkspaceRoot,
   workspaceMoveTarget,
 } from "../lib/fileTreePaths";
@@ -54,6 +56,10 @@ import {
   writeFileRef,
 } from "../lib/fileRef";
 import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
+import {
+  type MemoPathMove,
+  relocateWorkspaceMemos,
+} from "../lib/memoRelocation";
 import {
   copyPathIntoWorkspace,
   createDirectory,
@@ -369,13 +375,20 @@ function TreeRow({
 export function FileTree({
   directoryBase,
   workspacePath,
+  externalFocusPath,
   onOpenFile,
+  onExternalDirectoryChange,
   onDirectoryBaseUnavailable,
   onCollapse,
 }: {
   directoryBase: string;
   workspacePath: string;
+  externalFocusPath: string;
   onOpenFile: (file: FileRef, created?: boolean) => void;
+  onExternalDirectoryChange: (
+    directoryBase: string,
+    focusPath: string,
+  ) => Promise<void>;
   onDirectoryBaseUnavailable: () => void;
   onCollapse: () => void;
 }) {
@@ -538,9 +551,15 @@ export function FileTree({
     nodes,
     query,
   ]);
+  const focusedExternal = useMemo(
+    () =>
+      focusedExternalTree(externalFiltered, directoryBase, externalFocusPath),
+    [directoryBase, externalFiltered, externalFocusPath],
+  );
+  const externalFocusActive = focusedExternal !== externalFiltered;
   const visibleExternalFilePaths = useMemo(
-    () => treeFilePaths(externalFiltered, expanded),
-    [expanded, externalFiltered],
+    () => treeFilePaths(focusedExternal, expanded),
+    [expanded, focusedExternal],
   );
   const visibleContentResults = contentResults;
   const rootName = directoryBase.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ||
@@ -639,6 +658,20 @@ export function FileTree({
     clearWorkspaceMove();
     try {
       await renameFileRef(dragged.file, fileRef("workspace", target));
+      try {
+        await relocateWorkspaceMemos([{
+          sourcePaths: [dragged.file.path],
+          destinationPath: target,
+          isDirectory: dragged.node.isDir,
+        }]);
+      } catch (memoError) {
+        alert(
+          tr("files.memoMoveFailed").replace(
+            "{error}",
+            memoError instanceof Error ? memoError.message : String(memoError),
+          ),
+        );
+      }
       if (destination) {
         setExpanded((current) =>
           new Set(current).add(`workspace:${destination}`)
@@ -880,6 +913,24 @@ export function FileTree({
       alert(error instanceof Error ? error.message : String(error));
     }
   };
+  const showParentDirectoryFromMenu = async () => {
+    const selected = contextMenu;
+    setContextMenu(null);
+    if (!selected || selected.file.scope !== "files") return;
+    const absolute = absoluteFilesPath(directoryBase, selected.file.path);
+    const parent = filesystemParentPath(absolute);
+    if (!parent) return;
+    const parentBase = filesystemParentPath(parent);
+    try {
+      await onExternalDirectoryChange(
+        parentBase || parent,
+        parentBase ? parent : "",
+      );
+      setExternalSelection(new Set());
+    } catch (error) {
+      alert(error instanceof Error ? error.message : String(error));
+    }
+  };
   const moveIntoWorkspaceFromMenu = () => {
     const selected = contextMenu;
     setContextMenu(null);
@@ -911,12 +962,14 @@ export function FileTree({
     }
     setWorkspaceMove({ ...workspaceMove, busy: true, error: "" });
     try {
+      const memoMoves: MemoPathMove[] = [];
       for (const [index, item] of workspaceMove.items.entries()) {
         const move = workspaceMove.source === "local"
           ? moveLocalPathIntoWorkspace
           : movePathIntoWorkspace;
+        let movedResult: Awaited<ReturnType<typeof move>> | null = null;
         try {
-          await move(
+          movedResult = await move(
             item.path,
             workspaceMove.destination,
             item.name,
@@ -942,6 +995,23 @@ export function FileTree({
             item.name,
           );
         }
+        if (movedResult) {
+          const sourcePath = fileRefFromBackendPath(item.path).path;
+          memoMoves.push({
+            sourcePaths: Array.from(
+              new Set([
+                item.path,
+                sourcePath,
+                movedResult.originalPath,
+                /^(?:[a-z]:[\\/]|\/|\\\\)/i.test(sourcePath)
+                  ? sourcePath
+                  : absoluteFilesPath(directoryBase, sourcePath),
+              ]),
+            ),
+            destinationPath: movedResult.workspacePath,
+            isDirectory: item.isDir,
+          });
+        }
         if (index % 10 === 9) {
           await new Promise((resolve) => window.setTimeout(resolve, 0));
         }
@@ -964,6 +1034,16 @@ export function FileTree({
       setNodes((current) => withoutMoved(current));
       setWorkspaceMove(null);
       setExternalSelection(new Set());
+      try {
+        await relocateWorkspaceMemos(memoMoves);
+      } catch (memoError) {
+        alert(
+          tr("files.memoMoveFailed").replace(
+            "{error}",
+            memoError instanceof Error ? memoError.message : String(memoError),
+          ),
+        );
+      }
       await reload();
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
     } catch (error) {
@@ -1257,47 +1337,49 @@ export function FileTree({
                   <span>{tr("files.workspaceExternal")}</span>
                   <small>{tr("files.multiSelectHint")}</small>
                 </header>
-                <TreeRow
-                  key={directoryBase}
-                  node={{
-                    name: rootName,
-                    path: ".",
-                    isDir: true,
-                    size: 0,
-                    modTime: 0,
-                    children: externalFiltered,
-                  }}
-                  depth={0}
-                  expanded={expanded}
-                  onToggle={(path) =>
-                    setExpanded((current) => {
-                      const next = new Set(current);
-                      const key = `files:${path}`;
-                      if (next.has(key)) next.delete(key);
-                      else next.add(key);
-                      return next;
-                    })}
-                  onOpen={openTreeFile}
-                  onCreateFile={() => undefined}
-                  onMutated={() => void reload()}
-                  onDragExternal={beginExternalMove}
-                  externalSelection={externalSelection}
-                  onExternalFileClick={selectExternalFile}
-                  onPointerDragStart={startPointerDrag}
-                  shouldSuppressClick={() =>
-                    Date.now() < suppressExternalClickUntilRef.current}
-                  onContextMenu={(node, file, event) => {
-                    event.preventDefault();
-                    setContextMenu({
-                      node,
-                      file,
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }}
-                  isTreeRoot
-                  scope="files"
-                />
+                {(externalFocusActive ? focusedExternal : [{
+                  name: rootName,
+                  path: ".",
+                  isDir: true,
+                  size: 0,
+                  modTime: 0,
+                  children: externalFiltered,
+                }]).map((node) => (
+                  <TreeRow
+                    key={`${directoryBase}:${node.path}`}
+                    node={node}
+                    depth={0}
+                    expanded={expanded}
+                    onToggle={(path) =>
+                      setExpanded((current) => {
+                        const next = new Set(current);
+                        const key = `files:${path}`;
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      })}
+                    onOpen={openTreeFile}
+                    onCreateFile={() => undefined}
+                    onMutated={() => void reload()}
+                    onDragExternal={beginExternalMove}
+                    externalSelection={externalSelection}
+                    onExternalFileClick={selectExternalFile}
+                    onPointerDragStart={startPointerDrag}
+                    shouldSuppressClick={() =>
+                      Date.now() < suppressExternalClickUntilRef.current}
+                    onContextMenu={(item, file, event) => {
+                      event.preventDefault();
+                      setContextMenu({
+                        node: item,
+                        file,
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                    }}
+                    isTreeRoot={!externalFocusActive}
+                    scope="files"
+                  />
+                ))}
               </section>
             )}
           </div>
@@ -1315,6 +1397,18 @@ export function FileTree({
           >
             <FolderSearch size={14} />Open in Explorer
           </button>
+          {contextMenu.file.scope === "files" &&
+            filesystemParentPath(
+              absoluteFilesPath(directoryBase, contextMenu.file.path),
+            ) && (
+            <button
+              type="button"
+              onClick={() => void showParentDirectoryFromMenu()}
+            >
+              <FolderOpen size={14} />
+              {tr("files.showParentDirectory")}
+            </button>
+          )}
           {contextMenu.file.scope === "files" &&
             contextMenu.file.path !== "." && (
             <button type="button" onClick={moveIntoWorkspaceFromMenu}>

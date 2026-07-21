@@ -182,6 +182,8 @@ export interface TranslationStrings {
 
   // Workspace file tree / encryption
   "files.workspaceExternal": string;
+  "files.showParentDirectory": string;
+  "files.memoMoveFailed": string;
   "files.multiSelectHint": string;
   "files.moveToRoot": string;
   "files.encryptPassword": string;
@@ -439,6 +441,9 @@ const en: TranslationStrings = {
   "doc.convertHtml": "Convert to HTML",
 
   "files.workspaceExternal": "Outside Workspace",
+  "files.showParentDirectory": "Show parent directory",
+  "files.memoMoveFailed":
+    "The file was moved, but its memo could not be updated: {error}",
   "files.multiSelectHint": "Ctrl/Cmd or Shift to select multiple",
   "files.moveToRoot": "Move to Workspace root",
   "files.encryptPassword": "Enter an encryption password",
@@ -697,6 +702,9 @@ const ja: TranslationStrings = {
   "doc.convertHtml": "HTMLに変換",
 
   "files.workspaceExternal": "Workspace外",
+  "files.showParentDirectory": "親ディレクトリを開く",
+  "files.memoMoveFailed":
+    "ファイルは移動しましたが、メモを更新できませんでした: {error}",
   "files.multiSelectHint": "Ctrl/Cmd・Shiftで複数選択",
   "files.moveToRoot": "Workspace直下へ移動",
   "files.encryptPassword": "暗号化パスワードを入力してください",
