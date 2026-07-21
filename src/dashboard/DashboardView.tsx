@@ -704,6 +704,9 @@ export function DashboardView({
   const [kanbanEditRequests, setKanbanEditRequests] = useState<
     Record<string, number>
   >({});
+  const [fileSearchRequests, setFileSearchRequests] = useState<
+    Record<string, number>
+  >({});
   const [pendingNewWidgetId, setPendingNewWidgetId] = useState<string | null>(
     null,
   );
@@ -2865,6 +2868,21 @@ export function DashboardView({
                           </div>
                         )}
                         <div className="widget-action-group">
+                          <button
+                            type="button"
+                            className="widget-icon-button"
+                            onClick={() => {
+                              setActiveWidgetId(widget.id);
+                              setFileSearchRequests((current) => ({
+                                ...current,
+                                [widget.id]: (current[widget.id] || 0) + 1,
+                              }));
+                            }}
+                            title={tr("search.placeholder")}
+                            aria-label={tr("search.placeholder")}
+                          >
+                            <Search size={15} />
+                          </button>
                           {fileIsBrowserHtml && (
                             <button
                               type="button"
@@ -3275,6 +3293,7 @@ export function DashboardView({
                       <FileWidgetBody
                         widget={widget}
                         kanbanEditRequest={kanbanEditRequests[widget.id] || 0}
+                        searchRequest={fileSearchRequests[widget.id] || 0}
                         fallbackFileName={fileName}
                         fallbackContent={documentMarkdown}
                         isDark={isDark}

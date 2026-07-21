@@ -4849,6 +4849,11 @@ body.resizing-side-pane * {
   overflow: auto;
 }
 
+.file-widget-wysiwyg-selection-root {
+  flex: 1;
+  min-height: 0;
+}
+
 .frontmatter-editor {
   position: relative;
   z-index: 2;

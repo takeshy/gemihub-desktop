@@ -240,6 +240,7 @@ function latestEntryId(entries: MemoEntry[], ids: string[]): string {
 export function FileWidgetBody({
   widget,
   kanbanEditRequest,
+  searchRequest = 0,
   fallbackFileName,
   fallbackContent,
   isDark,
@@ -258,6 +259,7 @@ export function FileWidgetBody({
 }: {
   widget: DashboardWidget;
   kanbanEditRequest?: number;
+  searchRequest?: number;
   fallbackFileName: string;
   fallbackContent: string;
   isDark: boolean;
@@ -382,6 +384,7 @@ export function FileWidgetBody({
   const searchRootRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const previewRootRef = useRef<HTMLDivElement | null>(null);
+  const wysiwygRootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -394,6 +397,7 @@ export function FileWidgetBody({
   const memoEntriesRef = useRef<MemoEntry[]>([]);
   const recoveredPdfPathRef = useRef("");
   const searchMatchesRef = useRef<Array<{ range: Range; win: Window }>>([]);
+  const handledSearchRequestRef = useRef(searchRequest);
   const pdfSearchPagesRef = useRef<number[]>([]);
   const searchRunRef = useRef(0);
   memoEntriesRef.current = memoEntries;
@@ -911,9 +915,12 @@ export function FileWidgetBody({
   const selectionScopeFor = useCallback(
     (node: Node): { root: Node; anchor: string } | null => {
       if (kind === "markdown") {
-        return markdownMode === "preview" && previewRootRef.current
-          ? { root: previewRootRef.current, anchor: "text" }
+        const root = markdownMode === "preview"
+          ? previewRootRef.current
+          : markdownMode === "wysiwyg"
+          ? wysiwygRootRef.current
           : null;
+        return root ? { root, anchor: "text" } : null;
       }
       if (kind === "html" || kind === "epub") {
         const doc = frameRef.current?.contentDocument;
@@ -1418,6 +1425,12 @@ export function FileWidgetBody({
     }, 0);
   }, [runSearch, searchIndex, searchQuery]);
 
+  useEffect(() => {
+    if (searchRequest <= handledSearchRequestRef.current) return;
+    handledSearchRequestRef.current = searchRequest;
+    openSearch();
+  }, [openSearch, searchRequest]);
+
   const closeSearch = useCallback(() => {
     searchRunRef.current += 1;
     clearDocumentSearch();
@@ -1662,20 +1675,25 @@ export function FileWidgetBody({
                     })}
                 />
               ))}
-          <FileWidgetWysiwygEditor
-            value={markdownBody}
-            onImageChange={uploadMarkdownImage}
-            workspaceSourcePath={storedFile?.scope === "workspace"
-              ? storedFile.path
-              : undefined}
-            onChange={(next) =>
-              onConfigChange({
-                ...widget.config,
-                fileName,
-                content: replaceFrontmatterBody(documentContent, next),
-                mode: markdownMode,
-              })}
-          />
+          <div
+            ref={wysiwygRootRef}
+            className="file-widget-wysiwyg-selection-root"
+          >
+            <FileWidgetWysiwygEditor
+              value={markdownBody}
+              onImageChange={uploadMarkdownImage}
+              workspaceSourcePath={storedFile?.scope === "workspace"
+                ? storedFile.path
+                : undefined}
+              onChange={(next) =>
+                onConfigChange({
+                  ...widget.config,
+                  fileName,
+                  content: replaceFrontmatterBody(documentContent, next),
+                  mode: markdownMode,
+                })}
+            />
+          </div>
         </div>
       );
     }
@@ -1691,6 +1709,8 @@ export function FileWidgetBody({
             content: event.target.value,
             mode: markdownMode,
           })}
+        onContextMenu={(event) =>
+          selectionActionsAvailable && handleTextareaContextMenu(event)}
         spellCheck={false}
         aria-label="Raw Markdown"
       />
