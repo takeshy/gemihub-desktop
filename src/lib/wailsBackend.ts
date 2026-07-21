@@ -427,6 +427,11 @@ interface WailsAppApi {
     destinationName: string,
     leaveLink: boolean,
   ) => Promise<WorkspaceDirectoryMoveResult>;
+  CopyPathIntoWorkspace: (
+    path: string,
+    destinationDirectory: string,
+    destinationName: string,
+  ) => Promise<WorkspaceDirectoryMoveResult>;
   MoveLocalPathIntoWorkspace: (
     path: string,
     destinationDirectory: string,
@@ -896,6 +901,22 @@ export async function movePathIntoWorkspace(
     destinationDirectory,
     destinationName,
     leaveLink,
+  );
+}
+
+export async function copyPathIntoWorkspace(
+  path: string,
+  destinationDirectory: string,
+  destinationName: string,
+): Promise<WorkspaceDirectoryMoveResult> {
+  const api = appApi();
+  if (!api) {
+    throw new Error("Copying into the Workspace requires the desktop app.");
+  }
+  return await api.CopyPathIntoWorkspace(
+    path,
+    destinationDirectory,
+    destinationName,
   );
 }
 

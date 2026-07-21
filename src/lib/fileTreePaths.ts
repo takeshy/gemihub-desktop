@@ -28,3 +28,11 @@ export function isProtectedWorkspaceRoot(
 export function scopedTreeRef(scope: FileTreeScope, path: string): FileRef {
   return fileRef(scope, path);
 }
+
+export function absoluteFilesPath(base: string, relative: string): string {
+  const normalizedBase = base.replace(/[\\/]+$/, "");
+  const normalizedRelative = relative.replace(/^\.\/?/, "");
+  return normalizedRelative
+    ? `${normalizedBase}/${normalizedRelative}`
+    : normalizedBase;
+}

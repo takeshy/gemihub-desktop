@@ -90,19 +90,116 @@ func moveRegularFile(source, destination string) error {
 	return nil
 }
 
+func (a *App) filesTransferSource(path string) (string, error) {
+	if _, workspaceScoped := stripPathScope(path, "workspace"); workspaceScoped {
+		return "", fmt.Errorf("Workspace path cannot be used as an external transfer source")
+	}
+	value, _ := stripPathScope(path, "files")
+	value = strings.TrimSpace(value)
+	if !filepath.IsAbs(filepath.FromSlash(value)) {
+		return a.directoryPath("files://"+value, false)
+	}
+	source := filepath.Clean(filepath.FromSlash(value))
+	base := a.GetDirectoryBase()
+	if base == "" {
+		return "", fmt.Errorf("directory base is not configured")
+	}
+	if err := requirePathInside(base, source); err != nil {
+		return "", err
+	}
+	realParent, err := filepath.EvalSymlinks(filepath.Dir(source))
+	if err != nil {
+		return "", err
+	}
+	if err := requirePathInside(base, realParent); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("symbolic links cannot be transferred into the Workspace")
+	}
+	return source, nil
+}
+
 // MovePathIntoWorkspace moves an external file or directory into a Workspace
 // directory. path is resolved against Files; destinationDirectory is relative
 // to the active Workspace. Links are supported for directories only.
 func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName string, leaveLink bool) (*WorkspaceDirectoryMoveResult, error) {
-	if _, workspaceScoped := stripPathScope(path, "workspace"); workspaceScoped {
-		return nil, fmt.Errorf("Workspace path cannot be used as an external move source")
+	source, err := a.filesTransferSource(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Files move source %q: %w", path, err)
 	}
-	relative, _ := stripPathScope(path, "files")
-	source, err := a.directoryPath("files://"+relative, false)
+	return a.moveResolvedPathIntoWorkspace(source, destinationDirectory, destinationName, leaveLink)
+}
+
+// CopyPathIntoWorkspace copies an item from Files only after the frontend has
+// reported a failed move and the user explicitly chooses the copy fallback.
+func (a *App) CopyPathIntoWorkspace(path, destinationDirectory, destinationName string) (*WorkspaceDirectoryMoveResult, error) {
+	source, err := a.filesTransferSource(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Files copy source %q: %w", path, err)
+	}
+	return a.copyResolvedPathIntoWorkspace(source, destinationDirectory, destinationName)
+}
+
+func (a *App) copyResolvedPathIntoWorkspace(source, destinationDirectory, destinationName string) (*WorkspaceDirectoryMoveResult, error) {
+	name, err := validateWorkspaceDirectoryName(destinationName)
 	if err != nil {
 		return nil, err
 	}
-	return a.moveResolvedPathIntoWorkspace(source, destinationDirectory, destinationName, leaveLink)
+	info, err := os.Lstat(source)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+		return nil, fmt.Errorf("only regular files and directories can be copied into the Workspace")
+	}
+	if info.IsDir() {
+		if err := ensureTreeHasNoSymlinks(source); err != nil {
+			return nil, err
+		}
+	}
+	targetParent, err := a.workspacePath(destinationDirectory, false)
+	if err != nil {
+		return nil, err
+	}
+	destination := filepath.Join(targetParent, name)
+	if err := requirePathInside(a.GetWorkspacePath(), destination); err != nil {
+		return nil, err
+	}
+	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+		if err == nil {
+			return nil, fmt.Errorf("destination already contains %q", name)
+		}
+		return nil, err
+	}
+	if info.IsDir() {
+		if err := requireIndependentDirectories(source, a.GetWorkspacePath()); err != nil {
+			return nil, err
+		}
+		if err := os.CopyFS(destination, os.DirFS(source)); err != nil {
+			_ = os.RemoveAll(destination)
+			return nil, fmt.Errorf("copy directory: %w", err)
+		}
+	} else {
+		content, err := os.ReadFile(source)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(destination, content, info.Mode().Perm()); err != nil {
+			return nil, fmt.Errorf("copy file: %w", err)
+		}
+	}
+	workspaceBase := a.GetWorkspacePath()
+	relativeDestination, _ := filepath.Rel(workspaceBase, destination)
+	return &WorkspaceDirectoryMoveResult{
+		WorkspacePath: filepath.ToSlash(relativeDestination),
+		OriginalPath:  source,
+		LinkCreated:   false,
+	}, nil
 }
 
 // MoveLocalPathIntoWorkspace moves an absolute path dropped by the operating

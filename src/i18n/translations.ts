@@ -190,6 +190,7 @@ export interface TranslationStrings {
   "files.symlinkHint": string;
   "files.moving": string;
   "files.moveAction": string;
+  "files.moveFailedCopy": string;
   "encrypted.passwordPrompt": string;
   "encrypted.unlockFailed": string;
   "encrypted.saveFailed": string;
@@ -440,6 +441,8 @@ const en: TranslationStrings = {
   "files.symlinkHint": "Creates a symbolic link.",
   "files.moving": "Moving…",
   "files.moveAction": "Move",
+  "files.moveFailedCopy":
+    "Could not move {name}. Copy it into the Workspace instead?\n\n{error}",
   "encrypted.passwordPrompt": "Enter the password for the encrypted file",
   "encrypted.unlockFailed": "Could not decrypt the file. Check the password.",
   "encrypted.saveFailed":
@@ -691,6 +694,8 @@ const ja: TranslationStrings = {
   "files.symlinkHint": "シンボリックリンクを作成します。",
   "files.moving": "移動中…",
   "files.moveAction": "移動する",
+  "files.moveFailedCopy":
+    "{name}を移動できませんでした。代わりにWorkspaceへコピーしますか？\n\n{error}",
   "encrypted.passwordPrompt": "暗号化ファイルのパスワードを入力してください",
   "encrypted.unlockFailed":
     "復号できませんでした。パスワードを確認してください。",

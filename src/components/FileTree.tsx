@@ -32,6 +32,7 @@ import { useI18n } from "../i18n/context";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
 import { isEncryptedFile } from "../lib/hybridEncryption";
 import {
+  absoluteFilesPath,
   type FileTreeScope,
   isProtectedWorkspaceRoot,
 } from "../lib/fileTreePaths";
@@ -52,6 +53,7 @@ import {
 } from "../lib/fileRef";
 import { dashboardPluginWidgetForPath } from "../dashboard/widgetRegistry";
 import {
+  copyPathIntoWorkspace,
   createDirectory,
   duplicateFile,
   type FileHistoryEntry,
@@ -258,7 +260,7 @@ function TreeRow({
           }
         }}
         onContextMenu={(event) => {
-          if (!isTreeRoot) onContextMenu(node, ref(node.path), event);
+          onContextMenu(node, ref(node.path), event);
         }}
       >
         <button
@@ -574,7 +576,10 @@ export function FileTree({
     if (!items.length) return;
     setWorkspaceMove({
       items: items.map(({ node, file }) => ({
-        path: fileRefBackendPath(file),
+        path: fileRefBackendPath(fileRef(
+          "files",
+          absoluteFilesPath(directoryBase, file.path),
+        )),
         name: node.name,
         isDir: node.isDir,
       })),
@@ -832,22 +837,37 @@ export function FileTree({
     }
     setWorkspaceMove({ ...workspaceMove, busy: true, error: "" });
     try {
-      window.dispatchEvent(new Event("llm-hub:release-dashboard-files"));
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => window.setTimeout(resolve, 50))
-        )
-      );
       for (const [index, item] of workspaceMove.items.entries()) {
         const move = workspaceMove.source === "local"
           ? moveLocalPathIntoWorkspace
           : movePathIntoWorkspace;
-        await move(
-          item.path,
-          workspaceMove.destination,
-          item.name,
-          workspaceMove.leaveLink && item.isDir,
-        );
+        try {
+          await move(
+            item.path,
+            workspaceMove.destination,
+            item.name,
+            workspaceMove.leaveLink && item.isDir,
+          );
+        } catch (moveError) {
+          if (
+            workspaceMove.source !== "files" ||
+            !confirm(
+              tr("files.moveFailedCopy")
+                .replace("{name}", item.name)
+                .replace(
+                  "{error}",
+                  moveError instanceof Error
+                    ? moveError.message
+                    : String(moveError),
+                ),
+            )
+          ) throw moveError;
+          await copyPathIntoWorkspace(
+            item.path,
+            workspaceMove.destination,
+            item.name,
+          );
+        }
         if (index % 10 === 9) {
           await new Promise((resolve) => window.setTimeout(resolve, 0));
         }
@@ -938,7 +958,11 @@ export function FileTree({
   };
 
   return (
-    <aside className="file-tree-panel">
+    <aside
+      className={`file-tree-panel ${
+        draggedExternal.length ? "file-move-active" : ""
+      } ${externalDropTarget !== null ? "file-move-can-drop" : ""}`}
+    >
       <div className="file-tree-mode-bar">
         <button
           type="button"
@@ -1187,7 +1211,8 @@ export function FileTree({
           >
             <FolderSearch size={14} />Open in Explorer
           </button>
-          {contextMenu.file.scope === "files" && (
+          {contextMenu.file.scope === "files" &&
+            contextMenu.file.path !== "." && (
             <button type="button" onClick={moveIntoWorkspaceFromMenu}>
               <FolderOpen size={14} />Move into Workspace…
             </button>

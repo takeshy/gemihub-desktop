@@ -1604,23 +1604,6 @@ export default function App() {
   }, [directoryBase, directoryContextLoaded]);
 
   useEffect(() => {
-    const releaseDashboardFiles = () => {
-      setDashboardRawMode(true);
-      setActiveChatFile(null);
-      setActiveChatSelection(null);
-    };
-    window.addEventListener(
-      "llm-hub:release-dashboard-files",
-      releaseDashboardFiles,
-    );
-    return () =>
-      window.removeEventListener(
-        "llm-hub:release-dashboard-files",
-        releaseDashboardFiles,
-      );
-  }, []);
-
-  useEffect(() => {
     if (!directoryContextLoaded || !workspaceContextLoaded || !directoryBase) {
       return;
     }

@@ -1,5 +1,6 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
+  absoluteFilesPath,
   isProtectedWorkspaceRoot,
   scopedTreeRef,
 } from "../lib/fileTreePaths.ts";
@@ -11,6 +12,17 @@ const node = (name: string, isDir = true): FileTreeNode => ({
   isDir,
   size: 0,
   modTime: 0,
+});
+
+Deno.test("outside Workspace drag paths are pinned to their absolute Files path", () => {
+  assertEquals(
+    absoluteFilesPath("C:\\Users\\takes\\Documents", "projects/Research"),
+    "C:\\Users\\takes\\Documents/projects/Research",
+  );
+  assertEquals(
+    absoluteFilesPath("C:\\Users\\takes\\Documents\\", "."),
+    "C:\\Users\\takes\\Documents",
+  );
 });
 
 Deno.test("only managed workspace roots are protected", () => {

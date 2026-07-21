@@ -5794,6 +5794,14 @@ body.resizing-side-pane * {
   cursor: grabbing;
   opacity: 0.65;
 }
+.file-tree-panel.file-move-active,
+.file-tree-panel.file-move-active * {
+  cursor: grabbing !important;
+}
+.file-tree-panel.file-move-can-drop,
+.file-tree-panel.file-move-can-drop * {
+  cursor: move !important;
+}
 .file-tree-row.external.selected {
   background: color-mix(in srgb, var(--accent) 18%, var(--panel));
   box-shadow: inset 2px 0 0 var(--accent);

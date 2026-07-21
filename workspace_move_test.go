@@ -162,6 +162,52 @@ func TestMovePathIntoWorkspaceAlwaysResolvesBarePathsFromFiles(t *testing.T) {
 	}
 }
 
+func TestFilesTransferSourceAcceptsPinnedAbsolutePath(t *testing.T) {
+	app, files, _ := workspaceMoveTestApp(t)
+	source := filepath.Join(files, "manual", "BOT_README.md")
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("manual"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := app.filesTransferSource("files://" + filepath.ToSlash(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved != source {
+		t.Fatalf("resolved source = %q, want %q", resolved, source)
+	}
+}
+
+func TestCopyPathIntoWorkspaceKeepsOriginalDirectory(t *testing.T) {
+	app, files, workspace := workspaceMoveTestApp(t)
+	source := filepath.Join(files, "Research")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "paper.md"), []byte("paper"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := app.CopyPathIntoWorkspace("files://Research", "", "Research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WorkspacePath != "Research" || result.LinkCreated {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	for _, path := range []string{
+		filepath.Join(source, "paper.md"),
+		filepath.Join(workspace, "Research", "paper.md"),
+	} {
+		if content, err := os.ReadFile(path); err != nil || string(content) != "paper" {
+			t.Fatalf("copied file %s = %q, %v", path, content, err)
+		}
+	}
+}
+
 func TestMovePathIntoWorkspaceRejectsTraversalAndFileLink(t *testing.T) {
 	app, files, _ := workspaceMoveTestApp(t)
 	if err := os.WriteFile(filepath.Join(files, "outside.md"), []byte("external"), 0o600); err != nil {
