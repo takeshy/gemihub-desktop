@@ -1189,6 +1189,35 @@ body.resizing-side-pane * {
   line-height: 1.5;
 }
 
+.chat-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 7px;
+}
+
+.chat-message-attachments > span {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 6px;
+  background: var(--panel-subtle);
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-message-attachments small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
 .chat-message .markdown-preview {
   width: 100%;
   padding: 0;

@@ -182,9 +182,18 @@ export interface ChatMessage {
   usage?: ChatUsage;
   elapsedMs?: number;
   attachments?: ChatAttachment[];
+  attachedFiles?: ChatAttachedFile[];
   generatedImages?: GeneratedImage[];
   failedWorkflowPath?: string;
   mcpApps?: McpAppInfo[];
+}
+
+export interface ChatAttachedFile {
+  path: string;
+  name: string;
+  type: "image" | "pdf" | "text" | "audio" | "video" | "file";
+  mimeType?: string;
+  automatic?: boolean;
 }
 
 export interface WebSearchSource {

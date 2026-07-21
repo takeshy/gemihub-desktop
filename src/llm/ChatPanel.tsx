@@ -24,6 +24,7 @@ import {
   applyPendingFileAction,
   cancelChat,
   chat,
+  type ChatAttachedFile,
   type ChatMessage,
   type ChatStreamEvent,
   listWorkspaceFiles,
@@ -424,6 +425,28 @@ function attachedChatAttachments(files: AttachedFile[]) {
       }]
       : [];
   });
+}
+
+function attachedFileSummary(file: AttachedFile): ChatAttachedFile {
+  const mimeType = file.content.match(/^data:([^;,]+);base64,/)?.[1];
+  const type = mimeType?.startsWith("image/")
+    ? "image"
+    : mimeType === "application/pdf"
+    ? "pdf"
+    : mimeType?.startsWith("audio/")
+    ? "audio"
+    : mimeType?.startsWith("video/")
+    ? "video"
+    : mimeType
+    ? "file"
+    : "text";
+  return {
+    path: file.path,
+    name: file.path.split(/[\\/]/).at(-1) || file.path,
+    type,
+    mimeType,
+    automatic: file.automatic,
+  };
 }
 
 function semanticRAGContext(results: RAGSearchResult[]): string {
@@ -1510,6 +1533,9 @@ export function ChatPanel({
     const displayMessage = {
       role: "user",
       content: text,
+      attachedFiles: attachedFiles.length
+        ? attachedFiles.map(attachedFileSummary)
+        : undefined,
     } satisfies ChatMessage;
     const next = [...messages, displayMessage];
     const binaryAttachments = attachedChatAttachments(attachedFiles);
@@ -2078,6 +2104,21 @@ export function ChatPanel({
                     >
                       {source.title || source.url}
                     </a>
+                  ))}
+                </div>
+              )
+              : null}
+            {message.role === "user" && message.attachedFiles?.length
+              ? (
+                <div className="chat-message-attachments">
+                  {message.attachedFiles.map((file) => (
+                    <span key={`${file.path}:${file.type}`} title={file.path}>
+                      {file.type === "text" || file.type === "pdf"
+                        ? <FileText size={12} />
+                        : <Paperclip size={12} />}
+                      {file.name}
+                      {file.automatic && <small>Active</small>}
+                    </span>
                   ))}
                 </div>
               )
