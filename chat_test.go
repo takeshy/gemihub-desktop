@@ -177,8 +177,19 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 		t.Fatalf("AI list escaped Workspace: %#v", items)
 	}
 	_, pending, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md","content":"draft"}`)
-	if err != nil || pending == nil || pending.Path != "workspace://draft.md" {
+	if err != nil || pending == nil || pending.Path != "workspace://draft.md" || pending.Content != "draft" {
 		t.Fatalf("AI edit was not Workspace-scoped: %#v, %v", pending, err)
+	}
+	if _, _, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md"}`); err == nil {
+		t.Fatal("AI edit accepted a proposal without content")
+	}
+	_, emptyPending, err := app.executeFileTool("propose_file_edit", `{"path":"empty.md","content":""}`)
+	if err != nil || emptyPending == nil || emptyPending.Content != "" {
+		t.Fatalf("AI edit rejected an intentional empty file: %#v, %v", emptyPending, err)
+	}
+	encoded, err := json.Marshal(emptyPending)
+	if err != nil || !strings.Contains(string(encoded), `"content":""`) {
+		t.Fatalf("empty proposed content was omitted from JSON: %s, %v", encoded, err)
 	}
 }
 

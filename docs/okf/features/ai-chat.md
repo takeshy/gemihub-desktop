@@ -21,7 +21,7 @@ Botでも利用できます。
 tool設定とは独立して利用できます。
 
 - OpenAI互換、Gemini、Vertex AI、Anthropic、Local CLI
-- `@file` と `{selection}` による文脈追加
+- `@file` と選択範囲の右クリックメニューによる文脈追加
 - Local RAGとOKF knowledge source
 - provider nativeのWeb Search
 - Agent Skills、Slash commands、Workflow tools

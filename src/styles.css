@@ -1424,38 +1424,81 @@ body.resizing-side-pane * {
   }
 }
 
-.pending-file-action {
-  display: grid;
-  gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
-  border-radius: 8px;
-  margin: 8px 0;
-  background: var(--accent-soft);
-  padding: 9px;
-}
-
-.pending-file-action header,
-.pending-file-action > div {
+.pending-file-action-backdrop {
+  position: fixed;
+  z-index: 1250;
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.5);
+  padding: 18px;
+}
+
+.pending-file-action {
+  display: grid;
+  width: min(1024px, 100%);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 20px 80px rgb(0 0 0 / 0.32);
+}
+
+.pending-file-action.write {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: min(720px, 84vh);
+}
+
+.pending-file-action.rename {
+  grid-template-rows: auto auto auto;
+}
+
+.pending-file-action > header,
+.pending-file-action > footer,
+.pending-file-action > header > div,
+.pending-file-action-path,
+.pending-file-action-diff-header,
+.pending-file-action-diff-header > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pending-file-action > header,
+.pending-file-action > footer {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 11px 13px;
+}
+
+.pending-file-action > footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
 }
 
 .pending-file-action code {
+  min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
 }
 
-.pending-file-action pre {
-  max-height: 180px;
-  overflow: auto;
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--panel);
-  padding: 7px;
-  font-size: 0.68rem;
-  white-space: pre-wrap;
+.pending-file-action-path {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-subtle);
+  padding: 9px 13px;
+}
+
+.pending-file-action-path > span {
+  flex: none;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 2px 8px;
+  font-size: 0.7rem;
 }
 
 .pending-file-action button {
@@ -1471,10 +1514,78 @@ body.resizing-side-pane * {
   font-size: 0.72rem;
 }
 
+.pending-file-action button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .pending-file-action button.secondary {
   border-color: var(--border);
   background: var(--panel);
   color: var(--text);
+}
+
+.pending-file-action > header button.icon-button {
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+}
+
+.pending-file-action-diff {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pending-file-action-diff-header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
+.pending-file-action-diff-header > div:first-child {
+  width: 100%;
+}
+
+.pending-file-action-diff-header > div:first-child span {
+  width: 50%;
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-align: center;
+}
+
+.pending-file-action-diff-header .diff-mode-toggle {
+  grid-template-columns: repeat(2, 78px);
+  width: 156px;
+  flex: none;
+}
+
+.pending-file-action-diff-header .diff-mode-toggle button {
+  width: 78px;
+  height: 28px;
+}
+
+.pending-file-action .pending-file-diff {
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.75rem;
+}
+
+.pending-file-action-loading,
+.pending-file-action-error {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  color: var(--muted);
+  padding: 18px;
+}
+
+.pending-file-action-error {
+  color: var(--danger);
 }
 
 .chat-error {

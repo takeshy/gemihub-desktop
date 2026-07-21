@@ -112,7 +112,7 @@ type PendingFileAction struct {
 	Kind    string `json:"kind"`
 	Path    string `json:"path"`
 	NewPath string `json:"newPath,omitempty"`
-	Content string `json:"content,omitempty"`
+	Content string `json:"content"`
 	Mode    string `json:"mode,omitempty"`
 }
 
@@ -968,13 +968,21 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if err != nil {
 			return nil, nil, err
 		}
+		content, contentProvided := args["content"].(string)
+		if !contentProvided {
+			return nil, nil, fmt.Errorf("propose_file_edit requires string content")
+		}
 		if _, err := a.workspacePath(path, true); err != nil {
 			return nil, nil, err
 		}
-		return nil, &PendingFileAction{Kind: "write", Path: "workspace://" + filepath.ToSlash(path), Content: stringArg("content"), Mode: stringArg("mode")}, nil
+		return nil, &PendingFileAction{Kind: "write", Path: "workspace://" + filepath.ToSlash(path), Content: content, Mode: stringArg("mode")}, nil
 	case "create_note":
 		name := strings.TrimSpace(strings.ReplaceAll(stringArg("name"), "\\", "/"))
 		folder := strings.Trim(strings.TrimSpace(strings.ReplaceAll(stringArg("folder"), "\\", "/")), "/")
+		content, contentProvided := args["content"].(string)
+		if !contentProvided {
+			return nil, nil, fmt.Errorf("create_note requires string content")
+		}
 		if name == "" || strings.Contains(name, "/") {
 			return nil, nil, fmt.Errorf("create_note requires a file name without path separators")
 		}
@@ -985,7 +993,7 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if _, err := a.workspacePath(path, true); err != nil {
 			return nil, nil, err
 		}
-		return nil, &PendingFileAction{Kind: "write", Path: "workspace://" + path, Content: stringArg("content"), Mode: "replace"}, nil
+		return nil, &PendingFileAction{Kind: "write", Path: "workspace://" + path, Content: content, Mode: "replace"}, nil
 	case "propose_file_rename":
 		path, err := aiWorkspacePath(stringArg("path"))
 		if err != nil {

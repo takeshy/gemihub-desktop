@@ -245,7 +245,6 @@ export function FileWidgetBody({
   onOpenPathMaximized,
   onNavigatePath,
   onActivate,
-  onSelectionChange,
   aiAvailable,
   onAskAI,
   onAskMemoAI,
@@ -263,7 +262,6 @@ export function FileWidgetBody({
   onOpenPathMaximized: (path: string) => void;
   onNavigatePath: (path: string) => void;
   onActivate: () => void;
-  onSelectionChange: (selection: ActiveSelection | null) => void;
   aiAvailable: boolean;
   onAskAI: (selection: ActiveSelection) => void;
   onAskMemoAI: (draft: string) => void;
@@ -1004,52 +1002,6 @@ export function FileWidgetBody({
     [hostPointFor],
   );
 
-  const reportTextareaSelection = useCallback(
-    (textarea: HTMLTextAreaElement) => {
-      const { selectionStart, selectionEnd, value } = textarea;
-      const text = value.slice(selectionStart, selectionEnd);
-      onSelectionChange(
-        text
-          ? {
-            path: selectionPath,
-            text,
-            start: selectionStart,
-            end: selectionEnd,
-          }
-          : null,
-      );
-    },
-    [onSelectionChange, selectionPath],
-  );
-
-  const reportWindowSelection = useCallback(
-    (win: Window, root?: Node | null) => {
-      const selection = win.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      if (
-        root &&
-        (!root.contains(selection.anchorNode) ||
-          !root.contains(selection.focusNode))
-      ) return;
-      if (selection.isCollapsed) {
-        onSelectionChange(null);
-        return;
-      }
-      const text = selection.toString();
-      onSelectionChange(
-        text ? { path: selectionPath, text, start: -1, end: -1 } : null,
-      );
-    },
-    [onSelectionChange, selectionPath],
-  );
-
-  useEffect(() => {
-    const onSelection = () =>
-      reportWindowSelection(window, contentWrapRef.current);
-    document.addEventListener("selectionchange", onSelection);
-    return () => document.removeEventListener("selectionchange", onSelection);
-  }, [reportWindowSelection]);
-
   const memoConfigured = Boolean(memoDirPath && filePath && hasWailsBackend());
   const selectionActionsAvailable = memoConfigured || aiAvailable;
 
@@ -1113,18 +1065,15 @@ export function FileWidgetBody({
       onActivate();
       setSelPopup(null);
     };
-    const onSelection = () => reportWindowSelection(win, doc.body);
     doc.addEventListener("contextmenu", onContextMenu);
     doc.addEventListener("mousemove", onMouseMove);
     doc.addEventListener("click", onClick);
     doc.addEventListener("mousedown", onMouseDown);
-    doc.addEventListener("selectionchange", onSelection);
     return () => {
       doc.removeEventListener("contextmenu", onContextMenu);
       doc.removeEventListener("mousemove", onMouseMove);
       doc.removeEventListener("click", onClick);
       doc.removeEventListener("mousedown", onMouseDown);
-      doc.removeEventListener("selectionchange", onSelection);
     };
   }, [
     kind,
@@ -1134,7 +1083,6 @@ export function FileWidgetBody({
     handlePointerHover,
     handleHighlightClick,
     onActivate,
-    reportWindowSelection,
   ]);
 
   // ---- timeline → document jumps (§7.4) ------------------------------------
@@ -1418,7 +1366,6 @@ export function FileWidgetBody({
               fileName,
               content: event.target.value,
             })}
-          onSelect={(event) => reportTextareaSelection(event.currentTarget)}
           onContextMenu={(event) =>
             selectionActionsAvailable && handleTextareaContextMenu(event)}
           spellCheck={false}
@@ -1515,7 +1462,6 @@ export function FileWidgetBody({
             content: event.target.value,
             mode: markdownMode,
           })}
-        onSelect={(event) => reportTextareaSelection(event.currentTarget)}
         spellCheck={false}
         aria-label="Raw Markdown"
       />
@@ -1643,7 +1589,7 @@ export function FileWidgetBody({
                 }}
               >
                 <Bot size={13} />
-                <span>{tr("memo.askAI")}</span>
+                <span>{tr("memo.askAISelection")}</span>
               </button>
             )}
           </div>

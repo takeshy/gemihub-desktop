@@ -55,7 +55,7 @@ DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspace
 
 * [Chat](/features/ai-chat.md) - 任意で有効にするAIチャットと会話履歴。
 * [AI providerとLocal CLI](/features/ai-providers-cli.md) - OpenAI互換、Gemini、Vertex AI、Anthropic、CLIの設定。
-* [Chatのコンテキストとファイル操作](/features/chat-context-file-tools.md) - `@file`、`{selection}`、確認付きファイル変更。
+* [Chatのコンテキストとファイル操作](/features/chat-context-file-tools.md) - `@file`、選択範囲の「AIに相談」、確認付きファイル変更。
 * [Local RAG](/features/local-rag.md) - ローカル文書の索引作成と意味検索。
 * [Agent SkillsとSlash commands](/features/agent-skills-commands.md) - 再利用可能な手順とコマンド。
 * [MCP serversとMCP Apps](/features/mcp-apps.md) - 外部ツールや対話UIをChat・Workflowへ接続。

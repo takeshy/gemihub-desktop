@@ -9,6 +9,18 @@
 
 ![GemiHub workspace with Markdown, PDF, and EPUB side by side](docs/images/col.png)
 
+## Start with the work, not the prompt
+
+**Most AI tools start with a chat box. GemiHub starts with what you're
+reading.** Open a document, select the passage that matters, and turn the
+surrounding work into grounded context for Chat, memos, or a Workflow. You do
+not have to leave the source and reconstruct its meaning in a prompt.
+
+**The best interface to an AI isn't syntax. It's intent.** GemiHub treats
+actions such as “ask about this selection,” “memo this,” “organize these
+notes,” and “run this Workflow” as the interface. Files, selections, and the
+current Workspace carry the context; the user supplies the intent.
+
 ## Why this app exists
 
 GemiHub Desktop brings together three ideas developed in earlier projects:
@@ -24,6 +36,12 @@ The goal is a compact everyday Markdown application that can use AI deeply
 without making an online service mandatory. It is distributed as a single
 executable with no runtime dependency; the current Windows amd64 build is under
 20 MB.
+
+**Codex made “build instead of buy” a one-hour decision.** It made the first
+working implementation inexpensive enough to explore immediately, and it has
+remained part of the development loop for implementation, testing, and product
+iteration. GemiHub is both a product built with Codex and an environment where
+Codex can work with the user's own context.
 
 Files remain ordinary local files. Reading, editing, memos, Dashboards, Canvas,
 Base, Kanban, history, and Trash work without AI. When needed, the same
@@ -174,8 +192,8 @@ xattr -d com.apple.quarantine gemihub-desktop-darwin-arm64
 2. Click `+ Add Widget` or drag files into the window.
 3. Arrange sources in rows or columns.
 4. Enable AI in Settings and configure a provider if you want AI features.
-5. Add a file with `@file` or select text and use `{selection}` to give Chat
-   grounded context.
+5. Add a file with `@file`, or select text in a document and choose **Ask AI**
+   from the context menu, to give Chat grounded context.
 
 Files can also be opened through the operating system's **Open with** action or
 as startup arguments:

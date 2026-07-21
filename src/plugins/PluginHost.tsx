@@ -19,7 +19,6 @@ import { isFileRef } from "../lib/fileRef";
 import { chat, listPluginIDs } from "../lib/wailsBackend";
 import type { FileRef } from "../lib/fileRef";
 import { ChatPanel } from "../llm/ChatPanel";
-import type { ActiveSelection } from "../llm/selection";
 import { RAGSearchPanel } from "../llm/RAGSearchPanel";
 import {
   type ChatSettings,
@@ -154,7 +153,6 @@ export function PluginHost({
   chatSettings,
   onChatSettingsChange,
   activeFile,
-  activeSelection,
   onOpenChatSettings,
   onOpenRAGSettings,
   onOpenFile,
@@ -178,7 +176,6 @@ export function PluginHost({
   chatSettings: ChatSettings;
   onChatSettingsChange: (settings: ChatSettings) => void;
   activeFile: { path: string; content: string } | null;
-  activeSelection: ActiveSelection | null;
   onOpenChatSettings: () => void;
   onOpenRAGSettings: () => void;
   onOpenFile: (file: FileRef) => void;
@@ -812,7 +809,6 @@ export function PluginHost({
                     settings={chatSettings}
                     onSettingsChange={onChatSettingsChange}
                     activeFile={activeFile}
-                    activeSelection={activeSelection}
                     draftRequest={chatDraftRequest}
                     externalAttachments={chatAttachmentRequest}
                     pluginCommands={slashCommands}

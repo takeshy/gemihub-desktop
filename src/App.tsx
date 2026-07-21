@@ -131,7 +131,7 @@ import {
   saveChatSettings,
   switchChatProvider,
 } from "./llm/settings";
-import type { ActiveSelection } from "./llm/selection";
+import { type ActiveSelection, formatActiveSelection } from "./llm/selection";
 import { ModelProviderManager } from "./llm/ModelProviderManager";
 import { McpHttpClient, McpHttpError } from "./mcp/httpClient";
 import { McpStdioClient } from "./mcp/stdioClient";
@@ -1070,9 +1070,6 @@ export default function App() {
   const [activeChatFile, setActiveChatFile] = useState<
     { path: string; content: string } | null
   >(null);
-  const [activeChatSelection, setActiveChatSelection] = useState<
-    ActiveSelection | null
-  >(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(
     null,
   );
@@ -1374,9 +1371,6 @@ export default function App() {
           }
           : null);
       setActiveChatFile(nextFile);
-      setActiveChatSelection((current) =>
-        current?.path === nextFile?.path ? current : null
-      );
     },
     [activeDashboardPath, dashboard],
   );
@@ -2440,9 +2434,13 @@ export default function App() {
                   onHistoryCheckpoint={requestHistoryCheckpoint}
                   onDeferredHistoryCheckpoint={requestDeferredHistoryCheckpoint}
                   onActiveFileChange={handleActiveDashboardFileChange}
-                  onActiveSelectionChange={setActiveChatSelection}
                   onAskAI={(selection) => {
-                    setActiveChatSelection(selection);
+                    setChatDraftRequest((current) => ({
+                      id: current.id + 1,
+                      text: `${tr("memo.askAISelectionDraft")}\n\n${
+                        formatActiveSelection(selection)
+                      }\n\n`,
+                    }));
                     setChatViewOpen(true);
                     setChatOpenRequest((value) => value + 1);
                   }}
@@ -2513,7 +2511,6 @@ export default function App() {
             chatSettings={chatSettings}
             onChatSettingsChange={setChatSettings}
             activeFile={activeChatFile}
-            activeSelection={activeChatSelection}
             onOpenChatSettings={() => {
               setSettingsSection(
                 chatSettings.provider === "cli" ? "cli" : "ai",
@@ -3651,10 +3648,8 @@ export default function App() {
                           <strong>Slash commands</strong>
                           <p>
                             Type <code>/command</code> in Chat. Use{" "}
-                            <code>{"{selection}"}</code> or{" "}
-                            <code>{"{input}"}</code>{" "}
-                            in the template for the text entered after the
-                            command.
+                            <code>{"{input}"}</code> in the template for the
+                            text entered after the command.
                           </p>
                         </div>
                       </section>
@@ -3833,7 +3828,7 @@ export default function App() {
                               id: `cmd-${Date.now()}`,
                               name: "new-command",
                               description: "",
-                              promptTemplate: "{selection}",
+                              promptTemplate: "{input}",
                               enabledMcpServers: null,
                             }],
                           }))}

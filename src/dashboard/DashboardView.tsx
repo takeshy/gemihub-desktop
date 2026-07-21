@@ -616,7 +616,6 @@ export function DashboardView({
   onHistoryCheckpoint,
   onDeferredHistoryCheckpoint,
   onActiveFileChange,
-  onActiveSelectionChange,
   onAskAI,
   onAskMemoAI,
   chatSettings,
@@ -671,7 +670,6 @@ export function DashboardView({
   onHistoryCheckpoint: (reason: "reload") => void;
   onDeferredHistoryCheckpoint: (reason: "reload") => void;
   onActiveFileChange: (file: { path: string; content: string } | null) => void;
-  onActiveSelectionChange: (selection: ActiveSelection | null) => void;
   onAskAI: (selection: ActiveSelection) => void;
   onAskMemoAI: (draft: string) => void;
   chatSettings: ChatSettings;
@@ -3290,7 +3288,6 @@ export function DashboardView({
                         onNavigatePath={(path) =>
                           void navigateWidgetToPath(widget.id, path)}
                         onActivate={() => setActiveWidgetId(widget.id)}
-                        onSelectionChange={onActiveSelectionChange}
                         aiAvailable={aiEnabled &&
                           configuredChatProviders(chatSettings).length > 0}
                         onAskAI={onAskAI}

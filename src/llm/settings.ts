@@ -207,7 +207,7 @@ export const defaultChatSettings: ChatSettings = {
     id: "cmd_infographic_default",
     name: "infographic",
     promptTemplate:
-      "Convert the following content into an HTML infographic. Output the HTML directly in your response, do not create a file:\n\n{selection}",
+      "Convert the following content into an HTML infographic. Output the HTML directly in your response, do not create a file:\n\n{input}",
     description: "Generate an HTML infographic",
   }],
   mcpServers: [],
@@ -620,7 +620,13 @@ export function loadChatSettings(): ChatSettings {
         : [],
       cliPaths: { ...defaultChatSettings.cliPaths, ...(parsed.cliPaths ?? {}) },
       slashCommands: Array.isArray(parsed.slashCommands)
-        ? parsed.slashCommands
+        ? parsed.slashCommands.map((command) => ({
+          ...command,
+          promptTemplate: command.promptTemplate.replaceAll(
+            "{selection}",
+            "{input}",
+          ),
+        }))
         : defaultChatSettings.slashCommands,
       mcpServers: Array.isArray(parsed.mcpServers)
         ? parsed.mcpServers.map((server) => {

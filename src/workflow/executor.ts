@@ -17,6 +17,7 @@ import {
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
+import { reencryptFileContent } from "../lib/hybridEncryption";
 import {
   duplicateFileRef,
   type FileRef,
@@ -65,6 +66,7 @@ import {
   sanitizeWorkflowNotePath,
   workflowNameFromPath,
 } from "./compat";
+import { readWorkflowWorkspaceFile } from "./encryptedFile";
 
 export interface WorkflowExecutionServices {
   chatSettings: ChatSettings;
@@ -312,9 +314,7 @@ function workflowProviderForModel(
     ? settings
     : switchChatProvider(settings, target);
   if (target === "cli") {
-    const cliType = /antigravity/i.test(model)
-      ? "antigravity"
-      : "codex";
+    const cliType = /antigravity/i.test(model) ? "antigravity" : "codex";
     return { ...resolved, cliType };
   }
   return resolved;
@@ -770,10 +770,16 @@ async function executeNode(
       let path = property(node, "path", variables);
       if (!path) throw new Error("note-read node is missing path.");
       if (!path.endsWith(".md") && !path.endsWith(".encrypted")) path += ".md";
-      let result = await readWorkspaceFile(path);
+      let result = await readWorkflowWorkspaceFile(
+        path,
+        services.interactionMode,
+      );
       if (!result && path.endsWith(".md")) {
         path += ".encrypted";
-        result = await readWorkspaceFile(path);
+        result = await readWorkflowWorkspaceFile(
+          path,
+          services.interactionMode,
+        );
       }
       if (!result) throw new Error(`File not found: ${path}`);
       save(variables, node.properties.saveTo, result.content);
@@ -786,10 +792,15 @@ async function executeNode(
       path = sanitizeWorkflowNotePath(path);
       const content = property(node, "content", variables);
       const mode = node.properties.mode ?? "overwrite";
-      const existing = await readWorkspaceFile(path).catch(() => null);
-      if (mode === "create" && existing) {
+      const existingRaw = await readWorkspaceFile(path).catch(() => null);
+      if (mode === "create" && existingRaw) {
         return { output: { path, skipped: true } };
       }
+      const existing = existingRaw
+        ? await readWorkflowWorkspaceFile(path, services.interactionMode, {
+          readFile: async () => existingRaw,
+        })
+        : null;
       const finalContent = mode === "append" && existing
         ? `${existing.content}\n${content}`
         : content;
@@ -827,7 +838,14 @@ async function executeNode(
         }
         if (!result?.confirmed) throw new Error("File write cancelled.");
       }
-      await writeWorkspaceFile(path, finalContent);
+      const storedContent = existing?.encryption
+        ? await reencryptFileContent(
+          existing.encryption.sourceContent,
+          finalContent,
+          existing.encryption.password,
+        )
+        : finalContent;
+      await writeWorkspaceFile(path, storedContent);
       return { output: { path, mode } };
     }
     case "note-search": {
@@ -1103,7 +1121,7 @@ async function executeNode(
           throw new Error("encrypt requires an interactive password prompt.");
         }
         const result = await requestWorkflowPrompt({
-          kind: "value",
+          kind: "password",
           title: "Encrypt file",
           message: "Enter the encryption password",
         });
@@ -1224,7 +1242,10 @@ async function executeNode(
             content = String(variable);
           }
         } else {
-          const file = await readWorkspaceFile(name);
+          const file = await readWorkflowWorkspaceFile(
+            name,
+            services.interactionMode,
+          );
           const dataUrl = file?.content.match(
             /^data:([^;,]+);base64,([\s\S]+)$/,
           );
@@ -1689,7 +1710,10 @@ async function executeNode(
           extensions: ["md", "encrypted"],
         }) as string | null;
       if (!path) throw new Error("File selection cancelled.");
-      const file = await readWorkspaceFile(path);
+      const file = await readWorkflowWorkspaceFile(
+        path,
+        services.interactionMode,
+      );
       if (!file) throw new Error(`File not found: ${path}`);
       save(variables, node.properties.saveTo, file.content);
       if (node.properties.saveFileTo) {
@@ -1804,15 +1828,22 @@ async function executeNode(
         save(variables, node.properties.savePathTo, path);
         return { output: value };
       }
-      const file = await readWorkspaceFile(path);
+      const file = await readWorkflowWorkspaceFile(
+        path,
+        services.interactionMode,
+      );
       if (!file) throw new Error(`File not found: ${path}`);
+      const displayName = file.originalName || path.split("/").pop() || path;
+      const displayExtension = displayName.includes(".")
+        ? displayName.split(".").pop()!.toLowerCase()
+        : extension;
       const dataMatch = file.content.match(/^data:([^;,]+)?;base64,(.*)$/s);
       const value = {
         path,
-        basename: path.split("/").pop() || path,
-        name: (path.split("/").pop() || path).replace(/\.[^.]+$/, ""),
-        extension,
-        mimeType: dataMatch?.[1] || "text/plain",
+        basename: displayName,
+        name: displayName.replace(/\.[^.]+$/, ""),
+        extension: displayExtension,
+        mimeType: dataMatch?.[1] || file.mimeType || "text/plain",
         contentType: dataMatch ? "binary" : "text",
         data: dataMatch?.[2] || file.content,
       };
@@ -1828,7 +1859,12 @@ async function executeNode(
         );
       }
       const raw = String(variables.get(sourceName));
-      let value: { path?: string; contentType?: string; data?: string };
+      let value: {
+        path?: string;
+        mimeType?: string;
+        contentType?: string;
+        data?: string;
+      };
       try {
         value = JSON.parse(raw);
       } catch {
@@ -1841,6 +1877,15 @@ async function executeNode(
           ? (value as { extension?: string }).extension
           : "";
       if (!/\.[^/]+$/.test(path) && extension) path += `.${extension}`;
+      const existing = await readWorkflowWorkspaceFile(
+        path,
+        services.interactionMode,
+      );
+      const nextContent = value.contentType === "binary"
+        ? `data:${value.mimeType || workflowMimeType(path).mimeType};base64,${
+          value.data || ""
+        }`
+        : value.data || "";
       if (boolProperty(node, "confirm", false)) {
         if (services.interactionMode === "headless") {
           throw new Error(
@@ -1855,6 +1900,9 @@ async function executeNode(
           content: value.contentType === "binary"
             ? `[Binary data: ${(value.data || "").length} base64 characters]`
             : value.data || "",
+          originalContent: existing?.encrypted && value.contentType !== "binary"
+            ? existing.content
+            : undefined,
         });
         if (
           !(confirmation === true ||
@@ -1862,7 +1910,16 @@ async function executeNode(
               "confirmed" in confirmation && confirmation.confirmed))
         ) throw new Error("File save cancelled.");
       }
-      if (value.contentType === "binary") {
+      if (existing?.encryption) {
+        await writeWorkspaceFile(
+          path,
+          await reencryptFileContent(
+            existing.encryption.sourceContent,
+            nextContent,
+            existing.encryption.password,
+          ),
+        );
+      } else if (value.contentType === "binary") {
         await writeWorkspaceBinaryFile(path, value.data || "");
       } else await writeWorkspaceFile(path, value.data || "");
       save(variables, node.properties.savePathTo, path);

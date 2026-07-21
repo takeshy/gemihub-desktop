@@ -258,10 +258,16 @@ function TreeRow({
         onDrop={(event) => {
           if (scope === "workspace" && node.isDir && onDropExternal) {
             event.preventDefault();
+            const payload = event.dataTransfer.getData(
+              "application/x-gemihub-tree-item",
+            );
+            // Explorer drops need to keep bubbling to Wails, which resolves
+            // native File objects to absolute filesystem paths on Windows.
+            if (!payload) return;
             event.stopPropagation();
             onDropExternal(
               node.path,
-              event.dataTransfer.getData("application/x-gemihub-tree-item"),
+              payload,
             );
           }
         }}
@@ -1111,13 +1117,17 @@ export function FileTree({
             }}
             onDrop={(event) => {
               event.preventDefault();
-              if (draggedWorkspaceRef.current) void requestWorkspaceDrop("");
-              else {
+              const payload = event.dataTransfer.getData(
+                "application/x-gemihub-tree-item",
+              );
+              if (draggedWorkspaceRef.current) {
+                event.stopPropagation();
+                void requestWorkspaceDrop("");
+              } else if (draggedExternalRef.current.length || payload) {
+                event.stopPropagation();
                 requestExternalDrop(
                   "",
-                  event.dataTransfer.getData(
-                    "application/x-gemihub-tree-item",
-                  ),
+                  payload,
                 );
               }
             }}
@@ -1130,15 +1140,17 @@ export function FileTree({
               }}
               onDrop={(event) => {
                 event.preventDefault();
-                event.stopPropagation();
+                const payload = event.dataTransfer.getData(
+                  "application/x-gemihub-tree-item",
+                );
                 if (draggedWorkspaceRef.current) {
+                  event.stopPropagation();
                   void requestWorkspaceDrop("");
-                } else {
+                } else if (draggedExternalRef.current.length || payload) {
+                  event.stopPropagation();
                   requestExternalDrop(
                     "",
-                    event.dataTransfer.getData(
-                      "application/x-gemihub-tree-item",
-                    ),
+                    payload,
                   );
                 }
               }}
@@ -1199,15 +1211,17 @@ export function FileTree({
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  event.stopPropagation();
+                  const payload = event.dataTransfer.getData(
+                    "application/x-gemihub-tree-item",
+                  );
                   if (draggedWorkspaceRef.current) {
+                    event.stopPropagation();
                     void requestWorkspaceDrop("");
-                  } else {
+                  } else if (draggedExternalRef.current.length || payload) {
+                    event.stopPropagation();
                     requestExternalDrop(
                       "",
-                      event.dataTransfer.getData(
-                        "application/x-gemihub-tree-item",
-                      ),
+                      payload,
                     );
                   }
                 }}

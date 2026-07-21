@@ -14,7 +14,7 @@ Workspaceには `Dashboards`、`Memos`、`Secrets`、`skills`、`workflows`、`.
 
 FilesタブはSettingsで管理する常設設定ではありません。「プログラムから開く」や拡張子の関連付けでファイルを開いた場合、そのファイルがあるフォルダを表示します。単独起動では最後に選択していたWorkspace/Filesタブ、Filesで開いていたフォルダ、Dashboardを復元します。必要なときはFilesタブのフォルダ名を押して別のフォルダを開けます。
 
-Chatのattachment pickerとAI file toolsはFilesタブではなくWorkspace全体を対象にします。Workspace外の資料をAIに読ませたい場合は、必要なファイルをWorkspaceへ移動してから添付するか、表示中の選択範囲を `{selection}` で渡してください。
+Chatのattachment pickerとAI file toolsはFilesタブではなくWorkspace全体を対象にします。Workspace外の資料をAIに読ませたい場合は、必要なファイルをWorkspaceへ移動してから添付するか、表示中の文章を選択して右クリックメニューの「AIに相談」を使ってください。
 
 Filesタブで開いたフォルダ外への `..` やsymlink経由の脱出は拒否されます。Workspace資産はWorkspace directory内に限定されます。
 

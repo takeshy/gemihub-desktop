@@ -1,12 +1,12 @@
 ---
 type: Product Feature
 title: Chatのコンテキストとファイル操作
-description: "`@file`、現在の選択範囲、ワークスペース検索をChatへ渡し、AIのファイル変更を確認後に適用する機能。"
+description: "`@file`、右クリックした選択範囲、ワークスペース検索をChatへ渡し、AIのファイル変更を確認後に適用する機能。"
 tags: [chat, context, files, grounding]
 timestamp: 2026-07-20T00:00:00+09:00
 ---
 
-Chat入力で `@file` を使うとWorkspace内のローカルファイルを会話へ追加できます。Promptの `{selection}` はactive widgetで選択中の文章とファイル情報へ展開され、Raw/Textでは選択位置も含まれます。質問対象を明示すると、AIが一般論ではなく手元の文書に基づいて回答しやすくなります。
+Chat入力で `@file` を使うとWorkspace内のローカルファイルを会話へ追加できます。文書内の文章を選択して右クリックメニューの「AIに相談」を選ぶと、選択した文章とファイル情報がChatの下書きへ追加されます。質問対象を明示すると、AIが一般論ではなく手元の文書に基づいて回答しやすくなります。
 
 # File tools
 
@@ -15,7 +15,7 @@ API providerでは、設定したfile tool modeに応じてWorkspace内のファ
 # 使い分け
 
 * 1〜数ファイルを直接指定: `@file`
-* 今見ている箇所について質問: `{selection}`
+* 今見ている箇所について質問: 文章を選択して右クリックし「AIに相談」
 * 多数の文書から関連箇所を検索: [Local RAG](/features/local-rag.md)
 * 整理済みの製品・業務知識を常時参照: [OKF](/features/okf-knowledge.md)
 

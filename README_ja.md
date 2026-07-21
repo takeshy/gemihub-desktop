@@ -5,6 +5,14 @@
 
 ![Markdown、PDF、EPUBを並べたGemiHubワークスペース](docs/images/col.png)
 
+## プロンプトではなく、いま取り組んでいるものから始める
+
+**多くのAIツールはチャットボックスから始まります。GemiHubは、いま読んでいるものから始まります。**
+ドキュメントを開き、重要な箇所を選択すれば、その作業と周辺情報をChat、メモ、Workflowの根拠あるコンテキストとして使えます。元の資料を離れ、その意味をプロンプトとして組み立て直す必要はありません。
+
+**AIを使うための最高のインターフェースは、構文ではなく意図です。**
+GemiHubでは、「この選択範囲について聞く」「これをメモする」「これらのnoteを整理する」「このWorkflowを実行する」といった意図そのものがインターフェースになります。file、選択範囲、現在のWorkspaceがコンテキストを運び、ユーザーは意図を伝えます。
+
 ## このアプリで実現したかったこと
 
 GemiHub
@@ -15,6 +23,9 @@ Desktopは、これまで自作してきた3つのプロジェクトの発想を
 - **[obsidian-llm-hub](https://github.com/takeshy/obsidian-llm-hub)**で試してきた、LLM CLIとローカルmodelの連携
 
 目標は、オンラインサービスを必須にせず、普段使いできる軽量なMarkdownアプリでAIをフル活用することです。runtimeを必要としない単一実行ファイルとして配布し、現在のWindows amd64 buildは20 MB未満です。
+
+**Codexによって、「買う代わりに作る」は1時間で判断できる選択肢になりました。**
+最初に動く実装をすぐ試せるほど開発コストが下がり、その後も実装、test、productの改善にCodexを活用しています。GemiHubはCodexで作られたproductであると同時に、ユーザー自身のコンテキストとCodexを組み合わせるための環境でもあります。
 
 ファイルは通常のローカルファイルのままです。AIを使わなくても、閲覧・編集、引用付きメモ、Dashboard、Canvas、Base、Kanban、履歴、Trashを利用できます。必要なときだけ、OpenAI、Gemini、Vertex AI、Anthropic、Codex、Antigravity CLI,Local LLMへ同じWorkspaceから接続します。
 CodexはGemiHubの開発に使うだけではありません。設定したCodex
@@ -141,8 +152,8 @@ xattr -d com.apple.quarantine gemihub-desktop-darwin-arm64
 2. `+ Add Widget` を押すか、ファイルをウィンドウへドラッグします。
 3. 資料を行または列に配置します。
 4. AI を使う場合は Settings で有効にし、Provider を設定します。
-5. `@file` でファイルを追加するか、文章を選択して `{selection}` で Chat
-   に根拠を渡します。
+5. `@file` でファイルを追加するか、文章を選択して右クリックメニューの
+   「AIに相談」を使い、Chat に根拠を渡します。
 
 OS の「プログラムから開く」または起動引数からもファイルを開けます。
 

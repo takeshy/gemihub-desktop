@@ -96,14 +96,15 @@ import {
   selectedModelOptionKey,
   type SlashCommand,
 } from "./settings";
-import { type ActiveSelection, formatActiveSelection } from "./selection";
-import { type FileRef, fileRef } from "../lib/fileRef";
+import { type FileRef, fileRef, fileRefFromBackendPath } from "../lib/fileRef";
 import {
   type GroundingSource,
   groundingSourceLabel,
   groundingSources,
 } from "./grounding";
 import type { PluginSlashCommand } from "../plugins/types";
+import { computeWorkflowLineDiff } from "../workflow/diff";
+import { proposedPendingFileContent } from "./pendingFileAction";
 
 const CHAT_HISTORY_STATE_FILE = "chat-history";
 const initializedHistoryScopes = new Set<string>();
@@ -191,6 +192,94 @@ function formatUsage(message: ChatMessage): string {
     parts.push(`Tools ${usage.toolUseTokens.toLocaleString()}`);
   }
   return parts.join(" · ");
+}
+
+type PendingDiffLine = ReturnType<typeof computeWorkflowLineDiff>[number];
+
+function pendingSplitRows(lines: PendingDiffLine[]) {
+  const rows: Array<{
+    left: PendingDiffLine | null;
+    right: PendingDiffLine | null;
+  }> = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (lines[index].type === "unchanged") {
+      rows.push({ left: lines[index], right: lines[index] });
+      index++;
+      continue;
+    }
+    const removed: PendingDiffLine[] = [];
+    const added: PendingDiffLine[] = [];
+    while (index < lines.length && lines[index].type === "removed") {
+      removed.push(lines[index++]);
+    }
+    while (index < lines.length && lines[index].type === "added") {
+      added.push(lines[index++]);
+    }
+    for (let row = 0; row < Math.max(removed.length, added.length); row++) {
+      rows.push({ left: removed[row] ?? null, right: added[row] ?? null });
+    }
+  }
+  return rows;
+}
+
+function PendingFileDiff({
+  lines,
+  mode,
+}: {
+  lines: PendingDiffLine[];
+  mode: "unified" | "split";
+}) {
+  if (mode === "unified") {
+    return (
+      <pre className="history-diff-pre pending-file-diff">
+        {lines.map((line, index) => (
+          <div key={index} className={`history-diff-line ${line.type}`}>
+            <span className="history-diff-num">{line.oldLine ?? ""}</span>
+            <span className="history-diff-num">{line.newLine ?? ""}</span>
+            <span className="history-diff-sign">
+              {line.type === "added" ? "+" : line.type === "removed" ? "−" : " "}
+            </span>
+            <span className="history-diff-text">{line.content || " "}</span>
+          </div>
+        ))}
+      </pre>
+    );
+  }
+  return (
+    <pre className="history-diff-pre split pending-file-diff">
+      {pendingSplitRows(lines).map((row, index) => (
+        <div key={index} className="history-diff-split-row">
+          <div className={`history-diff-split-cell ${row.left?.type ?? "empty"}`}>
+            {row.left
+              ? (
+                <>
+                  <span className="history-diff-num">{row.left.oldLine ?? ""}</span>
+                  <span className="history-diff-sign">
+                    {row.left.type === "removed" ? "−" : " "}
+                  </span>
+                  <span className="history-diff-text">{row.left.content || " "}</span>
+                </>
+              )
+              : <span className="history-diff-text"> </span>}
+          </div>
+          <div className={`history-diff-split-cell ${row.right?.type ?? "empty"}`}>
+            {row.right
+              ? (
+                <>
+                  <span className="history-diff-num">{row.right.newLine ?? ""}</span>
+                  <span className="history-diff-sign">
+                    {row.right.type === "added" ? "+" : " "}
+                  </span>
+                  <span className="history-diff-text">{row.right.content || " "}</span>
+                </>
+              )
+              : <span className="history-diff-text"> </span>}
+          </div>
+        </div>
+      ))}
+    </pre>
+  );
 }
 
 function sessionID(): string {
@@ -352,7 +441,6 @@ function resolveSlashCommand(
   text: string,
   commands: SlashCommand[],
   activeContent = "",
-  selection: ActiveSelection | null = null,
 ): string {
   const match = text.match(/^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i);
   if (!match) return text;
@@ -361,12 +449,9 @@ function resolveSlashCommand(
   );
   if (!command) return text;
   const argument = match[2]?.trim() ?? "";
-  const hasVariable = /\{(?:selection|input)\}/.test(command.promptTemplate);
+  const hasVariable = command.promptTemplate.includes("{input}");
   const resolved = command.promptTemplate.replaceAll("{content}", activeContent)
-    .replaceAll(
-      "{selection}",
-      selection ? formatActiveSelection(selection) : argument,
-    ).replaceAll("{input}", argument);
+    .replaceAll("{input}", argument);
   return !hasVariable && argument ? `${resolved}\n\n${argument}` : resolved;
 }
 
@@ -440,7 +525,6 @@ export function ChatPanel({
   settings,
   onSettingsChange,
   activeFile,
-  activeSelection,
   draftRequest,
   externalAttachments,
   pluginCommands = [],
@@ -454,7 +538,6 @@ export function ChatPanel({
   settings: ChatSettings;
   onSettingsChange: (settings: ChatSettings) => void;
   activeFile: { path: string; content: string } | null;
-  activeSelection: ActiveSelection | null;
   draftRequest?: { id: number; text: string };
   externalAttachments?: {
     id: number;
@@ -475,6 +558,13 @@ export function ChatPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingFileAction | null>(null);
+  const [pendingCurrentContent, setPendingCurrentContent] = useState<
+    string | null
+  >(null);
+  const [pendingPreviewError, setPendingPreviewError] = useState("");
+  const [pendingDiffMode, setPendingDiffMode] = useState<"unified" | "split">(
+    "split",
+  );
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [filePaths, setFilePaths] = useState<string[]>([]);
@@ -484,6 +574,44 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [okfBundles, setOkfBundles] = useState<OkfBundle[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPendingPreviewError("");
+    setPendingCurrentContent(null);
+    if (!pending || pending.kind !== "write") return;
+    const path = fileRefFromBackendPath(pending.path).path;
+    void readWorkspaceFile(path).then((file) => {
+      if (!cancelled) setPendingCurrentContent(file?.content ?? "");
+    }).catch((caught) => {
+      if (!cancelled) {
+        setPendingPreviewError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pending]);
+
+  const pendingProposedContent = useMemo(
+    () =>
+      pending?.kind === "write" && pendingCurrentContent !== null
+        ? proposedPendingFileContent(pendingCurrentContent, pending)
+        : null,
+    [pending, pendingCurrentContent],
+  );
+  const pendingDiffLines = useMemo(
+    () =>
+      pendingCurrentContent !== null && pendingProposedContent !== null
+        ? computeWorkflowLineDiff(
+          pendingCurrentContent,
+          pendingProposedContent,
+        )
+        : [],
+    [pendingCurrentContent, pendingProposedContent],
+  );
 
   useEffect(() => {
     if (settings.webSearchEnabled && !supportsNativeWebSearch(settings)) {
@@ -1338,7 +1466,6 @@ export function ChatPanel({
         text,
         settings.slashCommands,
         activeFile?.content || "",
-        activeSelection,
       );
     const mentioned = [...text.matchAll(/(?:^|\s)@(?:"([^"]+)"|([^\s]+))/g)]
       .map((match) => match[1] || match[2]);
@@ -2065,35 +2192,109 @@ export function ChatPanel({
           </div>
         )}
         {pending && (
-          <section className="pending-file-action">
-            <header>
-              <FileCode2 size={16} />
-              <strong>
-                {pending.kind === "rename"
-                  ? "Rename proposed"
-                  : "File edit proposed"}
-              </strong>
-            </header>
-            <code>
-              {pending.path}
-              {pending.newPath ? ` → ${pending.newPath}` : ""}
-            </code>
-            {pending.content && (
-              <pre>{pending.content.slice(0, 4000)}{pending.content.length > 4000 ? "\n…" : ""}</pre>
-            )}
-            <div>
-              <button type="button" onClick={() => void applyPending()}>
-                <Check size={14} /> Apply
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setPending(null)}
-              >
-                <X size={14} /> Discard
-              </button>
-            </div>
-          </section>
+          <div className="pending-file-action-backdrop">
+            <section className={`pending-file-action ${pending.kind}`}>
+              <header>
+                <div>
+                  <FileCode2 size={16} />
+                  <strong>
+                    {pending.kind === "rename"
+                      ? "Confirm rename"
+                      : "Confirm file replacement"}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  className="secondary icon-button"
+                  onClick={() => setPending(null)}
+                  aria-label="Discard file change"
+                >
+                  <X size={15} />
+                </button>
+              </header>
+              <div className="pending-file-action-path">
+                <code>
+                  {fileRefFromBackendPath(pending.path).path}
+                  {pending.newPath
+                    ? ` → ${fileRefFromBackendPath(pending.newPath).path}`
+                    : ""}
+                </code>
+                {pending.kind === "write" && (
+                  <span>{pending.mode || "replace"}</span>
+                )}
+              </div>
+              {pending.kind === "write" && (
+                <div className="pending-file-action-diff">
+                  <div className="pending-file-action-diff-header">
+                    <div>
+                      <span>Current</span>
+                      <span>Proposed</span>
+                    </div>
+                    <div className="diff-mode-toggle">
+                      <button
+                        type="button"
+                        className={pendingDiffMode === "unified"
+                          ? "active"
+                          : ""}
+                        onClick={() => setPendingDiffMode("unified")}
+                      >
+                        Unified
+                      </button>
+                      <button
+                        type="button"
+                        className={pendingDiffMode === "split" ? "active" : ""}
+                        onClick={() => setPendingDiffMode("split")}
+                      >
+                        Split
+                      </button>
+                    </div>
+                  </div>
+                  {pendingPreviewError
+                    ? (
+                      <div className="pending-file-action-error">
+                        {pendingPreviewError}
+                      </div>
+                    )
+                    : pendingCurrentContent === null
+                    ? (
+                      <div className="pending-file-action-loading">
+                        Loading current file…
+                      </div>
+                    )
+                    : pendingCurrentContent === pendingProposedContent
+                    ? (
+                      <div className="pending-file-action-loading">
+                        No content changes.
+                      </div>
+                    )
+                    : (
+                      <PendingFileDiff
+                        lines={pendingDiffLines}
+                        mode={pendingDiffMode}
+                      />
+                    )}
+                </div>
+              )}
+              <footer>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setPending(null)}
+                >
+                  Discard
+                </button>
+                <button
+                  type="button"
+                  disabled={pending.kind === "write" &&
+                    (pendingCurrentContent === null || !!pendingPreviewError ||
+                      pendingCurrentContent === pendingProposedContent)}
+                  onClick={() => void applyPending()}
+                >
+                  <Check size={14} /> Apply
+                </button>
+              </footer>
+            </section>
+          </div>
         )}
         {error && <div className="chat-error">{error}</div>}
         <div ref={endRef} />
