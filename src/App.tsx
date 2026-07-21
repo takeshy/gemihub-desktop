@@ -1140,6 +1140,7 @@ export default function App() {
         | "local"
         | "directory"
         | "filetree"
+        | "filetree-new-widget"
         | "filetree-created"
         | "memo-list"
         | "startup";
@@ -2238,6 +2239,13 @@ export default function App() {
                     source: created ? "filetree-created" : "filetree",
                   })
                   );}
+              }}
+              onOpenFileInNewWidget={(file) => {
+                setOpenPathRequest((value) => ({
+                  id: value.id + 1,
+                  file,
+                  source: "filetree-new-widget",
+                }));
               }}
               onCollapse={() => setFileTreeOpen(false)}
             />

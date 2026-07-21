@@ -663,6 +663,7 @@ export function DashboardView({
       | "local"
       | "directory"
       | "filetree"
+      | "filetree-new-widget"
       | "filetree-created"
       | "memo-list"
       | "startup";
@@ -1978,6 +1979,32 @@ export function DashboardView({
     ],
   );
 
+  const openFileRefAsNewWidget = useCallback(
+    async (file: FileRef) => {
+      if (file.scope === "workspace" && /\.dashboard$/i.test(file.path)) {
+        await onOpenDashboard(file.path);
+        return undefined;
+      }
+      const result = await readFileRef(file);
+      if (!result) return undefined;
+      const opened = await resolveOpenedFile(file, result);
+      return createFileWidget(
+        opened.fileName,
+        opened.content,
+        readFileMode(opened.fileName),
+        activeLayoutDirection,
+        opened.filePath,
+        opened.extraConfig,
+      );
+    },
+    [
+      activeLayoutDirection,
+      createFileWidget,
+      onOpenDashboard,
+      resolveOpenedFile,
+    ],
+  );
+
   const openKnownPathMaximized = useCallback(async (path: string) => {
     try {
       const widgetId = await openKnownPathInLastActiveWidget(path);
@@ -2373,11 +2400,14 @@ export function DashboardView({
           await onOpenDashboard(requestedFile.path);
           return;
         }
-        const widgetId = await openFileRefInLastActiveWidget(
-          requestedFile,
-        );
+        const widgetId = openPathRequest.source === "filetree-new-widget"
+          ? await openFileRefAsNewWidget(requestedFile)
+          : await openFileRefInLastActiveWidget(requestedFile);
         if (!widgetId) alert(tr("alert.openFileFailed"));
-        else if (
+        else if (openPathRequest.source === "filetree-new-widget") {
+          setActiveWidgetId(widgetId);
+          setMaximizedWidgetId(null);
+        } else if (
           openPathRequest.source === "memo-list" ||
           openPathRequest.source === "startup" ||
           openPathRequest.source === "filetree" ||
@@ -2409,6 +2439,7 @@ export function DashboardView({
     openDirectoryPathInLastActiveWidget,
     openKnownPathInLastActiveWidget,
     openMemoSourceMaximized,
+    openFileRefAsNewWidget,
     onOpenDashboard,
     openPathAsWidget,
     openPathRequest,

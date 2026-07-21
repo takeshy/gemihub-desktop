@@ -378,6 +378,7 @@ export function FileTree({
   workspacePath,
   externalFocusPath,
   onOpenFile,
+  onOpenFileInNewWidget,
   onExternalDirectoryChange,
   onDirectoryBaseUnavailable,
   onCollapse,
@@ -386,6 +387,7 @@ export function FileTree({
   workspacePath: string;
   externalFocusPath: string;
   onOpenFile: (file: FileRef, created?: boolean) => void;
+  onOpenFileInNewWidget: (file: FileRef) => void;
   onExternalDirectoryChange: (
     directoryBase: string,
     focusPath: string,
@@ -921,6 +923,12 @@ export function FileTree({
       alert(error instanceof Error ? error.message : String(error));
     }
   };
+  const openInNewWidgetFromMenu = () => {
+    const selected = contextMenu;
+    setContextMenu(null);
+    if (!selected || selected.node.isDir) return;
+    onOpenFileInNewWidget(selected.file);
+  };
   const showParentDirectoryFromMenu = async () => {
     const selected = contextMenu;
     setContextMenu(null);
@@ -1431,6 +1439,10 @@ export function FileTree({
           )}
           {!contextMenu.node.isDir && (
             <>
+              <button type="button" onClick={openInNewWidgetFromMenu}>
+                <FilePlus2 size={14} />
+                {tr("wiki.openNewWidget")}
+              </button>
               {contextMenu.file.path.toLowerCase().endsWith(".encrypted")
                 ? (
                   <button
