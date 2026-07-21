@@ -1,6 +1,6 @@
 import { assertEquals } from "jsr:@std/assert";
 import { docKindFor, isFileWidgetFileName } from "./documentKind.ts";
-import { memoChatDraft } from "./memoChat.ts";
+import { memoChatDraft, memoEntryChatDraft } from "./memoChat.ts";
 
 Deno.test("File widgets route .base files to the Base editor", () => {
   assertEquals(docKindFor("Dashboards/Bases/Projects.base"), "base");
@@ -49,5 +49,37 @@ Deno.test("memo AI chat draft passes paths without file contents", () => {
   assertEquals(
     memoChatDraft("Memos/source.md", "Notes/source.md"),
     "Memo file:\nMemos/source.md\n\nSource file:\nNotes/source.md",
+  );
+});
+
+Deno.test("memo entry AI draft includes its unchanged body and quote context", () => {
+  assertEquals(
+    memoEntryChatDraft("Notes/source.md", {
+      id: "entry-1",
+      createdAt: "2026-07-21T12:00:00.000Z",
+      pinned: false,
+      anchor: "page=2",
+      quotePrefix: "before text",
+      quoteSuffix: "after text",
+      quote: "quoted line",
+      body: "First line\n\n- unchanged body",
+      raw: "",
+      index: 0,
+      parsed: true,
+    }),
+    `Source file:
+Notes/source.md
+
+Quote information:
+Anchor: page=2
+Before: before text
+Quote:
+quoted line
+After: after text
+
+Memo content:
+First line
+
+- unchanged body`,
   );
 });

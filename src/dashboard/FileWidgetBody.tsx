@@ -86,7 +86,7 @@ import { docKindFor } from "./documentKind";
 import type { ActiveSelection } from "../llm/selection";
 import { appendTimelineEntry, memoTimelineBody } from "./timelineEvents";
 import { WorkflowFileView } from "../workflow/WorkflowFileView";
-import { memoChatDraft } from "./memoChat";
+import { memoChatDraft, memoEntryChatDraft } from "./memoChat";
 import {
   type FileRef,
   fileRef,
@@ -1752,6 +1752,12 @@ export function FileWidgetBody({
           onOpenPath={onOpenPath}
           onAskAI={aiAvailable && memoFilePath
             ? () => onAskMemoAI(memoChatDraft(memoFilePath, selectionPath))
+            : undefined}
+          onAskEntryAI={aiAvailable && memoFilePath
+            ? (entry) =>
+              onAskMemoAI(
+                memoEntryChatDraft(selectionPath, entry),
+              )
             : undefined}
           onCollapse={() =>
             onConfigChange({ ...widget.config, memoPanelCollapsed: true })}

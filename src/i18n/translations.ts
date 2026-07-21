@@ -159,6 +159,7 @@ export interface TranslationStrings {
   "memo.previewOnly": string;
   "memo.hoverCount": string;
   "memo.askAI": string;
+  "memo.askAIEntry": string;
   "memo.askAISelection": string;
   "memo.askAISelectionDraft": string;
   "memo.timelineSyncFailed": string;
@@ -419,6 +420,7 @@ const en: TranslationStrings = {
   "memo.previewOnly": "Jump is available in Preview mode",
   "memo.hoverCount": "{count} memos",
   "memo.askAI": "Ask AI about all memos",
+  "memo.askAIEntry": "Ask AI about this memo",
   "memo.askAISelection": "Ask AI",
   "memo.askAISelectionDraft": "I want to ask about this selection:",
   "memo.timelineSyncFailed":
@@ -680,6 +682,7 @@ const ja: TranslationStrings = {
   "memo.previewOnly": "ジャンプは Preview モードで利用できます",
   "memo.hoverCount": "{count}件のメモ",
   "memo.askAI": "メモ全体についてAIに質問",
+  "memo.askAIEntry": "このメモについてAIに質問",
   "memo.askAISelection": "AIに相談",
   "memo.askAISelectionDraft": "この選択範囲について質問します:",
   "memo.timelineSyncFailed":

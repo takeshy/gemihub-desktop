@@ -177,6 +177,7 @@ function MemoEntryView({
   unresolved,
   flashing,
   onJumpToAnchor,
+  onAskAI,
   onEdit,
   onDelete,
   onTogglePin,
@@ -188,6 +189,7 @@ function MemoEntryView({
   unresolved: boolean;
   flashing: boolean;
   onJumpToAnchor: (entry: MemoEntry) => void;
+  onAskAI?: (entry: MemoEntry) => void;
   onEdit: (id: string, body: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onTogglePin: (id: string, pinned: boolean) => Promise<void>;
@@ -226,6 +228,15 @@ function MemoEntryView({
         </time>
         {entry.pinned && <Pin size={12} className="memo-entry-pinned" />}
         <div className="memo-entry-actions">
+          {onAskAI && (
+            <button
+              type="button"
+              title={tr("memo.askAIEntry")}
+              onClick={() => onAskAI(entry)}
+            >
+              <Bot size={13} />
+            </button>
+          )}
           {entry.parsed && (
             <>
               <button
@@ -358,6 +369,7 @@ export function MemoTimelinePanel({
   onJumpToAnchor,
   onOpenPath,
   onAskAI,
+  onAskEntryAI,
   onCollapse,
   onClose,
 }: {
@@ -377,6 +389,7 @@ export function MemoTimelinePanel({
   onJumpToAnchor: (entry: MemoEntry) => void;
   onOpenPath: (path: string) => void;
   onAskAI?: () => void;
+  onAskEntryAI?: (entry: MemoEntry) => void;
   onCollapse: () => void;
   onClose: () => void;
 }) {
@@ -482,6 +495,7 @@ export function MemoTimelinePanel({
             unresolved={unresolvedIds.has(entry.id)}
             flashing={flashEntryId === entry.id}
             onJumpToAnchor={onJumpToAnchor}
+            onAskAI={onAskEntryAI}
             onEdit={onEdit}
             onDelete={onDelete}
             onTogglePin={onTogglePin}
