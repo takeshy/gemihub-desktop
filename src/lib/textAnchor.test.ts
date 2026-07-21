@@ -35,3 +35,24 @@ Deno.test("rendered block boundaries separate headings from body text", () => {
 
   assertEquals(buildTextIndex(root as unknown as Node).text, "見出し 本文");
 });
+
+Deno.test("PDF text-layer line breaks separate adjacent text spans", () => {
+  const root = { parentElement: null };
+  const nodes = [
+    { nodeType: 3, data: "models that excel at", parentElement: root },
+    { nodeType: 1, tagName: "BR", parentElement: root },
+    { nodeType: 3, data: "passive tasks", parentElement: root },
+  ];
+  let index = 0;
+  const document = {
+    createTreeWalker: () => ({
+      nextNode: () => nodes[index++] ?? null,
+    }),
+  };
+  Object.assign(root, { ownerDocument: document });
+
+  assertEquals(
+    buildTextIndex(root as unknown as Node).text,
+    "models that excel at passive tasks",
+  );
+});

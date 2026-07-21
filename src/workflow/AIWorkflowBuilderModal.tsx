@@ -12,6 +12,8 @@ import {
   chatModelChoices,
   type ChatProvider,
   type ChatSettings,
+  cliNames,
+  type CLIType,
   configuredChatProviders,
   providerDefaults,
   settingsForModel,
@@ -25,6 +27,7 @@ import {
 import type { WorkflowRun } from "./types";
 import { workflowGenerationSpec } from "./workflowSpec";
 import yaml from "js-yaml";
+import { UnifiedDiff } from "../components/UnifiedDiff";
 
 type Phase =
   | "input"
@@ -150,6 +153,26 @@ export function outputPathForArtifactName(
     : `workflows/${slug}.workflow.yaml`;
 }
 
+export function workflowBuilderModelOptions(
+  settings: ChatSettings,
+  provider: ChatProvider,
+): Array<{ value: string; label: string }> {
+  if (provider === "cli") {
+    return settings.verifiedCliTypes.map((type) => ({
+      value: type,
+      label: cliNames[type],
+    }));
+  }
+  return [
+    ...new Set([
+      ...settings.modelProfiles.filter((item) =>
+        item.provider === provider && item.enabled
+      ).flatMap((item) => item.enabledModels),
+      ...chatModelChoices[provider],
+    ]),
+  ].filter(Boolean).map((value) => ({ value, label: value }));
+}
+
 export function AIWorkflowBuilderModal({
   mode,
   artifactKind = "workflow",
@@ -186,6 +209,7 @@ export function AIWorkflowBuilderModal({
   const [phase, setPhase] = useState<Phase>("input");
   const [provider, setProvider] = useState<ChatProvider>(settings.provider);
   const [model, setModel] = useState(settings.model);
+  const [cliType, setCLIType] = useState<CLIType>(settings.cliType);
   const [name, setName] = useState(
     mode === "modify"
       ? currentName || currentPath.split("/").pop()?.replace(/\.md$/i, "") ||
@@ -262,7 +286,8 @@ export function AIWorkflowBuilderModal({
     const resolved = provider === settings.provider
       ? settings
       : switchChatProvider(settings, provider);
-    return settingsForModel(resolved, model);
+    const selected = settingsForModel(resolved, model);
+    return provider === "cli" ? { ...selected, cliType } : selected;
   };
   const openAttachmentPicker = async () => {
     setAttachmentPickerOpen((open) => !open);
@@ -691,6 +716,13 @@ export function AIWorkflowBuilderModal({
                     const next = event.target.value as ChatProvider;
                     setProvider(next);
                     setModel(providerDefaults(next).model);
+                    if (next === "cli") {
+                      setCLIType((current) =>
+                        settings.verifiedCliTypes.includes(current)
+                          ? current
+                          : settings.verifiedCliTypes[0] ?? current
+                      );
+                    }
                   }}
                 >
                   {configured.map((value) => (
@@ -701,21 +733,19 @@ export function AIWorkflowBuilderModal({
               <label>
                 <span>Model</span>
                 <select
-                  value={model}
-                  onChange={(event) => setModel(event.target.value)}
+                  value={provider === "cli" ? cliType : model}
+                  onChange={(event) => {
+                    if (provider === "cli") {
+                      setCLIType(event.target.value as CLIType);
+                    } else setModel(event.target.value);
+                  }}
                 >
-                  {[
-                    ...new Set([
-                      model,
-                      ...(provider === "cli" ? [] : [
-                        ...settings.modelProfiles.filter((item) =>
-                          item.provider === provider && item.enabled
-                        ).flatMap((item) => item.enabledModels),
-                        ...chatModelChoices[provider],
-                      ]),
-                    ]),
-                  ].filter(Boolean).map((value) => (
-                    <option key={value}>{value}</option>
+                  {workflowBuilderModelOptions(settings, provider).map((
+                    option,
+                  ) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -1045,14 +1075,12 @@ export function AIWorkflowBuilderModal({
             {mode === "modify"
               ? (
                 <div className="ai-workflow-diff">
-                  <section>
-                    <strong>Before</strong>
-                    <pre>{currentMarkdown}</pre>
-                  </section>
-                  <section>
-                    <strong>After</strong>
-                    <pre>{skillInstructions ? `${skillInstructions}\n\n` : ""}{generatedBlock}</pre>
-                  </section>
+                  <UnifiedDiff
+                    before={currentMarkdown}
+                    after={`${
+                      skillInstructions ? `${skillInstructions}\n\n` : ""
+                    }${generatedBlock}`}
+                  />
                 </div>
               )
               : (

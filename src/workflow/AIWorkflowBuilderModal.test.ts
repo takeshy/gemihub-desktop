@@ -2,7 +2,9 @@ import { assertEquals } from "jsr:@std/assert";
 import {
   outputPathForArtifactName,
   parseExternalWorkflowResponse,
+  workflowBuilderModelOptions,
 } from "./AIWorkflowBuilderModal.tsx";
+import { defaultChatSettings } from "../llm/settings.ts";
 
 Deno.test("artifact output paths follow their names", () => {
   assertEquals(
@@ -18,6 +20,17 @@ Deno.test("artifact output paths follow their names", () => {
     "workflows/daily-notes.workflow.yaml",
   );
   assertEquals(outputPathForArtifactName("skill", "  "), "skills/new-skill");
+});
+
+Deno.test("workflow builder lists every verified CLI", () => {
+  const settings = {
+    ...defaultChatSettings,
+    verifiedCliTypes: ["codex" as const, "antigravity" as const],
+  };
+  assertEquals(workflowBuilderModelOptions(settings, "cli"), [
+    { value: "codex", label: "Codex App Server" },
+    { value: "antigravity", label: "Antigravity" },
+  ]);
 });
 
 Deno.test("external workflow response accepts YAML fences with surrounding prose", () => {

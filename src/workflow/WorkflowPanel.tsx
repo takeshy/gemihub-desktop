@@ -211,11 +211,13 @@ export function WorkflowPanel({
   settings,
   activeFile,
   onOpenFile,
+  onOpenFileInNewWidget,
 }: {
   directoryBase: string;
   settings: ChatSettings;
   activeFile: { path: string; content: string } | null;
   onOpenFile: (file: FileRef) => void;
+  onOpenFileInNewWidget: (file: FileRef) => void;
 }) {
   const [paths, setPaths] = useState<string[]>([]);
   const [path, setPath] = useState("");
@@ -1289,7 +1291,9 @@ export function WorkflowPanel({
               );
               let workflowMarkdown = workflowYamlFromContent(result.block);
               if (aiMode === "modify") {
-                const existingFile = await readWorkspaceFile(existingWorkflowPath).catch(
+                const existingFile = await readWorkspaceFile(
+                  existingWorkflowPath,
+                ).catch(
                   () => null,
                 );
                 if (existingFile) {
@@ -1324,7 +1328,7 @@ export function WorkflowPanel({
               setPaths((current) => [...new Set([...current, target])].sort());
               setPath(target);
               setMarkdown(nextMarkdown);
-              onOpenFile(fileRef("workspace", target));
+              onOpenFileInNewWidget(fileRef("workspace", target));
             } else {
               const replaced = replaceWorkflowDefinition(
                 markdown,

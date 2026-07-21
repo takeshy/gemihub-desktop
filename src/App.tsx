@@ -2576,6 +2576,13 @@ export default function App() {
                 })
                 );}
             }}
+            onOpenFileInNewWidget={(file) => {
+              setOpenPathRequest((value) => ({
+                id: value.id + 1,
+                file,
+                source: "filetree-new-widget",
+              }));
+            }}
           />
         </section>
 

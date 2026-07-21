@@ -156,6 +156,7 @@ export function PluginHost({
   onOpenChatSettings,
   onOpenRAGSettings,
   onOpenFile,
+  onOpenFileInNewWidget,
 }: {
   directoryBase: string;
   workspaceBase: string;
@@ -179,6 +180,7 @@ export function PluginHost({
   onOpenChatSettings: () => void;
   onOpenRAGSettings: () => void;
   onOpenFile: (file: FileRef) => void;
+  onOpenFileInNewWidget: (file: FileRef) => void;
 }) {
   const configKey = useMemo(() => workspaceConfigKey(workspaceBase), [
     workspaceBase,
@@ -844,6 +846,7 @@ export function PluginHost({
                     settings={chatSettings}
                     activeFile={activeFile}
                     onOpenFile={onOpenFile}
+                    onOpenFileInNewWidget={onOpenFileInNewWidget}
                   />
                 )
                 : activeTab === "plugins" && activePluginId

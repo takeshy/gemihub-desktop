@@ -78,7 +78,9 @@ function blockContainer(node: Text, root: Node): Element | null {
 // to one space while each kept character remembers its source Text node.
 export function buildTextIndex(root: Node): TextIndex {
   const doc = root.ownerDocument ?? (root as Document);
-  const walker = doc.createTreeWalker(root, 4); // NodeFilter.SHOW_TEXT
+  // Include elements so PDF.js line-ending <br> nodes become searchable
+  // whitespace instead of joining adjacent visual lines into one word.
+  const walker = doc.createTreeWalker(root, 5); // SHOW_ELEMENT | SHOW_TEXT
   const nodes: Text[] = [];
   const nodeIndexes: number[] = [];
   const offsets: number[] = [];
@@ -87,6 +89,12 @@ export function buildTextIndex(root: Node): TextIndex {
   let previousTextNode: Text | null = null;
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.nodeType === 1) { // Node.ELEMENT_NODE
+      if ((node as Element).tagName === "BR" && text.length > 0) {
+        pendingSpace = true;
+      }
+      continue;
+    }
     if (shouldSkip(node)) continue;
     const textNode = node as Text;
     const value = textNode.data;
