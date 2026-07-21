@@ -40,6 +40,7 @@ import {
   duplicateFileRef,
   type FileRef,
   fileRef,
+  fileRefBackendPath,
   fileRefFromBackendPath,
   listFileHistoryRef,
   openContainingFolderRef,
@@ -573,7 +574,7 @@ export function FileTree({
     if (!items.length) return;
     setWorkspaceMove({
       items: items.map(({ node, file }) => ({
-        path: file.path,
+        path: fileRefBackendPath(file),
         name: node.name,
         isDir: node.isDir,
       })),

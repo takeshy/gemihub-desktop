@@ -94,7 +94,11 @@ func moveRegularFile(source, destination string) error {
 // directory. path is resolved against Files; destinationDirectory is relative
 // to the active Workspace. Links are supported for directories only.
 func (a *App) MovePathIntoWorkspace(path, destinationDirectory, destinationName string, leaveLink bool) (*WorkspaceDirectoryMoveResult, error) {
-	source, err := a.directoryPath(path, false)
+	if _, workspaceScoped := stripPathScope(path, "workspace"); workspaceScoped {
+		return nil, fmt.Errorf("Workspace path cannot be used as an external move source")
+	}
+	relative, _ := stripPathScope(path, "files")
+	source, err := a.directoryPath("files://"+relative, false)
 	if err != nil {
 		return nil, err
 	}

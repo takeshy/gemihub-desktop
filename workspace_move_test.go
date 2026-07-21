@@ -140,6 +140,28 @@ func TestMoveFileIntoWorkspaceDirectory(t *testing.T) {
 	}
 }
 
+func TestMovePathIntoWorkspaceAlwaysResolvesBarePathsFromFiles(t *testing.T) {
+	app, files, workspace := workspaceMoveTestApp(t)
+	source := filepath.Join(files, "articles", "Research")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "paper.md"), []byte("paper"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := app.MovePathIntoWorkspace("articles/Research", "", "Research", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WorkspacePath != "Research" {
+		t.Fatalf("WorkspacePath = %q", result.WorkspacePath)
+	}
+	if content, err := os.ReadFile(filepath.Join(workspace, "Research", "paper.md")); err != nil || string(content) != "paper" {
+		t.Fatalf("moved file = %q, %v", content, err)
+	}
+}
+
 func TestMovePathIntoWorkspaceRejectsTraversalAndFileLink(t *testing.T) {
 	app, files, _ := workspaceMoveTestApp(t)
 	if err := os.WriteFile(filepath.Join(files, "outside.md"), []byte("external"), 0o600); err != nil {
