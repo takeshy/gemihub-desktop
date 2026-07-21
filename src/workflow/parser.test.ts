@@ -63,6 +63,7 @@ Deno.test("plain YAML is the canonical workflow format", () => {
     "workflows/Daily Notes.workflow.yaml",
   );
   assertEquals(isWorkflowFilePath("workflows/canonical.workflow.yaml"), true);
+  assertEquals(isWorkflowFilePath("workflow.yaml"), true);
   assertEquals(isWorkflowFilePath("skills/example/workflows/legacy.yml"), true);
   assertEquals(isWorkflowFilePath("workflows/legacy.md"), false);
   const replaced = replaceWorkflowDefinition(

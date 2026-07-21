@@ -106,6 +106,7 @@ import {
 import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
+import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory";
 
 const CHAT_HISTORY_STATE_FILE = "chat-history";
 const initializedHistoryScopes = new Set<string>();
@@ -332,18 +333,22 @@ function sessionsForAppStart(
   if (initializedHistoryScopes.has(scope)) return stored;
   initializedHistoryScopes.add(scope);
 
-  const onlySession = stored.sessions.length === 1 ? stored.sessions[0] : null;
-  if (onlySession?.messages.length === 0 && onlySession.title === "New chat") {
+  const sessions = deduplicateEmptyNewChats(stored.sessions);
+  const existingEmpty = sessions.find(isEmptyNewChat);
+  if (existingEmpty) {
     return {
-      activeSessionId: onlySession.id,
-      sessions: [{ ...onlySession, activeMcpServerNames: [] }],
+      activeSessionId: existingEmpty.id,
+      sessions: [
+        { ...existingEmpty, activeMcpServerNames: [] },
+        ...sessions.filter((session) => session.id !== existingEmpty.id),
+      ],
     };
   }
 
   const created = newSession();
   return {
     activeSessionId: created.id,
-    sessions: [created, ...stored.sessions],
+    sessions: [created, ...sessions],
   };
 }
 
@@ -1347,6 +1352,11 @@ export function ChatPanel({
   };
 
   const createChat = () => {
+    const existing = sessions.find(isEmptyNewChat);
+    if (existing) {
+      setActiveID(existing.id);
+      return;
+    }
     const created = newSession();
     setSessions((current) => [created, ...current]);
     setActiveID(created.id);

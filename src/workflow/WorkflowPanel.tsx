@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   Braces,
   CheckCircle,
@@ -356,9 +357,17 @@ export function WorkflowPanel({
       setWorkflow(null);
       return;
     }
-    void readWorkspaceFile(path).then((file) => setMarkdown(file?.content ?? "")).catch((
-      error,
-    ) => setParseError(error instanceof Error ? error.message : String(error)));
+    let cancelled = false;
+    void readWorkspaceFile(path).then((file) => {
+      if (!cancelled) setMarkdown(file?.content ?? "");
+    }).catch((error) => {
+      if (!cancelled) {
+        setParseError(error instanceof Error ? error.message : String(error));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [path]);
 
   useEffect(() => {
@@ -828,6 +837,14 @@ export function WorkflowPanel({
         : (
           <>
             <header className="workflow-detail-header">
+              <button
+                type="button"
+                onClick={() => setPath("")}
+                title="Back to workflows"
+                aria-label="Back to workflows"
+              >
+                <ArrowLeft size={14} />
+              </button>
               <strong title={skill?.name || workflow?.name || path}>
                 {skill?.name || workflow?.name || path.split("/").pop()}
               </strong>

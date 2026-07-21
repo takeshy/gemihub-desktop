@@ -233,6 +233,7 @@ export function isWorkflowFilePath(path: string): boolean {
   return /(?:^|\/)workflows\/.*\.(?:workflow\.ya?ml|ya?ml|workflow)$/i.test(
     normalized,
   ) ||
+    /(?:^|\/)workflow\.ya?ml$/i.test(normalized) ||
     /\.workflow\.ya?ml$/i.test(normalized);
 }
 

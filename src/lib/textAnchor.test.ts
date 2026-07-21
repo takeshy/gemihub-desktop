@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { findTextMatchStarts } from "./textAnchor.ts";
+import { buildTextIndex, findTextMatchStarts } from "./textAnchor.ts";
 
 Deno.test("file search finds every case-insensitive non-overlapping match", () => {
   assertEquals(findTextMatchStarts("Alpha beta ALPHA alphabet", "alpha"), [
@@ -15,4 +15,23 @@ Deno.test("file search handles Japanese text and empty queries", () => {
     8,
   ]);
   assertEquals(findTextMatchStarts("content", "   "), []);
+});
+
+Deno.test("rendered block boundaries separate headings from body text", () => {
+  const root = { parentElement: null };
+  const heading = { tagName: "H2", parentElement: root };
+  const paragraph = { tagName: "P", parentElement: root };
+  const nodes = [
+    { data: "見出し", parentElement: heading },
+    { data: "本文", parentElement: paragraph },
+  ];
+  let index = 0;
+  const document = {
+    createTreeWalker: () => ({
+      nextNode: () => nodes[index++] ?? null,
+    }),
+  };
+  Object.assign(root, { ownerDocument: document });
+
+  assertEquals(buildTextIndex(root as unknown as Node).text, "見出し 本文");
 });

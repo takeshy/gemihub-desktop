@@ -2707,6 +2707,10 @@ export function DashboardView({
                 <article
                   key={widget.id}
                   data-widget-id={widget.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setActiveWidgetId(widget.id);
+                  }}
                   className={`dashboard-widget ${
                     isFileWidgetType(widget.type)
                       ? "file-widget"

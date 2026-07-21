@@ -13623,6 +13623,16 @@ body.resizing-modal {
   overflow: hidden;
 }
 
+.app-modal-drag-handle {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.app-modal-drag-handle:active {
+  cursor: grabbing;
+}
+
 .app-calendar-body > .dashboard-calendar-widget {
   height: 100%;
   padding: 18px;

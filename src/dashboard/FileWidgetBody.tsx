@@ -715,12 +715,14 @@ export function FileWidgetBody({
       byId.set(entry.id, { range: match.range, win });
     };
 
-    if (
-      kind === "markdown" && markdownMode === "preview" &&
-      previewRootRef.current
-    ) {
+    const markdownRoot = markdownMode === "preview"
+      ? previewRootRef.current
+      : markdownMode === "wysiwyg"
+      ? wysiwygRootRef.current
+      : null;
+    if (kind === "markdown" && markdownRoot) {
       for (const entry of anchored) {
-        record(entry, previewRootRef.current, window, false, "md");
+        record(entry, markdownRoot, window, false, `md-${markdownMode}`);
       }
     } else if (
       (kind === "html" || kind === "epub") &&
@@ -1195,12 +1197,17 @@ export function FileWidgetBody({
     }
 
     if (kind === "markdown") {
-      if (markdownMode !== "preview" || !previewRootRef.current) {
+      const root = markdownMode === "preview"
+        ? previewRootRef.current
+        : markdownMode === "wysiwyg"
+        ? wysiwygRootRef.current
+        : null;
+      if (!root) {
         showToast(tr("memo.previewOnly"));
         return;
       }
       const match = findQuoteMatch(
-        buildTextIndex(previewRootRef.current),
+        buildTextIndex(root),
         entry.quote,
         entry.quotePrefix,
         entry.quoteSuffix,

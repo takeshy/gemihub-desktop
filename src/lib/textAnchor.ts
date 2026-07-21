@@ -26,22 +26,81 @@ function shouldSkip(node: Node): boolean {
     tag === "TEXTAREA";
 }
 
+const BLOCK_TAGS = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "BLOCKQUOTE",
+  "DD",
+  "DIV",
+  "DL",
+  "DT",
+  "FIELDSET",
+  "FIGCAPTION",
+  "FIGURE",
+  "FOOTER",
+  "FORM",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HEADER",
+  "HR",
+  "LI",
+  "MAIN",
+  "NAV",
+  "OL",
+  "P",
+  "PRE",
+  "SECTION",
+  "TABLE",
+  "TBODY",
+  "TD",
+  "TFOOT",
+  "TH",
+  "THEAD",
+  "TR",
+  "UL",
+]);
+
+function blockContainer(node: Text, root: Node): Element | null {
+  let element = node.parentElement;
+  while (element && element !== root) {
+    if (BLOCK_TAGS.has(element.tagName)) return element;
+    element = element.parentElement;
+  }
+  return null;
+}
+
 // Builds a normalized text index over a container: whitespace runs collapse
 // to one space while each kept character remembers its source Text node.
 export function buildTextIndex(root: Node): TextIndex {
   const doc = root.ownerDocument ?? (root as Document);
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const walker = doc.createTreeWalker(root, 4); // NodeFilter.SHOW_TEXT
   const nodes: Text[] = [];
   const nodeIndexes: number[] = [];
   const offsets: number[] = [];
   let text = "";
   let pendingSpace = false;
+  let previousTextNode: Text | null = null;
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (shouldSkip(node)) continue;
     const textNode = node as Text;
     const value = textNode.data;
     if (!value) continue;
+    if (
+      previousTextNode &&
+      blockContainer(previousTextNode, root) !== blockContainer(textNode, root)
+    ) {
+      // Selection.toString() places a line break between rendered blocks even
+      // though sibling headings, paragraphs and list items have no whitespace
+      // Text node between them. Represent that visual boundary as one space so
+      // multi-block memo quotes resolve against the rendered DOM.
+      pendingSpace = text.length > 0;
+    }
     const nodeIndex = nodes.push(textNode) - 1;
     for (let i = 0; i < value.length; i++) {
       if (/\s/.test(value[i])) {
@@ -59,6 +118,7 @@ export function buildTextIndex(root: Node): TextIndex {
       nodeIndexes.push(nodeIndex);
       offsets.push(i);
     }
+    previousTextNode = textNode;
   }
   return { text, nodes, nodeIndexes, offsets };
 }

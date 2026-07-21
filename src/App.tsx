@@ -1118,7 +1118,48 @@ export default function App() {
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarPosition, setCalendarPosition] = useState({ x: 0, y: 0 });
+  const calendarDragRef = useRef<
+    | { pointerId: number; x: number; y: number; baseX: number; baseY: number }
+    | null
+  >(null);
   const [kanbanOpen, setKanbanOpen] = useState(false);
+  const startCalendarDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    calendarDragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      baseX: calendarPosition.x,
+      baseY: calendarPosition.y,
+    };
+  };
+  const moveCalendarDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = calendarDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setCalendarPosition({
+      x: Math.max(
+        -window.innerWidth / 2 + 48,
+        Math.min(
+          window.innerWidth / 2 - 48,
+          drag.baseX + event.clientX - drag.x,
+        ),
+      ),
+      y: Math.max(
+        -window.innerHeight / 2 + 32,
+        Math.min(
+          window.innerHeight / 2 - 32,
+          drag.baseY + event.clientY - drag.y,
+        ),
+      ),
+    });
+  };
+  const stopCalendarDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (calendarDragRef.current?.pointerId === event.pointerId) {
+      calendarDragRef.current = null;
+    }
+  };
   useEffect(() => {
     if (!secretManagerOpen) return;
     const close = (event: KeyboardEvent) => {
@@ -2600,6 +2641,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setLauncherOpen(false);
+                    setCalendarPosition({ x: 0, y: 0 });
                     setCalendarOpen(true);
                   }}
                 >
@@ -2687,12 +2729,25 @@ export default function App() {
               if (event.target === event.currentTarget) setCalendarOpen(false);
             }}
           >
-            <section className="app-calendar-modal">
-              <header className="memo-list-header">
+            <section
+              className="app-calendar-modal"
+              style={{
+                transform:
+                  `translate(${calendarPosition.x}px, ${calendarPosition.y}px)`,
+              }}
+            >
+              <header
+                className="memo-list-header app-modal-drag-handle"
+                onPointerDown={startCalendarDrag}
+                onPointerMove={moveCalendarDrag}
+                onPointerUp={stopCalendarDrag}
+                onPointerCancel={stopCalendarDrag}
+              >
                 <strong>{tr("topbar.calendar")}</strong>
                 <button
                   type="button"
                   className="icon-button"
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => setCalendarOpen(false)}
                   title={tr("common.close")}
                 >
