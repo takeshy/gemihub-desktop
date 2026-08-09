@@ -606,6 +606,7 @@ export function TimelineDashboardWidget(
     [attachments, setAttachments] = useState<File[]>([]),
     [aiBusy, setAIBusy] = useState(false),
     [error, setError] = useState("");
+  const feedRef = useRef<HTMLDivElement | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false),
     [word, setWord] = useState(""),
     [tag, setTag] = useState(""),
@@ -900,12 +901,23 @@ export function TimelineDashboardWidget(
         </div>
       )}
       {error && <div className="dashboard-widget-error">{error}</div>}
-      <div className="timeline-feed">
+      <div ref={feedRef} className="timeline-feed">
         {visibleCount < filtered.length && (
           <button
             type="button"
             className="timeline-load-more"
-            onClick={() => setVisibleCount((count) => count + pageSize)}
+            onClick={() => {
+              const feed = feedRef.current;
+              const previousHeight = feed?.scrollHeight || 0;
+              const previousTop = feed?.scrollTop || 0;
+              setVisibleCount((count) => count + pageSize);
+              requestAnimationFrame(() => {
+                if (feed) {
+                  feed.scrollTop = previousTop + feed.scrollHeight -
+                    previousHeight;
+                }
+              });
+            }}
           >
             Load older
           </button>

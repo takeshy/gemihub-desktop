@@ -166,3 +166,18 @@ func TestExchangeMCPOAuthTokenIncludesClientSecret(t *testing.T) {
 		t.Fatalf("unexpected token response: %#v, %v", token, err)
 	}
 }
+
+func TestExchangeMCPOAuthTokenIncludesResource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		_ = request.ParseForm()
+		if request.Form.Get("resource") != "https://example.com/mcp" {
+			t.Fatalf("resource indicator missing: %s", request.Form.Encode())
+		}
+		_ = json.NewEncoder(response).Encode(map[string]any{"access_token": "access"})
+	}))
+	defer server.Close()
+	token, err := exchangeMCPOAuthToken(mcpOAuthConfig{ClientID: "client", TokenURL: server.URL, Resource: "https://example.com/mcp"}, url.Values{"grant_type": {"refresh_token"}})
+	if err != nil || token.AccessToken != "access" {
+		t.Fatalf("unexpected token response: %#v, %v", token, err)
+	}
+}

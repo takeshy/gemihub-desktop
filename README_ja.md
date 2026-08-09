@@ -129,11 +129,23 @@ GitHub Releases から実行ファイルをダウンロードしてください�
 
 配布される実行ファイル：
 
-- `gemihub-desktop-linux-amd64`
-- `gemihub-desktop-linux-arm64`
+- `gemihub-desktop-linux-amd64`（WebKitGTK 4.1）
+- `gemihub-desktop-linux-arm64`（WebKitGTK 4.1）
+- `gemihub-desktop-linux-amd64-webkit2gtk-4.0`
+- `gemihub-desktop-linux-arm64-webkit2gtk-4.0`
 - `gemihub-desktop-darwin-arm64`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
+
+標準のLinux版はWebKitGTK 4.1を使用し、Debian 12/13やUbuntu 24.04以降に対応
+します。runtime libraryが未installの場合は、次のcommandでinstallしてください。
+
+```bash
+sudo apt install libwebkit2gtk-4.1-0
+```
+
+Ubuntu 22.04などWebKitGTK 4.0のみを提供するdistributionでは、file名が
+`-webkit2gtk-4.0`で終わるartifactを使用してください。
 
 各リリースには `THIRD_PARTY_NOTICES.md` も含まれます。同じ内容をアプリ内の
 **Settings → General → Third-party notices** から確認できます。

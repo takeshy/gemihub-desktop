@@ -7871,6 +7871,9 @@ body.resizing-side-pane * {
   overflow: hidden;
   background: var(--surface);
 }
+.timeline-feed {
+  overflow-anchor: none;
+}
 .timeline-toolbar {
   z-index: 3;
   display: flex;

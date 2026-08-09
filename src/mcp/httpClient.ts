@@ -1,5 +1,14 @@
-import { mcpOAuthAccessToken, workflowHTTPRequest, type ChatToolDefinition, type ExternalHTTPResponse } from "../lib/wailsBackend";
-import { cachedMcpTools, normalizeMcpInputSchema, storeMcpTools } from "./toolSchema";
+import {
+  type ChatToolDefinition,
+  type ExternalHTTPResponse,
+  mcpOAuthAccessToken,
+  workflowHTTPRequest,
+} from "../lib/wailsBackend";
+import {
+  cachedMcpTools,
+  normalizeMcpInputSchema,
+  storeMcpTools,
+} from "./toolSchema";
 
 export interface McpHttpServerConfig {
   id?: string;
@@ -22,107 +31,342 @@ export interface McpToolBinding extends ChatToolDefinition {
   remoteName: string;
 }
 
-function parseMcpResponse(body: string): { result?: Record<string, unknown>; error?: { message?: string } } {
-  const payloads = body.startsWith("data:") ? body.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).filter(Boolean) : [body.trim()];
+function parseMcpResponse(
+  body: string,
+): {
+  result?: Record<string, unknown>;
+  error?: { code?: number; message?: string; data?: unknown };
+} {
+  const payloads = body.startsWith("data:")
+    ? body.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((
+      line,
+    ) => line.slice(5).trim()).filter(Boolean)
+    : [body.trim()];
   for (const payload of payloads.reverse()) {
-    try { return JSON.parse(payload) as { result?: Record<string, unknown>; error?: { message?: string } }; } catch { /* try the preceding event */ }
+    try {
+      return JSON.parse(payload) as {
+        result?: Record<string, unknown>;
+        error?: { message?: string };
+      };
+    } catch { /* try the preceding event */ }
   }
   throw new Error("MCP server returned an invalid response.");
 }
 
 export class McpHttpError extends Error {
-  constructor(message: string, readonly status: number) { super(message); this.name = "McpHttpError"; }
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "McpHttpError";
+  }
 }
 
-function responseResult(response: ExternalHTTPResponse, method: string): Record<string, unknown> {
+export class McpRpcError extends Error {
+  constructor(readonly code: number, message: string, readonly data?: unknown) {
+    super(`MCP Error ${code}: ${message}`);
+    this.name = "McpRpcError";
+  }
+}
+
+function responseResult(
+  response: ExternalHTTPResponse,
+  method: string,
+): Record<string, unknown> {
   if (response.status < 200 || response.status >= 300) {
     const detail = response.body.trim().replace(/\s+/g, " ").slice(0, 500);
-    throw new McpHttpError(`MCP ${method} failed with HTTP ${response.status}${detail ? `: ${detail}` : "."}`, response.status);
+    throw new McpHttpError(
+      `MCP ${method} failed with HTTP ${response.status}${
+        detail ? `: ${detail}` : "."
+      }`,
+      response.status,
+    );
   }
   const payload = parseMcpResponse(response.body);
-  if (payload.error) throw new Error(payload.error.message || `MCP ${method} failed.`);
+  if (payload.error) {
+    throw new McpRpcError(
+      payload.error.code ?? -32603,
+      payload.error.message || `MCP ${method} failed.`,
+      payload.error.data,
+    );
+  }
   return payload.result ?? {};
+}
+
+export const MCP_PROTOCOL_VERSION = "2026-07-28";
+const LEGACY_PROTOCOL_VERSION = "2025-11-25";
+const CLIENT_INFO = { name: "gemihub-desktop", version: "1.0.0" } as const;
+type ProtocolMode = "unknown" | "modern" | "legacy";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function shouldTryLegacyProtocol(error: unknown): boolean {
+  return (error instanceof McpHttpError &&
+    [400, 404, 405].includes(error.status)) ||
+    (error instanceof McpRpcError && [-32601, -32022].includes(error.code));
 }
 
 export class McpHttpClient {
   private requestID = 1;
-  private sessionHeaders: Record<string, string> | null = null;
+  private protocolMode: ProtocolMode = "unknown";
+  private negotiatedVersion = "";
+  private sessionID = "";
+  private negotiationPromise: Promise<void> | null = null;
 
   constructor(readonly server: McpHttpServerConfig) {}
 
   private async baseHeaders(): Promise<Record<string, string>> {
-    const headers: Record<string, string> = { Accept: "application/json, text/event-stream", "Content-Type": "application/json", ...(this.server.headers || {}) };
+    const headers: Record<string, string> = {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      ...(this.server.headers || {}),
+    };
     if (this.server.oauth) {
-      if (!this.server.id) throw new Error(`MCP server ${this.server.name} is missing its OAuth credential ID.`);
-      headers.Authorization = `Bearer ${await mcpOAuthAccessToken(this.server.id, this.server.url)}`;
+      if (!this.server.id) {
+        throw new Error(
+          `MCP server ${this.server.name} is missing its OAuth credential ID.`,
+        );
+      }
+      headers.Authorization = `Bearer ${await mcpOAuthAccessToken(
+        this.server.id,
+        this.server.url,
+      )}`;
     }
     return headers;
   }
 
-  async initialize(): Promise<void> {
-    if (this.sessionHeaders) return;
-    if (!/^https?:\/\//i.test(this.server.url)) throw new Error(`MCP server ${this.server.name} requires an HTTP or HTTPS URL.`);
-    const headers = await this.baseHeaders();
-    let response: ExternalHTTPResponse | null = null, lastError: unknown;
-    for (const protocolVersion of ["2025-03-26", "2024-11-05"]) {
-      try {
-        const candidate = await workflowHTTPRequest({ url: this.server.url, method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: this.requestID++, method: "initialize", params: { protocolVersion, capabilities: {}, clientInfo: { name: "gemihub-desktop", version: "0.1.0" } } }) });
-        responseResult(candidate, "initialize"); response = candidate; break;
-      } catch (error) { lastError = error; }
+  private async sendRaw(
+    method: string,
+    params: Record<string, unknown> = {},
+    mode: "modern" | "legacy" | "legacy-initialize" = "modern",
+  ): Promise<
+    { response: ExternalHTTPResponse; result: Record<string, unknown> }
+  > {
+    if (!/^https?:\/\//i.test(this.server.url)) {
+      throw new Error(
+        `MCP server ${this.server.name} requires an HTTP or HTTPS URL.`,
+      );
     }
-    if (!response) throw lastError instanceof Error ? lastError : new Error("MCP initialize failed.");
-    const session = Object.entries(response.headers).find(([key]) => key.toLowerCase() === "mcp-session-id")?.[1];
-    this.sessionHeaders = session ? { ...headers, "Mcp-Session-Id": session } : headers;
-    await workflowHTTPRequest({ url: this.server.url, method: "POST", headers: this.sessionHeaders, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }) });
+    const headers = await this.baseHeaders();
+    headers["Mcp-Method"] = method;
+    const requestName = params.name ?? params.uri;
+    if (typeof requestName === "string") headers["Mcp-Name"] = requestName;
+    if (mode === "modern") {
+      headers["MCP-Protocol-Version"] = MCP_PROTOCOL_VERSION;
+    } else if (mode === "legacy" && this.negotiatedVersion) {
+      headers["MCP-Protocol-Version"] = this.negotiatedVersion;
+    }
+    if (mode !== "modern" && this.sessionID) {
+      headers["Mcp-Session-Id"] = this.sessionID;
+    }
+    const requestParams = mode === "modern"
+      ? {
+        ...params,
+        _meta: {
+          ...(isRecord(params._meta) ? params._meta : {}),
+          "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      }
+      : params;
+    const response = await workflowHTTPRequest({
+      url: this.server.url,
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: this.requestID++,
+        method,
+        params: requestParams,
+      }),
+    });
+    const result = responseResult(response, method);
+    if (mode !== "modern") {
+      this.sessionID = Object.entries(response.headers).find(([key]) =>
+        key.toLowerCase() === "mcp-session-id"
+      )?.[1] || this.sessionID;
+    }
+    return { response, result };
   }
 
-  async send(method: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  private async sendLegacyNotification(method: string): Promise<void> {
+    const headers = await this.baseHeaders();
+    headers["Mcp-Method"] = method;
+    if (this.negotiatedVersion) {
+      headers["MCP-Protocol-Version"] = this.negotiatedVersion;
+    }
+    if (this.sessionID) headers["Mcp-Session-Id"] = this.sessionID;
+    await workflowHTTPRequest({
+      url: this.server.url,
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", method, params: {} }),
+    }).catch(() => undefined);
+  }
+
+  private async initializeLegacy(requestedVersion: string): Promise<void> {
+    const { result } = await this.sendRaw("initialize", {
+      protocolVersion: requestedVersion,
+      capabilities: {},
+      clientInfo: CLIENT_INFO,
+    }, "legacy-initialize");
+    this.protocolMode = "legacy";
+    this.negotiatedVersion = typeof result.protocolVersion === "string"
+      ? result.protocolVersion
+      : requestedVersion;
+    await this.sendLegacyNotification("notifications/initialized");
+  }
+
+  private async negotiateProtocol(): Promise<void> {
+    try {
+      const { result } = await this.sendRaw("server/discover");
+      const supported = Array.isArray(result.supportedVersions)
+        ? result.supportedVersions.filter((value): value is string =>
+          typeof value === "string"
+        )
+        : [];
+      if (supported.includes(MCP_PROTOCOL_VERSION)) {
+        this.protocolMode = "modern";
+        this.negotiatedVersion = MCP_PROTOCOL_VERSION;
+        return;
+      }
+      await this.initializeLegacy(
+        supported.find((version) => version !== MCP_PROTOCOL_VERSION) ||
+          LEGACY_PROTOCOL_VERSION,
+      );
+    } catch (error) {
+      if (!shouldTryLegacyProtocol(error)) throw error;
+      await this.initializeLegacy(LEGACY_PROTOCOL_VERSION);
+    }
+  }
+
+  async initialize(): Promise<void> {
+    if (this.protocolMode !== "unknown") return;
+    if (!this.negotiationPromise) {
+      this.negotiationPromise = this.negotiateProtocol().finally(() => {
+        this.negotiationPromise = null;
+      });
+    }
+    await this.negotiationPromise;
+  }
+
+  async send(
+    method: string,
+    params: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
     await this.initialize();
-    const response = await workflowHTTPRequest({ url: this.server.url, method: "POST", headers: this.sessionHeaders!, body: JSON.stringify({ jsonrpc: "2.0", id: this.requestID++, method, params }) });
-    return responseResult(response, method);
+    return (await this.sendRaw(
+      method,
+      params,
+      this.protocolMode === "modern" ? "modern" : "legacy",
+    )).result;
   }
 
   async listTools(): Promise<McpToolInfo[]> {
-    const result = await this.send("tools/list");
-    return Array.isArray(result.tools) ? result.tools.filter((tool): tool is McpToolInfo => !!tool && typeof tool === "object" && typeof (tool as McpToolInfo).name === "string") : [];
+    const tools: McpToolInfo[] = [];
+    let cursor = "";
+    for (let page = 0; page < 100; page++) {
+      const result = await this.send("tools/list", cursor ? { cursor } : {});
+      if (Array.isArray(result.tools)) {
+        tools.push(
+          ...result.tools.filter((tool): tool is McpToolInfo =>
+            !!tool && typeof tool === "object" &&
+            typeof (tool as McpToolInfo).name === "string"
+          ),
+        );
+      }
+      cursor = typeof result.nextCursor === "string" ? result.nextCursor : "";
+      if (!cursor) break;
+    }
+    return tools;
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     return await this.send("tools/call", { name, arguments: args });
   }
 
-  async readResource(uri: string): Promise<{ uri?: string; mimeType?: string; text?: string; blob?: string } | null> {
+  async readResource(
+    uri: string,
+  ): Promise<
+    { uri?: string; mimeType?: string; text?: string; blob?: string } | null
+  > {
     const result = await this.send("resources/read", { uri });
-    const contents = Array.isArray(result.contents) ? result.contents as Array<{ uri?: string; mimeType?: string; text?: string; blob?: string }> : [];
+    const contents = Array.isArray(result.contents)
+      ? result.contents as Array<
+        { uri?: string; mimeType?: string; text?: string; blob?: string }
+      >
+      : [];
     return contents[0] ?? null;
   }
 
   async close(): Promise<void> {
-    if (!this.sessionHeaders?.["Mcp-Session-Id"]) return;
-    await workflowHTTPRequest({ url: this.server.url, method: "DELETE", headers: this.sessionHeaders }).catch(() => undefined);
-    this.sessionHeaders = null;
+    if (this.protocolMode === "legacy" && this.sessionID) {
+      const headers = await this.baseHeaders();
+      headers["Mcp-Session-Id"] = this.sessionID;
+      if (this.negotiatedVersion) {
+        headers["MCP-Protocol-Version"] = this.negotiatedVersion;
+      }
+      await workflowHTTPRequest({
+        url: this.server.url,
+        method: "DELETE",
+        headers,
+      }).catch(() => undefined);
+    }
+    this.protocolMode = "unknown";
+    this.negotiatedVersion = "";
+    this.sessionID = "";
   }
 }
 
 export function safeMcpName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  return value.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-export async function discoverMcpHttpTools(servers: McpHttpServerConfig[], forceRefresh = false): Promise<{ bindings: McpToolBinding[]; clients: Map<string, McpHttpClient>; errors: string[] }> {
+export async function discoverMcpHttpTools(
+  servers: McpHttpServerConfig[],
+  forceRefresh = false,
+): Promise<
+  {
+    bindings: McpToolBinding[];
+    clients: Map<string, McpHttpClient>;
+    errors: string[];
+  }
+> {
   const clients = new Map<string, McpHttpClient>();
   const errors: string[] = [];
   const lists = await Promise.all(servers.map(async (server) => {
     const client = new McpHttpClient(server);
     clients.set(server.name, client);
-    try { const cached = cachedMcpTools(server, forceRefresh); const tools = cached ?? await client.listTools(); if (!cached) storeMcpTools(server, tools); return { server, tools }; }
-    catch (error) { await client.close(); clients.delete(server.name); errors.push(`${server.name}: ${error instanceof Error ? error.message : String(error)}`); return { server, tools: [] }; }
+    try {
+      const cached = cachedMcpTools(server, forceRefresh);
+      const tools = cached ?? await client.listTools();
+      if (!cached) storeMcpTools(server, tools);
+      return { server, tools };
+    } catch (error) {
+      await client.close();
+      clients.delete(server.name);
+      errors.push(
+        `${server.name}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { server, tools: [] };
+    }
   }));
-  const bindings = lists.flatMap(({ server, tools }) => tools.map((tool) => ({
-    name: `mcp_${safeMcpName(server.name)}_${safeMcpName(tool.name)}`,
-    description: tool.description || `MCP tool ${tool.name} from ${server.name}`,
-    parameters: normalizeMcpInputSchema(tool.inputSchema),
-    server,
-    remoteName: tool.name,
-  })));
+  const bindings = lists.flatMap(({ server, tools }) =>
+    tools.map((tool) => ({
+      name: `mcp_${safeMcpName(server.name)}_${safeMcpName(tool.name)}`,
+      description: tool.description ||
+        `MCP tool ${tool.name} from ${server.name}`,
+      parameters: normalizeMcpInputSchema(tool.inputSchema),
+      server,
+      remoteName: tool.name,
+    }))
+  );
   return { bindings, clients, errors };
 }

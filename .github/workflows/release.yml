@@ -47,19 +47,36 @@ jobs:
         include:
           - os: ubuntu-22.04
             platform: linux/amd64
-            artifact: gemihub-desktop-linux-amd64
+            artifact: gemihub-desktop-linux-amd64-webkit2gtk-4.0
+            webkit_package: libwebkit2gtk-4.0-dev
+            wails_tags: ""
           - os: ubuntu-22.04-arm
             platform: linux/arm64
+            artifact: gemihub-desktop-linux-arm64-webkit2gtk-4.0
+            webkit_package: libwebkit2gtk-4.0-dev
+            wails_tags: ""
+          - os: ubuntu-24.04
+            platform: linux/amd64
+            artifact: gemihub-desktop-linux-amd64
+            webkit_package: libwebkit2gtk-4.1-dev
+            wails_tags: webkit2_41
+          - os: ubuntu-24.04-arm
+            platform: linux/arm64
             artifact: gemihub-desktop-linux-arm64
+            webkit_package: libwebkit2gtk-4.1-dev
+            wails_tags: webkit2_41
           - os: macos-14
             platform: darwin/arm64
             artifact: gemihub-desktop-darwin-arm64
+            wails_tags: ""
           - os: windows-latest
             platform: windows/amd64
             artifact: gemihub-desktop-windows-amd64.exe
+            wails_tags: ""
           - os: windows-latest
             platform: windows/arm64
             artifact: gemihub-desktop-windows-arm64.exe
+            wails_tags: ""
 
     steps:
       - name: Checkout
@@ -82,7 +99,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y libgtk-3-dev ${{ matrix.webkit_package }}
 
       - name: Check frontend
         run: deno task check
@@ -104,7 +121,13 @@ jobs:
 
       - name: Build non-Windows binary
         if: runner.os != 'Windows'
-        run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build -devtools -clean -nopackage -platform ${{ matrix.platform }} -o ${{ matrix.artifact }}
+        shell: bash
+        run: |
+          args=(build -devtools -clean -nopackage -platform "${{ matrix.platform }}" -o "${{ matrix.artifact }}")
+          if [[ -n "${{ matrix.wails_tags }}" ]]; then
+            args+=(-tags "${{ matrix.wails_tags }}")
+          fi
+          go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 "${args[@]}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

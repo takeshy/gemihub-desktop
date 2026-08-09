@@ -397,6 +397,9 @@ func registerMCPOAuthClient(registrationURL, redirectURI string) (string, string
 }
 
 func exchangeMCPOAuthToken(config mcpOAuthConfig, values url.Values) (*mcpOAuthTokenResponse, error) {
+	if config.Resource != "" {
+		values.Set("resource", config.Resource)
+	}
 	if config.ClientSecret != "" {
 		values.Set("client_secret", config.ClientSecret)
 	}
