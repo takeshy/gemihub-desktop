@@ -183,8 +183,16 @@ func geminiThinkingConfig(model string, enabled bool) map[string]any {
 	if strings.Contains(lower, "gemma-4") {
 		return nil
 	}
-	// Gemini 3.1 Flash Lite is the exception that uses thinkingLevel.
-	if strings.Contains(lower, "gemini-3.1-flash-lite") {
+	// Gemini 3.6 Flash and 3.5 Flash Lite use thinkingLevel rather than a
+	// thinkingBudget.
+	if strings.Contains(lower, "gemini-3.6-flash") {
+		level := "LOW"
+		if enabled {
+			level = "HIGH"
+		}
+		return map[string]any{"includeThoughts": enabled, "thinkingLevel": level}
+	}
+	if strings.Contains(lower, "gemini-3.5-flash-lite") {
 		if !enabled {
 			return nil
 		}

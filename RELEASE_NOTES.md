@@ -1,4 +1,13 @@
-# GemiHub Desktop v1.0.0
+# GemiHub Desktop v1.1.0
+
+## What's new
+
+- Updated MCP HTTP compatibility with modern stateless transport negotiation,
+  legacy session fallback, pagination, and OAuth resource indicators.
+- Added Gemini 3.6 Flash and Gemini 3.5 Flash Lite support, including migration
+  from older Flash Lite settings.
+- Improved Secret Manager directory organization and Timeline loading behavior.
+- Added Linux builds for both WebKitGTK 4.1 and 4.0 distributions.
 
 GemiHub Desktop is a local-first desktop workspace that brings files, AI chat,
 dashboards, workflows, memos, and plugins together in one application.

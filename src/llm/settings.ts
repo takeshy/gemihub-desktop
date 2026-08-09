@@ -138,20 +138,22 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
       "o3",
     ],
     gemini: [
+      "gemini-3.6-flash",
       "gemini-3.5-flash",
       "gemini-3.1-pro-preview",
       "gemini-3.1-pro-preview-customtools",
-      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite",
       "gemini-3.1-flash-image-preview",
       "gemini-3-pro-image-preview",
       "gemini-2.5-pro",
       "gemini-2.5-flash",
     ],
     vertex: [
+      "gemini-3.6-flash",
       "gemini-3.5-flash",
       "gemini-3.1-pro-preview",
       "gemini-3.1-pro-preview-customtools",
-      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite",
       "gemini-3.1-flash-image-preview",
       "gemini-3-pro-image-preview",
       "gemini-2.5-pro",
@@ -261,10 +263,10 @@ export function providerDefaults(
   if (provider === "gemini") {
     return {
       endpoint: "https://generativelanguage.googleapis.com/v1beta",
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
     };
   }
-  if (provider === "vertex") return { endpoint: "", model: "gemini-3.5-flash" };
+  if (provider === "vertex") return { endpoint: "", model: "gemini-3.6-flash" };
   if (provider === "anthropic") {
     return {
       endpoint: "https://api.anthropic.com/v1/messages",
@@ -284,7 +286,12 @@ function migrateOldDefaultModel(
   if (
     (provider === "gemini" || provider === "vertex") &&
     model === "gemini-2.5-flash"
-  ) return "gemini-3.5-flash";
+  ) return "gemini-3.6-flash";
+  if (
+    (provider === "gemini" || provider === "vertex") &&
+    (model === "gemini-3.1-flash-lite" ||
+      model === "gemini-3.1-flash-lite-preview")
+  ) return "gemini-3.5-flash-lite";
   if (provider === "anthropic" && model === "claude-sonnet-4-5") {
     return "claude-opus-4-8";
   }
@@ -561,6 +568,10 @@ export function loadChatSettings(): ChatSettings {
         return {
           ...newModelProfile(item.provider, item.local, compatible),
           ...item,
+          model: migrateOldDefaultModel(item.provider, item.model),
+          enabledModels: (item.enabledModels || []).map((model) =>
+            migrateOldDefaultModel(item.provider, model)
+          ),
           openAICompatible: item.openAICompatible ?? compatible,
         };
       })

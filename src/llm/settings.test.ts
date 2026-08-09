@@ -4,12 +4,13 @@ import {
   configuredModelOptions,
   defaultChatSettings,
   defaultRAGSetting,
+  loadChatSettings,
+  localLLMFrameworks,
   newModelProfile,
   resolveRAGSetting,
   selectConfiguredModel,
   selectModelProfile,
   updateModelProfile,
-  localLLMFrameworks,
 } from "./settings.ts";
 
 Deno.test("Gemini 3.5 Flash thinking can be switched on and off", () => {
@@ -24,6 +25,26 @@ Deno.test("Gemini 3.5 Flash thinking can be switched on and off", () => {
     ),
     { available: true, required: false },
   );
+});
+
+Deno.test("Gemini defaults and legacy Flash Lite settings follow GemiHub", () => {
+  const saved = localStorage.getItem("gemihub-desktop:chat-settings");
+  try {
+    localStorage.setItem(
+      "gemihub-desktop:chat-settings",
+      JSON.stringify({
+        ...defaultChatSettings,
+        provider: "gemini",
+        model: "gemini-3.1-flash-lite",
+      }),
+    );
+    assertEquals(loadChatSettings().model, "gemini-3.5-flash-lite");
+    assertEquals(defaultChatSettings.model, "gpt-5.5");
+  } finally {
+    if (saved === null) {
+      localStorage.removeItem("gemihub-desktop:chat-settings");
+    } else localStorage.setItem("gemihub-desktop:chat-settings", saved);
+  }
 });
 
 Deno.test("multiple API and local profiles become distinct selectable models", () => {

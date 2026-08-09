@@ -327,9 +327,17 @@ func TestGeminiThinkingConfig(t *testing.T) {
 	if legacyOff["thinkingBudget"] != 0 {
 		t.Fatalf("unexpected Gemini 2.5 off config: %#v", legacyOff)
 	}
-	liteOn := geminiThinkingConfig("gemini-3.1-flash-lite", true)
+	liteOn := geminiThinkingConfig("gemini-3.5-flash-lite", true)
 	if liteOn["thinkingLevel"] != "HIGH" || liteOn["includeThoughts"] != true {
-		t.Fatalf("unexpected Gemini 3.1 Flash Lite config: %#v", liteOn)
+		t.Fatalf("unexpected Gemini 3.5 Flash Lite config: %#v", liteOn)
+	}
+	flashOff := geminiThinkingConfig("gemini-3.6-flash", false)
+	if flashOff["thinkingLevel"] != "LOW" || flashOff["includeThoughts"] != false {
+		t.Fatalf("unexpected Gemini 3.6 Flash off config: %#v", flashOff)
+	}
+	flashOn := geminiThinkingConfig("gemini-3.6-flash", true)
+	if flashOn["thinkingLevel"] != "HIGH" || flashOn["includeThoughts"] != true {
+		t.Fatalf("unexpected Gemini 3.6 Flash on config: %#v", flashOn)
 	}
 	if got := geminiThinkingConfig("gemini-3.1-pro-preview", false); got["includeThoughts"] != true {
 		t.Fatalf("Gemini 3.1 Pro thinking must remain enabled: %#v", got)

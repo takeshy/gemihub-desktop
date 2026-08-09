@@ -345,7 +345,7 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
 	encoder := json.NewEncoder(stdin)
-	if _, err := callCodexRPC(scanner, encoder, 1, "initialize", map[string]any{"clientInfo": map[string]any{"name": "gemihub_desktop", "title": appName, "version": "1.0.0"}}, nil); err != nil {
+	if _, err := callCodexRPC(scanner, encoder, 1, "initialize", map[string]any{"clientInfo": map[string]any{"name": "gemihub_desktop", "title": appName, "version": "1.1.0"}}, nil); err != nil {
 		return nil, codexAppServerError(err, stderr.String())
 	}
 	if err := writeCodexRPC(encoder, map[string]any{"method": "initialized", "params": map[string]any{}}); err != nil {

@@ -72,6 +72,7 @@ import {
   readFile,
   readMemoFile,
   readWorkspaceFile,
+  renameWorkspaceFile,
   writeBinaryFile,
   writeFile,
   writeWorkspaceBinaryFile,
@@ -2447,6 +2448,7 @@ export function SecretManagerDashboardWidget(
     ),
     [viewPassword, setViewPassword] = useState(""),
     [viewValue, setViewValue] = useState<string | null>(null),
+    [viewDirectory, setViewDirectory] = useState(""),
     [editMode, setEditMode] = useState(false),
     [copied, setCopied] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
@@ -2561,6 +2563,14 @@ export function SecretManagerDashboardWidget(
     setViewValue(null);
     setEditMode(false);
     setCopied(false);
+    const relative = folder && entry.path.startsWith(`${folder}/`)
+      ? entry.path.slice(folder.length + 1)
+      : entry.path;
+    setViewDirectory(
+      relative.includes("/")
+        ? relative.slice(0, relative.lastIndexOf("/"))
+        : "",
+    );
     setError("");
     setDescription(entry.description);
     setMetadataFields(
@@ -2607,6 +2617,30 @@ export function SecretManagerDashboardWidget(
     if (!viewing || viewValue === null || !viewPassword) return;
     setBusy(true);
     try {
+      const normalizedDirectory = viewDirectory.replaceAll("\\", "/")
+        .replace(/^\/+|\/+$/g, "");
+      if (
+        normalizedDirectory &&
+        normalizedDirectory.split("/").some((part) =>
+          !part || part === "." || part === ".."
+        )
+      ) {
+        throw new Error("Secret directory contains an invalid path segment.");
+      }
+      const nextPrefix = [folder, normalizedDirectory].filter(Boolean).join(
+        "/",
+      );
+      const nextPath = `${nextPrefix ? `${nextPrefix}/` : ""}${
+        baseName(viewing.path)
+      }`;
+      if (
+        nextPath !== viewing.path &&
+        (entries || []).some((entry) => entry.path === nextPath)
+      ) {
+        throw new Error(
+          "A secret with this name already exists in that directory.",
+        );
+      }
       const encrypted = await reencryptFileContent(
         viewing.content,
         viewValue,
@@ -2617,17 +2651,26 @@ export function SecretManagerDashboardWidget(
         publicMetadata: metadataRecord(metadataFields),
       });
       await writeWorkspaceFile(viewing.path, nextContent);
+      if (nextPath !== viewing.path) {
+        await renameWorkspaceFile(viewing.path, nextPath);
+      }
       await load();
       setViewing({
         ...viewing,
+        path: nextPath,
         content: nextContent,
         description,
         publicMetadata: metadataRecord(metadataFields),
       });
       setEditMode(false);
       setError("");
-    } catch {
-      setError("Could not update the secret. Check the password.");
+      window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not update the secret. Check the password.",
+      );
     } finally {
       setBusy(false);
     }
@@ -3011,6 +3054,13 @@ export function SecretManagerDashboardWidget(
             : editMode
             ? (
               <form className="secret-dialog-form" onSubmit={update}>
+                <label>
+                  Directory<input
+                    value={viewDirectory}
+                    onChange={(event) => setViewDirectory(event.target.value)}
+                    placeholder="Optional path below the secret folder"
+                  />
+                </label>
                 <label>
                   Description<textarea
                     rows={3}

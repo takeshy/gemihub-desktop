@@ -93,7 +93,7 @@ function responseResult(
 
 export const MCP_PROTOCOL_VERSION = "2026-07-28";
 const LEGACY_PROTOCOL_VERSION = "2025-11-25";
-const CLIENT_INFO = { name: "gemihub-desktop", version: "1.0.0" } as const;
+const CLIENT_INFO = { name: "gemihub-desktop", version: "1.1.0" } as const;
 type ProtocolMode = "unknown" | "modern" | "legacy";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
