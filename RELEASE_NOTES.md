@@ -1,13 +1,15 @@
-# GemiHub Desktop v1.1.0
+# GemiHub Desktop v1.2.0
 
 ## What's new
 
-- Updated MCP HTTP compatibility with modern stateless transport negotiation,
-  legacy session fallback, pagination, and OAuth resource indicators.
-- Added Gemini 3.6 Flash and Gemini 3.5 Flash Lite support, including migration
-  from older Flash Lite settings.
-- Improved Secret Manager directory organization and Timeline loading behavior.
-- Added Linux builds for both WebKitGTK 4.1 and 4.0 distributions.
+- Added Agent Plugins v1 support for installing portable Agent Skills and stdio
+  or Streamable HTTP MCP servers from public GitHub repositories.
+- Added pinned release/branch installs, update previews, enable/disable controls,
+  and uninstall support for Agent Plugins.
+- Hardened Agent Plugin installation with manifest, repository, commit, path,
+  size, executable, and Skill metadata validation at the backend boundary.
+- MCP approval and credentials are now retained during an Agent Plugin update
+  only when the server connection definition is unchanged.
 
 GemiHub Desktop is a local-first desktop workspace that brings files, AI chat,
 dashboards, workflows, memos, and plugins together in one application.

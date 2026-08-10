@@ -175,7 +175,11 @@ export async function discoverWorkspaceSkills(): Promise<WorkspaceSkill[]> {
       return parsed ? { ...parsed, name: id, description: item.description, references: item.references ?? [], folderPath: `agent-plugins/${plugin.name}/skills/${item.name}`, skillFilePath: `agent-plugins/${plugin.name}/${item.path}`, agentPluginRevision: plugin.commitSha } : null;
     });
   }));
-  const agentSkills = agentResults.flatMap((result) => result.status === "fulfilled" ? result.value : []).filter((skill): skill is WorkspaceSkill => skill !== null);
+  const agentSkills: WorkspaceSkill[] = [];
+  for (const result of agentResults) {
+    if (result.status !== "fulfilled") continue;
+    for (const skill of result.value) if (skill) agentSkills.push(skill);
+  }
   return [...getBuiltinSkillMetadata(), ...agentSkills, ...loaded.filter((skill): skill is WorkspaceSkill => skill !== null)]
     .sort((left, right) => Number(right.builtin) - Number(left.builtin) || left.name.localeCompare(right.name));
 }

@@ -45,7 +45,7 @@ import type {
 import { SkillWorkflowToolHost } from "../skills/SkillWorkflowToolHost";
 import { AgentPluginsSection } from "../agentPlugins/AgentPluginsSection";
 import { listAgentPlugins } from "../lib/wailsBackend";
-import { loadInstalledAgentPlugin } from "../agentPlugins/manager";
+import { loadInstalledAgentPlugin, mergeAgentPluginMcpServer } from "../agentPlugins/manager";
 import {
   checkPluginUpdate,
   installPluginRelease,
@@ -247,7 +247,7 @@ export function PluginHost({
           const contents = loaded.get(plugin.name);
           if (!contents) return previous;
           const byName = new Map(previous.map((server) => [server.agentPlugin!.serverName, server]));
-          return contents.mcpServers.map((server) => { const old = byName.get(server.agentPlugin!.serverName); return { ...server, enabled: old?.enabled ?? false, verified: old?.verified ?? false, toolHints: old?.toolHints ?? [], oauth: old?.oauth ?? server.oauth, oauthClientId: old?.oauthClientId, oauthClientSecret: old?.oauthClientSecret, oauthScopes: old?.oauthScopes }; });
+          return contents.mcpServers.map((server) => mergeAgentPluginMcpServer(server, byName.get(server.agentPlugin!.serverName)));
         });
         const next = [...unmanaged, ...managed];
         return JSON.stringify(next) === JSON.stringify(current.mcpServers) ? current : { ...current, mcpServers: next };

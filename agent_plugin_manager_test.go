@@ -56,6 +56,26 @@ func TestAgentPluginRejectsUnsafePackage(t *testing.T) {
 	}
 }
 
+func TestAgentPluginValidatesPinnedMetadataAndManifestAtBackendBoundary(t *testing.T) {
+	app := NewApp()
+	if _, err := app.SetDirectoryBase(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	validManifest := base64.StdEncoding.EncodeToString([]byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"demo"}`))
+	validMetadata := `{"name":"demo","repo":"owner/repo","version":"1.0.0","sourceType":"release","sourceRef":"v1.0.0","commitSha":"0123456789012345678901234567890123456789","enabled":true}`
+	if err := app.InstallAgentPlugin("demo", map[string]string{"plugin.json": validManifest}, validMetadata); err != nil {
+		t.Fatalf("valid package rejected: %v", err)
+	}
+	wrongManifest := base64.StdEncoding.EncodeToString([]byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"other"}`))
+	if err := app.InstallAgentPlugin("demo", map[string]string{"plugin.json": wrongManifest}, validMetadata); err == nil {
+		t.Fatal("manifest name mismatch accepted")
+	}
+	badCommit := `{"name":"demo","repo":"owner/repo","version":"1.0.0","sourceType":"release","sourceRef":"v1.0.0","commitSha":"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz","enabled":true}`
+	if err := app.InstallAgentPlugin("demo", map[string]string{"plugin.json": validManifest}, badCommit); err == nil {
+		t.Fatal("non-hex commit SHA accepted")
+	}
+}
+
 func TestListAgentPluginsBeforeManagerDirectoryExists(t *testing.T) {
 	app := NewApp()
 	if _, err := app.SetDirectoryBase(t.TempDir()); err != nil {

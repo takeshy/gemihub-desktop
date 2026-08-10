@@ -12,6 +12,17 @@ assetを取得してインストールします。有効化、update、uninstall
 viewを表示します。隣の設定ボタンは、そのPluginが登録したsettings
 tabを直接開きます。
 
+# Agent Plugins
+
+同じ管理画面から、[Agent Plugins v1.0.0](https://agent-plugins.org/)対応packageを公開GitHub
+repositoryからpreviewしてinstallできます。Agent Pluginに含まれるAgent Skillsとstdio／Streamable HTTP MCP
+Serverは、GemiHub固有のUI Pluginとは別に管理されます。install元のreleaseまたはdefault branchとcommit
+SHAを記録するため、更新を確認して固定された内容をinstallできます。有効状態を保ったまま更新でき、uninstallするとpackage管理されたSkillとMCP設定が削除されます。
+
+install時にはmanifest schemaとname、repository、commit SHA、path、file size、実行file、Skill metadataをDesktop
+backendでも検証します。MCP Serverはinstall直後は無効で、接続testを通してから有効化します。更新後も接続定義が同じ場合だけ承認・OAuth
+設定を引き継ぎ、command、URL、header、environmentなどが変わった場合は再確認が必要です。
+
 Pluginが`location: "main"`のviewを登録すると、Desktopはそのviewを暗黙のPluginWidgetとしてDashboardへ追加します。同じtypeのwidgetがすでにあればconfigと登録定義を更新して再利用し、どちらの場合もwidgetを最大化します。main
 viewが`extensions`を宣言している場合、その拡張子のファイルを開く操作は汎用File
 widgetを作らず、対応するPluginWidgetへ自動的にルーティングされます。旧Desktop

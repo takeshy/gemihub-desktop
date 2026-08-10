@@ -14,6 +14,11 @@ import (
 const maxAgentPluginInstallBytes = 50 * 1024 * 1024
 
 var agentPluginReadableFilePattern = regexp.MustCompile(`^skills/[^/]+/(?:SKILL\.md|references/.+)$`)
+var agentPluginRepoPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$`)
+var agentPluginCommitPattern = regexp.MustCompile(`^[0-9A-Fa-f]{40}$`)
+var agentPluginSkillNamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`)
+
+const agentPluginSchema = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 
 type AgentPluginInstall struct {
 	Name        string   `json:"name"`
@@ -30,6 +35,11 @@ type AgentPluginInstall struct {
 type AgentPluginFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+}
+
+type agentPluginManifest struct {
+	Schema string `json:"$schema"`
+	Name   string `json:"name"`
 }
 
 func safeAgentPluginName(name string) bool {
@@ -51,13 +61,13 @@ func (a *App) InstallAgentPlugin(name string, files map[string]string, installJS
 		return fmt.Errorf("plugin.json is required")
 	}
 	var install AgentPluginInstall
-	if err := json.Unmarshal([]byte(installJSON), &install); err != nil || install.Name != name || install.Repo == "" || len(install.CommitSHA) != 40 {
+	if err := json.Unmarshal([]byte(installJSON), &install); err != nil || install.Name != name || !agentPluginRepoPattern.MatchString(install.Repo) || !agentPluginCommitPattern.MatchString(install.CommitSHA) || (install.SourceType != "release" && install.SourceType != "branch") || install.SourceRef == "" || len(install.SourceRef) > 255 || install.Version == "" || len(install.Version) > 255 {
 		return fmt.Errorf("invalid Agent Plugin install metadata")
 	}
 	decoded := make(map[string][]byte, len(files))
 	executables := make(map[string]bool, len(install.Executables))
 	for _, path := range install.Executables {
-		if !safePluginRelativePath(path) {
+		if !safePluginRelativePath(path) || executables[path] {
 			return fmt.Errorf("unsafe executable path: %s", path)
 		}
 		executables[path] = true
@@ -76,6 +86,25 @@ func (a *App) InstallAgentPlugin(name string, files map[string]string, installJS
 			return fmt.Errorf("Agent Plugin package exceeds size limit")
 		}
 		decoded[path] = content
+	}
+	var manifest agentPluginManifest
+	if err := json.Unmarshal(decoded["plugin.json"], &manifest); err != nil || manifest.Schema != agentPluginSchema || manifest.Name != name {
+		return fmt.Errorf("plugin.json schema or name is invalid")
+	}
+	seenSkills := make(map[string]bool, len(install.SkillNames))
+	for _, skillName := range install.SkillNames {
+		if len(skillName) > 64 || !agentPluginSkillNamePattern.MatchString(skillName) || strings.Contains(skillName, "--") || seenSkills[skillName] {
+			return fmt.Errorf("invalid Agent Skill name: %s", skillName)
+		}
+		if _, ok := decoded["skills/"+skillName+"/SKILL.md"]; !ok {
+			return fmt.Errorf("Agent Skill file is missing: %s", skillName)
+		}
+		seenSkills[skillName] = true
+	}
+	for path := range executables {
+		if _, ok := decoded[path]; !ok {
+			return fmt.Errorf("executable file is missing: %s", path)
+		}
 	}
 	root, err := a.directoryPath(".llm-hub/agent-plugins", true)
 	if err != nil {

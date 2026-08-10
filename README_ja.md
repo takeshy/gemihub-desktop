@@ -65,7 +65,8 @@ GemiHub Desktopは、内蔵のドキュメント機能やAI機能だけに限定
 
 同じ画面から、ポータブルな[Agent Plugins v1.0.0](https://agent-plugins.org/)も利用できます。公開GitHub
 packageをpreviewしてinstallすると、含まれるAgent Skillsとstdio／Streamable HTTP MCP
-Serverが追加されます。packageはcommitへ固定され、GemiHub固有のUI Pluginとは独立して有効化、更新、削除できます。
+Serverが追加されます。packageはcommitへ固定され、GemiHub固有のUI Pluginとは独立して有効化、更新、削除できます。更新内容はinstall前にpreviewされ、MCP
+Serverはtest後にのみ有効化できます。更新で接続設定が変わった場合、以前の承認は自動的に解除されます。
 
 - **[Audio Score](https://github.com/takeshy/hub-audio-score)**：機械学習による音高検出、音源分離、MIDI入出力、PDF出力、任意のAIコード解析を使い、音声から再生可能な楽譜を作成します。
 - **[Accounting](https://github.com/takeshy/hub-accounting)**：Beancount互換の複式簿記、取引入力、検証、財務レポートを追加し、帳簿はplain textのまま保持します。

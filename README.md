@@ -95,7 +95,9 @@ to the same local Workspace:
 The same screen also supports portable [Agent Plugins v1.0.0](https://agent-plugins.org/).
 Preview and install a public GitHub package to add its Agent Skills and stdio or
 Streamable HTTP MCP servers. Packages are pinned to a commit and can be disabled,
-updated, or removed independently from GemiHub UI plugins.
+updated, or removed independently from GemiHub UI plugins. Updates are previewed
+before installation, and an MCP server must be tested before it can be enabled;
+approval is cleared automatically if an update changes its connection details.
 
 - **[Audio Score](https://github.com/takeshy/hub-audio-score)** turns audio into
   playable sheet music with ML pitch detection, source separation, MIDI import
