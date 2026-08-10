@@ -59,6 +59,7 @@ func TestAgentPluginStdioInjectsReservedEnvironmentAndContainsCWD(t *testing.T) 
 	if _, err := app.SetWorkspaceDirectory(base); err != nil {
 		t.Fatal(err)
 	}
+	base = app.GetWorkspacePath()
 	root := filepath.Join(base, ".llm-hub", "agent-plugins", "demo")
 	data := filepath.Join(base, ".llm-hub", "agent-plugin-data", "demo")
 	if err := os.MkdirAll(root, 0o755); err != nil {
