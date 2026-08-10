@@ -2,6 +2,8 @@ import yaml from "js-yaml";
 import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile, type ChatToolDefinition } from "../lib/wailsBackend";
 import { getBuiltinSkillMetadata, isBuiltinSkillPath, loadBuiltinSkill } from "./builtinSkills";
 import { findWorkflowBlocks } from "../workflow/parser";
+import { listAgentPlugins } from "../lib/wailsBackend";
+import { loadInstalledAgentPlugin } from "../agentPlugins/manager";
 
 export interface SkillWorkflowRef {
   path: string;
@@ -18,6 +20,7 @@ export interface WorkspaceSkill {
   references: string[];
   workflows: SkillWorkflowRef[];
   builtin?: boolean;
+  agentPluginRevision?: string;
 }
 
 export interface SkillWorkflowEntry {
@@ -163,7 +166,17 @@ export async function discoverWorkspaceSkills(): Promise<WorkspaceSkill[]> {
     const file = await readWorkspaceFile(path);
     return file ? parseWorkspaceSkill(path, file.content) : null;
   }));
-  return [...getBuiltinSkillMetadata(), ...loaded.filter((skill): skill is WorkspaceSkill => skill !== null)]
+  const agentPackages = await listAgentPlugins();
+  const agentResults = await Promise.allSettled(agentPackages.filter((plugin) => plugin.enabled).map(async (plugin) => {
+    const contents = await loadInstalledAgentPlugin(plugin.name, "", plugin.commitSha);
+    return contents.skills.map((item) => {
+      const id = `${plugin.name}.${item.name}`;
+      const parsed = parseWorkspaceSkill(`skills/${id}/SKILL.md`, item.content);
+      return parsed ? { ...parsed, name: id, description: item.description, references: item.references ?? [], folderPath: `agent-plugins/${plugin.name}/skills/${item.name}`, skillFilePath: `agent-plugins/${plugin.name}/${item.path}`, agentPluginRevision: plugin.commitSha } : null;
+    });
+  }));
+  const agentSkills = agentResults.flatMap((result) => result.status === "fulfilled" ? result.value : []).filter((skill): skill is WorkspaceSkill => skill !== null);
+  return [...getBuiltinSkillMetadata(), ...agentSkills, ...loaded.filter((skill): skill is WorkspaceSkill => skill !== null)]
     .sort((left, right) => Number(right.builtin) - Number(left.builtin) || left.name.localeCompare(right.name));
 }
 
@@ -172,6 +185,12 @@ export async function loadActiveSkillContents(skills: WorkspaceSkill[]): Promise
   const inventory = await listWorkspaceFiles();
   return await Promise.all(skills.map(async (skill) => {
     if (isBuiltinSkillPath(skill.folderPath)) return loadBuiltinSkill(skill.folderPath) ?? skill;
+    if (skill.folderPath.startsWith("agent-plugins/")) {
+      const parts = skill.folderPath.split("/");
+      const loaded = await loadInstalledAgentPlugin(parts[1], "", skill.agentPluginRevision);
+      const source = loaded.skills.find((item) => item.name === parts[3]);
+      return source ? { ...skill, instructions: parseWorkspaceSkill(`skills/${parts[3]}/SKILL.md`, source.content)?.instructions ?? skill.instructions, references: source.references ?? [] } : skill;
+    }
     const prefix = `${skill.folderPath}/references/`.toLowerCase();
     const paths = inventory.filter((entry) => !entry.binary && entry.path.toLowerCase().startsWith(prefix)).map((entry) => entry.path).sort();
     const references = (await Promise.all(paths.map(async (path) => {

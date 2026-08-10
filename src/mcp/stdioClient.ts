@@ -14,7 +14,7 @@ export class McpStdioClient {
 
   async initialize(): Promise<void> {
     if (this.sessionID) return;
-    this.sessionID = await mcpStdioStart({ name: this.server.name, command: this.server.command, args: this.server.args, env: this.server.env, framing: this.server.framing });
+    this.sessionID = await mcpStdioStart({ name: this.server.name, command: this.server.command, args: this.server.args, env: this.server.env, cwd: this.server.cwd, pluginRoot: this.server.pluginRoot, pluginData: this.server.pluginData, framing: this.server.framing });
     try {
       let initialized = false, lastError: unknown;
       for (const protocolVersion of ["2025-03-26", "2024-11-05"]) {

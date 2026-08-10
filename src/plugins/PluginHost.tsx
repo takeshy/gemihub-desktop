@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import {
   Bot,
@@ -43,6 +43,9 @@ import type {
   PluginView,
 } from "./types";
 import { SkillWorkflowToolHost } from "../skills/SkillWorkflowToolHost";
+import { AgentPluginsSection } from "../agentPlugins/AgentPluginsSection";
+import { listAgentPlugins } from "../lib/wailsBackend";
+import { loadInstalledAgentPlugin } from "../agentPlugins/manager";
 import {
   checkPluginUpdate,
   installPluginRelease,
@@ -175,7 +178,7 @@ export function PluginHost({
   ) => void;
   onOpenPluginSettings: () => void;
   chatSettings: ChatSettings;
-  onChatSettingsChange: (settings: ChatSettings) => void;
+  onChatSettingsChange: Dispatch<SetStateAction<ChatSettings>>;
   activeFile: { path: string; content: string } | null;
   onOpenChatSettings: () => void;
   onOpenRAGSettings: () => void;
@@ -221,7 +224,37 @@ export function PluginHost({
   const [pluginBusy, setPluginBusy] = useState<string | null>(null);
   const [managerMessage, setManagerMessage] = useState("");
   const [pluginRefresh, setPluginRefresh] = useState(0);
+  const [agentPluginRefresh, setAgentPluginRefresh] = useState(0);
   const instancesRef = useRef<PluginInstance[]>([]);
+
+  useEffect(() => {
+    if (!workspaceBase) return;
+    let cancelled = false;
+    void (async () => {
+      const installed = await listAgentPlugins();
+      const enabled = installed.filter((item) => item.enabled);
+      const settled = await Promise.allSettled(enabled.map(async (item) => ({ name: item.name, package: await loadInstalledAgentPlugin(item.name, workspaceBase) })));
+      if (cancelled) return;
+      const loaded = new Map(settled.flatMap((result) => result.status === "fulfilled" ? [[result.value.name, result.value.package] as const] : []));
+      const installedNames = new Set(installed.map((item) => item.name));
+      onChatSettingsChange((current) => {
+        const unmanaged = current.mcpServers.filter((server) => !server.agentPlugin);
+        const previousByPlugin = new Map<string, typeof current.mcpServers>();
+        for (const server of current.mcpServers) if (server.agentPlugin && installedNames.has(server.agentPlugin.pluginName)) previousByPlugin.set(server.agentPlugin.pluginName, [...(previousByPlugin.get(server.agentPlugin.pluginName) ?? []), server]);
+        const managed = installed.flatMap((plugin) => {
+          const previous = previousByPlugin.get(plugin.name) ?? [];
+          if (!plugin.enabled) return previous.map((server) => ({ ...server, enabled: false }));
+          const contents = loaded.get(plugin.name);
+          if (!contents) return previous;
+          const byName = new Map(previous.map((server) => [server.agentPlugin!.serverName, server]));
+          return contents.mcpServers.map((server) => { const old = byName.get(server.agentPlugin!.serverName); return { ...server, enabled: old?.enabled ?? false, verified: old?.verified ?? false, toolHints: old?.toolHints ?? [], oauth: old?.oauth ?? server.oauth, oauthClientId: old?.oauthClientId, oauthClientSecret: old?.oauthClientSecret, oauthScopes: old?.oauthScopes }; });
+        });
+        const next = [...unmanaged, ...managed];
+        return JSON.stringify(next) === JSON.stringify(current.mcpServers) ? current : { ...current, mcpServers: next };
+      });
+    })().catch((error) => { if (!cancelled) console.error("Failed to synchronize Agent Plugins:", error); });
+    return () => { cancelled = true; };
+  }, [agentPluginRefresh, onChatSettingsChange, workspaceBase]);
   const apiMapRef = useRef(new Map<string, PluginAPI>());
   const handledPluginViewRequestRef = useRef(0);
   const handledPluginFileRef = useRef("");
@@ -951,6 +984,7 @@ export function PluginHost({
           {managerMessage && (
             <p className="plugin-manager-message">{managerMessage}</p>
           )}
+          {workspaceBase && <AgentPluginsSection workspaceBase={workspaceBase} onChanged={() => setAgentPluginRefresh((value) => value + 1)} />}
           {manifests.map((manifest) => {
             const config = configs.find((item) => item.id === manifest.id);
             const enabled = !!config?.enabled;

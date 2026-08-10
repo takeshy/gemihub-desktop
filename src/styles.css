@@ -14283,3 +14283,11 @@ body.resizing-modal {
   cursor: default;
   box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
 }
+.agent-plugin-manager { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border-color, #d1d5db); display: grid; gap: 10px; }
+.agent-plugin-manager > header small, .agent-plugin-manager article small { display: block; opacity: .7; }
+.agent-plugin-manager > article { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border-color, #d1d5db); border-radius: 8px; padding: 10px; }
+.agent-plugin-preview { position: relative; align-items: flex-start !important; flex-direction: column; background: color-mix(in srgb, var(--accent-color, #3b82f6) 8%, transparent); }
+.agent-plugin-preview-close { position: absolute; top: 6px; right: 6px; }
+.agent-plugin-warning { color: #b7791f; }
+.agent-plugin-preview code { display: block; max-width: 100%; overflow-wrap: anywhere; }
+.agent-plugin-component-title { margin-top: 4px; }

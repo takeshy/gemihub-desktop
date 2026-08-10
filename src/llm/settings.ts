@@ -36,6 +36,9 @@ export interface MCPServerConfig {
   command: string;
   args: string[];
   env: Record<string, string>;
+  cwd?: string;
+  pluginRoot?: string;
+  pluginData?: string;
   framing: "content-length" | "newline";
   enabled: boolean;
   toolHints: string[];
@@ -44,6 +47,7 @@ export interface MCPServerConfig {
   oauthClientId?: string;
   oauthClientSecret?: string;
   oauthScopes?: string[];
+  agentPlugin?: { pluginName: string; serverName: string };
 }
 
 export interface APIProviderProfile {
@@ -657,6 +661,9 @@ export function loadChatSettings(): ChatSettings {
             command: server.command || "",
             args: Array.isArray(server.args) ? server.args : [],
             env: server.env && typeof server.env === "object" ? server.env : {},
+            cwd: typeof server.cwd === "string" ? server.cwd : undefined,
+            pluginRoot: typeof server.pluginRoot === "string" ? server.pluginRoot : undefined,
+            pluginData: typeof server.pluginData === "string" ? server.pluginData : undefined,
             framing: server.framing === "newline"
               ? "newline"
               : "content-length",
@@ -675,6 +682,7 @@ export function loadChatSettings(): ChatSettings {
                 typeof scope === "string"
               )
               : [],
+            agentPlugin: server.agentPlugin && typeof server.agentPlugin.pluginName === "string" && typeof server.agentPlugin.serverName === "string" ? server.agentPlugin : undefined,
           };
         })
         : [],

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,11 +16,14 @@ import (
 )
 
 type MCPStdioStartRequest struct {
-	Name    string            `json:"name"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env"`
-	Framing string            `json:"framing"`
+	Name       string            `json:"name"`
+	Command    string            `json:"command"`
+	Args       []string          `json:"args"`
+	Env        map[string]string `json:"env"`
+	CWD        string            `json:"cwd"`
+	PluginRoot string            `json:"pluginRoot"`
+	PluginData string            `json:"pluginData"`
+	Framing    string            `json:"framing"`
 }
 
 type mcpStdioSession struct {
@@ -37,18 +41,69 @@ func (a *App) MCPStdioStart(request MCPStdioStartRequest) (string, error) {
 	if command == "" {
 		return "", fmt.Errorf("MCP stdio command is required")
 	}
-	resolved, err := exec.LookPath(command)
+	pluginRoot, pluginData := "", ""
+	var err error
+	if request.PluginRoot != "" {
+		if request.PluginData == "" {
+			return "", fmt.Errorf("Agent Plugin data path is required")
+		}
+		pluginRoot, err = a.workspacePath(request.PluginRoot, false)
+		if err != nil {
+			return "", fmt.Errorf("invalid Agent Plugin root: %w", err)
+		}
+		pluginData, err = a.workspacePath(request.PluginData, true)
+		if err != nil {
+			return "", fmt.Errorf("invalid Agent Plugin data path: %w", err)
+		}
+		if err := os.MkdirAll(pluginData, 0o755); err != nil {
+			return "", err
+		}
+	}
+	resolved := ""
+	if filepath.IsAbs(command) {
+		resolved, err = filepath.EvalSymlinks(command)
+		if err == nil && pluginRoot != "" {
+			err = requirePathInside(pluginRoot, resolved)
+		}
+	} else {
+		resolved, err = exec.LookPath(command)
+	}
 	if err != nil {
-		return "", fmt.Errorf("MCP stdio command not found: %s", command)
+		return "", fmt.Errorf("MCP stdio command is invalid or not found: %s", command)
 	}
 	cmd := exec.Command(resolved, request.Args...)
 	cmd.Dir = a.GetDirectoryBase()
+	if request.CWD != "" {
+		resolvedCWD, resolveErr := filepath.Abs(request.CWD)
+		if resolveErr != nil {
+			return "", resolveErr
+		}
+		if pluginRoot != "" {
+			insideRoot := requirePathInside(pluginRoot, resolvedCWD) == nil
+			insideData := requirePathInside(pluginData, resolvedCWD) == nil
+			if !insideRoot && !insideData {
+				return "", fmt.Errorf("Agent Plugin cwd is outside PLUGIN_ROOT and PLUGIN_DATA")
+			}
+			if insideData {
+				if err := os.MkdirAll(resolvedCWD, 0o755); err != nil {
+					return "", err
+				}
+			}
+		}
+		cmd.Dir = resolvedCWD
+	}
 	cmd.Env = os.Environ()
 	for key, value := range request.Env {
 		if strings.ContainsAny(key, "=\x00") {
 			return "", fmt.Errorf("invalid MCP environment variable name: %s", key)
 		}
+		if pluginRoot != "" && (strings.EqualFold(key, "PLUGIN_ROOT") || strings.EqualFold(key, "PLUGIN_DATA")) {
+			return "", fmt.Errorf("reserved Agent Plugin environment variable: %s", key)
+		}
 		cmd.Env = append(cmd.Env, key+"="+value)
+	}
+	if pluginRoot != "" {
+		cmd.Env = append(cmd.Env, "PLUGIN_ROOT="+pluginRoot, "PLUGIN_DATA="+pluginData)
 	}
 	configureCLIProcess(cmd)
 	stdin, err := cmd.StdinPipe()

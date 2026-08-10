@@ -63,6 +63,10 @@ MCP Server、Agent Skill、OKF bundle、PluginとAIをフルで活用できる�
 GemiHub Desktopは、内蔵のドキュメント機能やAI機能だけに限定されません。**Settings
 → Plugins**からPluginを追加すると、用途に特化したアプリケーションを同じローカルWorkspace内で利用できます。
 
+同じ画面から、ポータブルな[Agent Plugins v1.0.0](https://agent-plugins.org/)も利用できます。公開GitHub
+packageをpreviewしてinstallすると、含まれるAgent Skillsとstdio／Streamable HTTP MCP
+Serverが追加されます。packageはcommitへ固定され、GemiHub固有のUI Pluginとは独立して有効化、更新、削除できます。
+
 - **[Audio Score](https://github.com/takeshy/hub-audio-score)**：機械学習による音高検出、音源分離、MIDI入出力、PDF出力、任意のAIコード解析を使い、音声から再生可能な楽譜を作成します。
 - **[Accounting](https://github.com/takeshy/hub-accounting)**：Beancount互換の複式簿記、取引入力、検証、財務レポートを追加し、帳簿はplain textのまま保持します。
 - **[Ronginus](https://github.com/takeshy/hub-ronginus)**：設定済みの複数AI・ローカルmodelへ異なる役割を与えて討論させ、結論と投票結果をまとめます。
