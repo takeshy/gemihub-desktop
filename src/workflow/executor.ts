@@ -47,6 +47,7 @@ import {
 import { showWorkflowMcpApp, type WorkflowMcpApp } from "./McpAppHost";
 import { discoverMcpHttpTools } from "../mcp/httpClient";
 import { discoverMcpStdioTools, McpStdioClient } from "../mcp/stdioClient";
+import { applyMcpAppCsp, type McpAppResource } from "../mcp/appCsp";
 import type {
   Workflow,
   WorkflowLog,
@@ -481,7 +482,7 @@ async function mcpAppFromResult(
   title: string,
 ): Promise<WorkflowMcpApp | undefined> {
   const content = Array.isArray(result.content)
-    ? result.content as Array<{ resource?: { text?: string; blob?: string } }>
+    ? result.content as Array<{ resource?: McpAppResource }>
     : [];
   const meta = result._meta && typeof result._meta === "object"
     ? result._meta as Record<string, unknown>
@@ -502,6 +503,7 @@ async function mcpAppFromResult(
       throw new Error("MCP App resource could not be decoded.");
     }
   }
+  if (html) html = applyMcpAppCsp(html, resource ?? {});
   return html
     ? {
       title,
@@ -616,12 +618,7 @@ async function callMcpTool(
         {
           type?: string;
           text?: string;
-          resource?: {
-            uri?: string;
-            mimeType?: string;
-            text?: string;
-            blob?: string;
-          };
+          resource?: McpAppResource;
         }
       >
       : [];
@@ -640,9 +637,7 @@ async function callMcpTool(
     if (!resource && resourceUri) {
       const read = await send("resources/read", { uri: resourceUri });
       const resources = Array.isArray(read.contents)
-        ? read.contents as Array<
-          { uri?: string; mimeType?: string; text?: string; blob?: string }
-        >
+        ? read.contents as McpAppResource[]
         : [];
       resource = resources[0];
     }
@@ -654,6 +649,7 @@ async function callMcpTool(
         throw new Error("MCP App resource could not be decoded.");
       }
     }
+    if (html) html = applyMcpAppCsp(html, resource ?? {});
     const app = html
       ? {
         title: tool,

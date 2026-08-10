@@ -9,6 +9,7 @@ import {
   normalizeMcpInputSchema,
   storeMcpTools,
 } from "./toolSchema";
+import type { McpAppResource } from "./appCsp";
 
 export interface McpHttpServerConfig {
   id?: string;
@@ -291,14 +292,10 @@ export class McpHttpClient {
 
   async readResource(
     uri: string,
-  ): Promise<
-    { uri?: string; mimeType?: string; text?: string; blob?: string } | null
-  > {
+  ): Promise<McpAppResource | null> {
     const result = await this.send("resources/read", { uri });
     const contents = Array.isArray(result.contents)
-      ? result.contents as Array<
-        { uri?: string; mimeType?: string; text?: string; blob?: string }
-      >
+      ? result.contents as McpAppResource[]
       : [];
     return contents[0] ?? null;
   }

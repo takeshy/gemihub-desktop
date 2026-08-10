@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import { installAgentPlugin, type AgentPluginFile, readAgentPluginFiles } from "../lib/wailsBackend";
+import { installAgentPlugin, type AgentPluginFile, type AgentPluginInstall, readAgentPluginFiles } from "../lib/wailsBackend";
 import type { MCPServerConfig } from "../llm/settings";
 
 export const AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
@@ -126,6 +126,24 @@ export function mergeAgentPluginMcpServer(next: MCPServerConfig, previous?: MCPS
     : next.command === previous.command && next.cwd === previous.cwd && next.framing === previous.framing && next.args.length === previous.args.length && next.args.every((value, index) => value === previous.args[index]) && sameStringRecord(next.env, previous.env));
   if (!sameConnection) return next;
   return { ...next, enabled: previous.enabled, verified: previous.verified, toolHints: previous.toolHints, oauth: previous.oauth, oauthClientId: previous.oauthClientId, oauthClientSecret: previous.oauthClientSecret, oauthScopes: previous.oauthScopes };
+}
+
+/** Temporarily enable verified MCP servers from an enabled Agent Plugin when
+ * one of that package's Skills is active for the current chat turn. */
+export function resolveAgentPluginMcpServers(
+  servers: MCPServerConfig[],
+  activeSkillPaths: string[],
+  installs: AgentPluginInstall[],
+): MCPServerConfig[] {
+  const activePlugins = new Set<string>();
+  for (const path of activeSkillPaths) {
+    const match = path.replaceAll("\\", "/").match(/^(?:\.llm-hub\/)?agent-plugins\/([^/]+)\/skills\/[^/]+(?:\/SKILL\.md)?$/i);
+    if (match) activePlugins.add(match[1]);
+  }
+  const enabledPlugins = new Set(installs.filter((plugin) => plugin.enabled && activePlugins.has(plugin.name)).map((plugin) => plugin.name));
+  return servers.map((server) => server.enabled || !server.verified || !server.agentPlugin || !enabledPlugins.has(server.agentPlugin.pluginName)
+    ? server
+    : { ...server, enabled: true });
 }
 
 async function githubJSON<T>(url: string, optional = false): Promise<T | null> {

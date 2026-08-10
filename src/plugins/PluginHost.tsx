@@ -984,7 +984,7 @@ export function PluginHost({
           {managerMessage && (
             <p className="plugin-manager-message">{managerMessage}</p>
           )}
-          {workspaceBase && <AgentPluginsSection workspaceBase={workspaceBase} onChanged={() => setAgentPluginRefresh((value) => value + 1)} />}
+          {workspaceBase && <AgentPluginsSection workspaceBase={workspaceBase} mcpServers={chatSettings.mcpServers} onChanged={() => setAgentPluginRefresh((value) => value + 1)} onMcpServersTested={(pluginName, servers) => onChatSettingsChange((current) => ({ ...current, mcpServers: [...current.mcpServers.filter((server) => server.agentPlugin?.pluginName !== pluginName), ...servers] }))} />}
           {manifests.map((manifest) => {
             const config = configs.find((item) => item.id === manifest.id);
             const enabled = !!config?.enabled;

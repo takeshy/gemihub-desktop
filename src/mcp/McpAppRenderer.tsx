@@ -10,6 +10,7 @@ export function McpAppRenderer({ info }: { info: McpAppInfo }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const clientRef = useRef<AppClient | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [messageListenerReady, setMessageListenerReady] = useState(false);
 
   useEffect(() => {
     const getClient = () => {
@@ -23,22 +24,32 @@ export function McpAppRenderer({ info }: { info: McpAppInfo }) {
     const receive = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const message = event.data as { jsonrpc?: string; id?: string | number; method?: string; params?: Record<string, unknown> };
-      if (message.jsonrpc !== "2.0" || message.id === undefined) return;
+      if (message.jsonrpc !== "2.0") return;
       const respond = (payload: Record<string, unknown>) => iframeRef.current?.contentWindow?.postMessage({ jsonrpc: "2.0", id: message.id, ...payload }, "*");
-      if (message.method === "tools/call") {
+      if (message.method === "ui/initialize") {
+        if (message.id === undefined) return;
+        respond({ result: { protocolVersion: "2026-01-26", hostInfo: { name: "gemihub-desktop", version: "1.2.2" }, hostCapabilities: { serverTools: {} }, hostContext: { theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light", platform: "desktop", displayMode: "inline" } } });
+      } else if (message.method === "ui/notifications/initialized") {
+        iframeRef.current?.contentWindow?.postMessage({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: info.toolResult.content || [], isError: Boolean(info.toolResult.isError), structuredContent: info.toolResult.structuredContent } }, "*");
+      } else if (message.method === "tools/call") {
+        if (message.id === undefined) return;
         const name = typeof message.params?.name === "string" ? message.params.name : "";
         const args = message.params?.arguments && typeof message.params.arguments === "object" ? message.params.arguments as Record<string, unknown> : {};
         if (!name) { respond({ error: { code: -32602, message: "Invalid params: missing tool name" } }); return; }
         void getClient().callTool(name, args).then((result) => respond({ result })).catch((error) => respond({ error: { code: -32603, message: error instanceof Error ? error.message : String(error) } }));
-      } else if (message.method === "context/update") respond({ result: { success: true } });
-      else respond({ error: { code: -32601, message: `Method not found: ${message.method || ""}` } });
+      } else if (message.method === "context/update") {
+        if (message.id !== undefined) respond({ result: { success: true } });
+      } else if (message.id !== undefined) respond({ error: { code: -32601, message: `Method not found: ${message.method || ""}` } });
     };
     window.addEventListener("message", receive);
-    return () => { window.removeEventListener("message", receive); if (clientRef.current) void clientRef.current.close(); clientRef.current = null; };
+    setMessageListenerReady(true);
+    return () => { setMessageListenerReady(false); window.removeEventListener("message", receive); if (clientRef.current) void clientRef.current.close(); clientRef.current = null; };
   }, [info]);
 
   return <section className={`chat-mcp-app ${expanded ? "expanded" : ""}`}>
     <header><span><MonitorUp size={12} />MCP App · {info.title}</span><button type="button" onClick={() => setExpanded((value) => !value)} title={expanded ? "Collapse" : "Expand"}>{expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}</button></header>
-    <iframe ref={iframeRef} title={`MCP App ${info.title}`} srcDoc={info.html} sandbox="allow-scripts allow-forms" onLoad={() => iframeRef.current?.contentWindow?.postMessage({ jsonrpc: "2.0", method: "toolResult", params: { content: info.toolResult.content || [], isError: Boolean(info.toolResult.isError), structuredContent: info.toolResult.structuredContent } }, "*")} />
+    {messageListenerReady
+      ? <iframe ref={iframeRef} title={`MCP App ${info.title}`} srcDoc={info.html} sandbox="allow-scripts allow-forms" />
+      : <div className="chat-mcp-app-loading">Initializing MCP App…</div>}
   </section>;
 }

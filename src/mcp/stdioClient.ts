@@ -2,6 +2,7 @@ import { mcpStdioClose, mcpStdioRequest, mcpStdioStart, type ChatToolDefinition 
 import type { MCPServerConfig } from "../llm/settings";
 import { safeMcpName, type McpToolInfo } from "./httpClient";
 import { cachedMcpTools, normalizeMcpInputSchema, storeMcpTools } from "./toolSchema";
+import type { McpAppResource } from "./appCsp";
 
 export interface McpStdioToolBinding extends ChatToolDefinition {
   server: MCPServerConfig;
@@ -43,9 +44,9 @@ export class McpStdioClient {
     return await this.send("tools/call", { name, arguments: args });
   }
 
-  async readResource(uri: string): Promise<{ uri?: string; mimeType?: string; text?: string; blob?: string } | null> {
+  async readResource(uri: string): Promise<McpAppResource | null> {
     const result = await this.send("resources/read", { uri });
-    const contents = Array.isArray(result.contents) ? result.contents as Array<{ uri?: string; mimeType?: string; text?: string; blob?: string }> : [];
+    const contents = Array.isArray(result.contents) ? result.contents as McpAppResource[] : [];
     return contents[0] ?? null;
   }
 

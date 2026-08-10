@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert";
-import { AGENT_PLUGIN_MCP_SCHEMA, AGENT_PLUGIN_SCHEMA, mergeAgentPluginMcpServer, normalizeAgentPluginRepo, parseAgentPluginManifest, parseAgentPluginMcp, parseAgentPluginSkill } from "./manager.ts";
+import { AGENT_PLUGIN_MCP_SCHEMA, AGENT_PLUGIN_SCHEMA, mergeAgentPluginMcpServer, normalizeAgentPluginRepo, parseAgentPluginManifest, parseAgentPluginMcp, parseAgentPluginSkill, resolveAgentPluginMcpServers } from "./manager.ts";
 
 Deno.test("Agent Plugin manifest follows the closed v1 schema failure boundaries", () => {
   const parsed = parseAgentPluginManifest(JSON.stringify({ $schema: AGENT_PLUGIN_SCHEMA, name: "demo.plugin", unknown: true }));
@@ -53,4 +53,14 @@ Deno.test("Agent Plugin MCP approval is retained only for an unchanged connectio
   assertEquals(changed.enabled, false);
   assertEquals(changed.verified, false);
   assertEquals(changed.oauthClientSecret, undefined);
+});
+
+Deno.test("an active Agent Plugin Skill enables only its verified MCP servers for the chat turn", () => {
+  const parsed = parseAgentPluginMcp(JSON.stringify({ $schema: AGENT_PLUGIN_MCP_SCHEMA, mcpServers: { remote: { type: "streamable-http", url: "https://example.com/mcp" } } }), "demo");
+  const verified = { ...parsed.servers[0], verified: true, toolHints: ["search"] };
+  const installs = [{ name: "demo", repo: "owner/repo", version: "1.0.0", sourceType: "release" as const, sourceRef: "v1.0.0", commitSha: "a".repeat(40), enabled: true, skillNames: ["review"] }];
+  assertEquals(resolveAgentPluginMcpServers([verified], ["agent-plugins/demo/skills/review/SKILL.md"], installs)[0].enabled, true);
+  assertEquals(resolveAgentPluginMcpServers([{ ...verified, verified: false }], ["agent-plugins/demo/skills/review/SKILL.md"], installs)[0].enabled, false);
+  assertEquals(resolveAgentPluginMcpServers([verified], ["agent-plugins/other/skills/review/SKILL.md"], installs)[0].enabled, false);
+  assertEquals(resolveAgentPluginMcpServers([verified], ["agent-plugins/demo/skills/review/SKILL.md"], [{ ...installs[0], enabled: false }])[0].enabled, false);
 });

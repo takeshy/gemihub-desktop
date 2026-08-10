@@ -28,6 +28,7 @@ import {
   type ChatMessage,
   type ChatStreamEvent,
   listWorkspaceFiles,
+  listAgentPlugins,
   onChatFunctionLimitRequest,
   onChatStream,
   onChatToolRequest,
@@ -42,6 +43,7 @@ import {
   stopCLI,
   writeWorkspaceStateFile,
 } from "../lib/wailsBackend";
+import { resolveAgentPluginMcpServers } from "../agentPlugins/manager";
 import {
   buildSkillSystemPrompt,
   collectSkillWorkflows,
@@ -1608,7 +1610,7 @@ export function ChatPanel({
       );
       const slashMcpNames = invokedCommand?.enabledMcpServers;
       const sessionMcpNames = activeSession?.activeMcpServerNames;
-      const selectedMcpServers = slashMcpNames != null
+      const configuredMcpServers = slashMcpNames != null
         ? settings.mcpServers.map((server) => ({
           ...server,
           enabled: slashMcpNames.includes(server.name),
@@ -1619,6 +1621,11 @@ export function ChatPanel({
           enabled: server.enabled && sessionMcpNames.includes(server.name),
         }))
         : settings.mcpServers;
+      const selectedMcpServers = resolveAgentPluginMcpServers(
+        configuredMcpServers,
+        skillMetadataAtSend.map((skill) => skill.skillFilePath),
+        await listAgentPlugins().catch(() => []),
+      );
       const effectiveMcpServers = selectedMcpServers.map((server) => {
         const configuredProjectId = server.headers["x-goog-user-project"] ||
           server.headers["X-Goog-User-Project"];

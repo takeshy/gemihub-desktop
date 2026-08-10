@@ -1,4 +1,4 @@
-# GemiHub Desktop v1.2.0
+# GemiHub Desktop v1.2.2
 
 ## What's new
 
@@ -10,6 +10,11 @@
   size, executable, and Skill metadata validation at the backend boundary.
 - MCP approval and credentials are now retained during an Agent Plugin update
   only when the server connection definition is unchanged.
+- Agent Plugin MCP servers are tested during installation and become available
+  automatically for chat turns that activate a Skill from the same plugin.
+- MCP Apps now use the standard UI initialization and tool-result notification
+  handshake instead of the legacy custom notification, and enforce the
+  resource and connection domains declared by MCP UI resource metadata.
 
 GemiHub Desktop is a local-first desktop workspace that brings files, AI chat,
 dashboards, workflows, memos, and plugins together in one application.
