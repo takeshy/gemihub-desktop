@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 type ExternalHTTPRequest struct {
@@ -110,10 +112,45 @@ func (a *App) doExternalHTTPRequest(request ExternalHTTPRequest, allowHTTP bool)
 	for key, values := range response.Header {
 		headers[strings.ToLower(key)] = strings.Join(values, ", ")
 	}
-	return &ExternalHTTPResponse{
-		Status: response.StatusCode, Headers: headers, Body: string(responseBody),
-		BodyBase64: base64.StdEncoding.EncodeToString(responseBody),
-	}, nil
+	return externalHTTPResponse(response.StatusCode, headers, responseBody), nil
+}
+
+// externalHTTPResponse keeps the Wails callback payload valid and reasonably
+// sized for binary downloads. Wails JSON-serializes exported method results;
+// putting arbitrary bytes in a Go string is lossy for non-UTF-8 data and also
+// duplicates large downloads in the WebView IPC message. bodyBase64 is the
+// byte-preserving representation for every response, while body remains the
+// backwards-compatible text representation for textual content only.
+func externalHTTPResponse(status int, headers map[string]string, content []byte) *ExternalHTTPResponse {
+	result := &ExternalHTTPResponse{
+		Status:     status,
+		Headers:    headers,
+		BodyBase64: base64.StdEncoding.EncodeToString(content),
+	}
+	contentType := strings.TrimSpace(headers["content-type"])
+	if (contentType == "" || isTextualHTTPContent(contentType)) && utf8.Valid(content) {
+		result.Body = string(content)
+	}
+	return result
+}
+
+func isTextualHTTPContent(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mediaType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	}
+	mediaType = strings.ToLower(mediaType)
+	if strings.HasPrefix(mediaType, "text/") {
+		return true
+	}
+	switch mediaType {
+	case "application/json", "application/ld+json", "application/problem+json",
+		"application/xml", "application/xhtml+xml", "application/javascript",
+		"application/x-www-form-urlencoded", "application/graphql":
+		return true
+	default:
+		return strings.HasSuffix(mediaType, "+json") || strings.HasSuffix(mediaType, "+xml")
+	}
 }
 
 func readLimitedHTTPBody(reader io.Reader, limit int64) ([]byte, error) {

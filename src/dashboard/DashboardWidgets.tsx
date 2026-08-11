@@ -586,13 +586,14 @@ function TimelinePostMarkdown({
 }
 
 export function TimelineDashboardWidget(
-  { config, isDark, settings, onChange, onOpenPath, onExternalPathOpened }: {
+  { config, isDark, settings, onChange, onOpenPath, onExternalPathOpened, initialComposerOpen = false }: {
     config: Record<string, unknown>;
     isDark: boolean;
     settings: ChatSettings;
     onChange: (config: Record<string, unknown>) => void;
     onOpenPath: (path: string) => void;
     onExternalPathOpened: (path: string) => void;
+    initialComposerOpen?: boolean;
   },
 ) {
   const name = configText(config, "name");
@@ -614,7 +615,7 @@ export function TimelineDashboardWidget(
     [from, setFrom] = useState(""),
     [to, setTo] = useState(""),
     [pinnedOnly, setPinnedOnly] = useState(false);
-  const [composerOpen, setComposerOpen] = useState(false),
+  const [composerOpen, setComposerOpen] = useState(initialComposerOpen),
     [editing, setEditing] = useState<TimelineItem | null>(null),
     [expandedPosts, setExpandedPosts] = useState<Set<string>>(() => new Set()),
     [editDraft, setEditDraft] = useState(""),

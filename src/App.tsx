@@ -29,6 +29,7 @@ import {
   MessageSquare,
   Moon,
   NotebookText,
+  PenLine,
   Pencil,
   Plug,
   Plus,
@@ -1098,6 +1099,7 @@ export default function App() {
   const [secretManagerOpen, setSecretManagerOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineComposerOpen, setTimelineComposerOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarPosition, setCalendarPosition] = useState({ x: 0, y: 0 });
   const calendarDragRef = useRef<
@@ -2196,6 +2198,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              className="icon-button timeline-quick-new"
+              onClick={() => {
+                setTimelineComposerOpen(true);
+                setTimelineOpen(true);
+              }}
+              title={tr("topbar.newTimeline")}
+              aria-label={tr("topbar.newTimeline")}
+            >
+              <PenLine size={18} />
+            </button>
+            <button
+              type="button"
               className="icon-button"
               onClick={() => setSecretManagerOpen(true)}
               title={tr("topbar.secretManager")}
@@ -2622,6 +2636,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setLauncherOpen(false);
+                    setTimelineComposerOpen(false);
                     setTimelineOpen(true);
                   }}
                 >
@@ -2695,6 +2710,7 @@ export default function App() {
                     latestCount: 20,
                     composerMode: "raw",
                   }}
+                  initialComposerOpen={timelineComposerOpen}
                   isDark={isDark}
                   settings={chatSettings}
                   onChange={() => {}}
