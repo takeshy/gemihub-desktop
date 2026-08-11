@@ -25,6 +25,7 @@ export interface TranslationStrings {
   "topbar.memoList": string;
   "topbar.launcher": string;
   "topbar.timeline": string;
+  "topbar.newTimeline": string;
   "topbar.calendar": string;
   "topbar.kanban": string;
   "topbar.secretManager": string;
@@ -288,6 +289,7 @@ const en: TranslationStrings = {
   "topbar.memoList": "Memo list",
   "topbar.launcher": "Launcher",
   "topbar.timeline": "Timeline",
+  "topbar.newTimeline": "Write to Timeline",
   "topbar.calendar": "Calendar",
   "topbar.kanban": "Kanban",
   "topbar.secretManager": "Secret Manager",
@@ -550,6 +552,7 @@ const ja: TranslationStrings = {
   "topbar.memoList": "メモ一覧",
   "topbar.launcher": "ランチャー",
   "topbar.timeline": "タイムライン",
+  "topbar.newTimeline": "タイムラインに投稿",
   "topbar.calendar": "カレンダー",
   "topbar.kanban": "カンバン",
   "topbar.secretManager": "シークレットマネージャー",

@@ -6380,6 +6380,10 @@ body.resizing-side-pane * {
   color: var(--accent);
 }
 
+.global-toolbar .timeline-quick-new {
+  color: var(--accent);
+}
+
 .global-command {
   display: inline-flex;
   height: 34px;

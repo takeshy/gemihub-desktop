@@ -1,7 +1,11 @@
-# GemiHub Desktop v1.2.2
+# GemiHub Desktop v1.2.3
 
 ## What's new
 
+- Fixed binary HTTP proxy responses so Google Drive Sync downloads Office,
+  PDF, and image files through `bodyBase64` without creating empty files.
+- Added a quick Timeline post button beside Launcher that opens the Timeline
+  composer directly.
 - Added Agent Plugins v1 support for installing portable Agent Skills and stdio
   or Streamable HTTP MCP servers from public GitHub repositories.
 - Added pinned release/branch installs, update previews, enable/disable controls,
