@@ -1797,7 +1797,9 @@ export function ChatPanel({
         localFramework: settings.localFramework,
         localUsername: settings.localUsername,
         localPassword: settings.localPassword,
-        model: settings.model,
+        model: settings.provider === "cli"
+          ? settings.cliModels[settings.cliType]
+          : settings.model,
         vertexProjectId: settings.vertexProjectId,
         vertexLocation: settings.vertexLocation,
         systemPrompt: [
@@ -1955,6 +1957,11 @@ export function ChatPanel({
       const applied = pending;
       setPending(null);
       window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+      window.dispatchEvent(
+        new CustomEvent("llm-hub:file-content-changed", {
+          detail: { path: applied.path, newPath: applied.newPath },
+        }),
+      );
       setLoading(false);
       window.setTimeout(
         () =>

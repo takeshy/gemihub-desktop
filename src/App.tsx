@@ -113,12 +113,25 @@ import {
   type WorkspaceState,
   writeWorkspaceFile,
 } from "./lib/wailsBackend";
-import { type FileRef, fileRef, fileRefFromBackendPath } from "./lib/fileRef";
+import {
+  type FileRef,
+  fileRef,
+  fileRefFromBackendPath,
+  listFileHistoryRef,
+  readFileRef,
+  readFileHistoryContentRef,
+  restoreFileHistoryRef,
+} from "./lib/fileRef";
 import {
   parseRecentDirectories,
   updateRecentDirectories,
 } from "./lib/recentDirectories";
-import { selectCLIPath, verifyCLI } from "./lib/wailsBackend";
+import {
+  listCLIModels,
+  selectCLIPath,
+  type CLIModelOption,
+  verifyCLI,
+} from "./lib/wailsBackend";
 import {
   chatModelChoices,
   type ChatProvider,
@@ -176,6 +189,7 @@ interface HistoryCheckpoint {
   fileName: string;
   content: string;
   dashboard: DashboardData;
+  persistent?: { file: FileRef; entryId: string; size: number };
 }
 
 interface DiffLine {
@@ -319,12 +333,7 @@ function persistenceDashboard(dashboard: DashboardData): DashboardData {
     widgets: dashboard.widgets.map((widget) => {
       if (widget.type === "file" || widget.type === "markdown") {
         const config = { ...widget.config };
-        const path = typeof config.filePath === "string" && config.filePath
-          ? config.filePath
-          : typeof config.path === "string"
-          ? config.path
-          : "";
-        if (path) config.path = path;
+        delete config.path;
         delete config.filePath;
         delete config.fileName;
         delete config.content;
@@ -379,6 +388,61 @@ function historyDashboard(dashboard: DashboardData): DashboardData {
   };
 }
 
+function fileVersionCheckpoint(
+  file: FileRef,
+  entry: { id: string; timestamp: number; size: number },
+  versionContent: string,
+  currentFileName: string,
+  currentContent: string,
+  currentDashboard: DashboardData,
+): HistoryCheckpoint {
+  let matched = false;
+  const snapshot = historyDashboard(currentDashboard);
+  snapshot.widgets = snapshot.widgets.map((widget) => {
+    const configuredFile = widget.config.file as
+      | { scope?: unknown; path?: unknown }
+      | undefined;
+    const configuredPath = typeof configuredFile?.path === "string"
+      ? configuredFile.path
+      : "";
+    if (configuredPath !== file.path) return widget;
+    matched = true;
+    return {
+      ...widget,
+      config: { ...widget.config, content: versionContent },
+    };
+  });
+  return {
+    id: `file:${file.scope}:${file.path}:${entry.id}`,
+    timestamp: new Date(entry.timestamp),
+    reason: "manual",
+    fileName: matched
+      ? currentFileName
+      : file.path.split("/").pop() || currentFileName,
+    content: matched ? currentContent : versionContent,
+    dashboard: snapshot,
+    persistent: { file, entryId: entry.id, size: entry.size },
+  };
+}
+
+function checkpointContainsFile(
+  checkpoint: HistoryCheckpoint,
+  path: string,
+): boolean {
+  const normalize = (value: string) =>
+    value.trim().replaceAll("\\", "/").replace(/^(?:workspace|files):\/\//, "");
+  const target = normalize(path);
+  if (!target) return true;
+  if (normalize(checkpoint.fileName) === target) return true;
+  return checkpoint.dashboard.widgets.some((widget) => {
+    const configuredFile = widget.config.file as { path?: unknown } | undefined;
+    const configuredPath = typeof configuredFile?.path === "string"
+      ? configuredFile.path
+      : "";
+    return normalize(configuredPath) === target;
+  });
+}
+
 function persistLocalState(
   fileName: string,
   content: string,
@@ -427,7 +491,9 @@ function checkpointHash(
         fileName: typeof widget.config.fileName === "string"
           ? widget.config.fileName
           : "",
-        path: typeof widget.config.path === "string" ? widget.config.path : "",
+        path: typeof (widget.config.file as { path?: unknown } | undefined)?.path === "string"
+          ? (widget.config.file as { path: string }).path
+          : "",
         content: widgetContent,
       }];
     }),
@@ -1007,6 +1073,9 @@ export default function App() {
   >({ id: 0, direction: "horizontal" });
   const [openFilePickerRequest, setOpenFilePickerRequest] = useState(0);
   const [checkpoints, setCheckpoints] = useState<HistoryCheckpoint[]>([]);
+  const [fileCheckpoints, setFileCheckpoints] = useState<HistoryCheckpoint[]>(
+    [],
+  );
   const [isDark, setIsDark] = useState(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
@@ -1038,6 +1107,7 @@ export default function App() {
     readStored(ENCRYPTION_DIRECTORY_KEY, "Secrets")
   );
   const [cliStatus, setCLIStatus] = useState("");
+  const [codexModels, setCodexModels] = useState<CLIModelOption[]>([]);
   const [mcpStatus, setMCPStatus] = useState<Record<string, string>>({});
   const [ragStatus, setRAGStatus] = useState("");
   const [ragErrors, setRAGErrors] = useState<string[]>([]);
@@ -1068,6 +1138,7 @@ export default function App() {
     {
       path: string;
       content: string;
+      file?: FileRef;
     } | null
   >(null);
   const [externalEditorPath, setExternalEditorPath] = useState(() =>
@@ -1256,7 +1327,17 @@ export default function App() {
     );
     return stored === 300 ? DEFAULT_CHAT_VIEW_WIDTH : stored;
   });
-  const visibleCheckpoints = uniqueCheckpoints(checkpoints);
+  const visibleCheckpoints = uniqueCheckpoints(
+    [
+      ...checkpoints.filter((checkpoint) =>
+        !comparisonSource?.path ||
+        checkpointContainsFile(checkpoint, comparisonSource.path)
+      ),
+      ...fileCheckpoints,
+    ].sort((left, right) =>
+      left.timestamp.getTime() - right.timestamp.getTime()
+    ),
+  );
   const selectedHistoryCheckpoint =
     visibleCheckpoints.find((item) => item.id === selectedHistoryId) ??
       visibleCheckpoints.at(-1);
@@ -1995,7 +2076,51 @@ export default function App() {
     downloadFile(fileName, content);
   }, [content, fileName]);
 
-  const restoreCheckpoint = useCallback((checkpoint: HistoryCheckpoint) => {
+  const openUnifiedHistory = useCallback(async (source?: {
+    path: string;
+    content: string;
+    file?: FileRef;
+  }) => {
+    setHistoryMode("history");
+    setComparisonSource(source ?? null);
+    setComparisonTarget(null);
+    setSelectedHistoryId(null);
+    setFileCheckpoints([]);
+    setHistoryOpen(true);
+    if (!source?.file) return;
+    try {
+      const entries = await listFileHistoryRef(source.file);
+      const versions = await Promise.all(entries.filter((entry) =>
+        !entry.binary
+      ).map(async (entry) =>
+        fileVersionCheckpoint(
+          source.file!,
+          entry,
+          await readFileHistoryContentRef(source.file!, entry.id),
+          fileName,
+          content,
+          dashboard,
+        )
+      ));
+      setFileCheckpoints(versions);
+    } catch (error) {
+      console.warn("Could not load persistent file history.", error);
+    }
+  }, [content, dashboard, fileName]);
+
+  const restoreCheckpoint = useCallback(async (checkpoint: HistoryCheckpoint) => {
+    if (checkpoint.persistent) {
+      await restoreFileHistoryRef(
+        checkpoint.persistent.file,
+        checkpoint.persistent.entryId,
+      );
+      setHistoryOpen(false);
+      window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+      window.dispatchEvent(new CustomEvent("llm-hub:file-content-changed", {
+        detail: { path: checkpoint.persistent.file.path },
+      }));
+      return;
+    }
     const currentHash = checkpointHash(fileName, content, dashboard);
     const targetHash = checkpointHash(
       checkpoint.fileName,
@@ -2284,6 +2409,15 @@ export default function App() {
                   source: "filetree-new-widget",
                 }));
               }}
+              onOpenHistory={(file) => {
+                void readFileRef(file).then((result) =>
+                  openUnifiedHistory({
+                    path: file.path,
+                    content: result?.content || "",
+                    file,
+                  })
+                );
+              }}
               onCollapse={() => setFileTreeOpen(false)}
             />
           )}
@@ -2452,12 +2586,7 @@ export default function App() {
                   onFileNameChange={setFileName}
                   onNewDocument={newDocument}
                   onExportDocument={exportDocument}
-                  onHistoryClick={(source) => {
-                    setHistoryMode("history");
-                    setComparisonSource(source ?? null);
-                    setComparisonTarget(null);
-                    setHistoryOpen(true);
-                  }}
+                  onHistoryClick={(source) => void openUnifiedHistory(source)}
                   onDiffClick={(source) => {
                     setHistoryMode("compare");
                     setComparisonSource(source);
@@ -3684,12 +3813,64 @@ export default function App() {
                                 item !== type
                               ),
                           }));
+                          if (result.success && type === "codex") {
+                            try {
+                              setCodexModels(await listCLIModels(
+                                type,
+                                chatSettings.cliPaths[type],
+                              ));
+                            } catch (caught) {
+                              setCodexModels([]);
+                              setCLIStatus(
+                                `Verified, but model catalog failed: ${
+                                  caught instanceof Error
+                                    ? caught.message
+                                    : String(caught)
+                                }`,
+                              );
+                            }
+                          }
                         }}
                       >
                         {chatSettings.cliType === "codex"
                           ? "Verify App Server"
                           : "Verify CLI"}
                       </button>
+                      {chatSettings.cliType === "codex" && (
+                        <label className="settings-field">
+                          <span>Codex model</span>
+                          <select
+                            className="settings-select"
+                            value={chatSettings.cliModels.codex}
+                            onChange={(event) => {
+                              const model = event.target.value;
+                              setChatSettings((current) => ({
+                                ...current,
+                                cliModels: { ...current.cliModels, codex: model },
+                              }));
+                            }}
+                          >
+                            <option value="">Codex default</option>
+                            {chatSettings.cliModels.codex &&
+                                !codexModels.some((model) =>
+                                  model.id === chatSettings.cliModels.codex
+                                ) && (
+                              <option value={chatSettings.cliModels.codex}>
+                                {chatSettings.cliModels.codex}
+                              </option>
+                            )}
+                            {codexModels.map((model) => (
+                              <option key={model.id} value={model.id}>
+                                {model.displayName} ({model.id})
+                              </option>
+                            ))}
+                          </select>
+                          <small className="settings-hint">
+                            Verify App Server to refresh the installed Codex
+                            model catalog.
+                          </small>
+                        </label>
+                      )}
                       {cliStatus && (
                         <div
                           className={cliStatus.startsWith("Verified")
@@ -3714,11 +3895,10 @@ export default function App() {
                       <section className="settings-warning">
                         <strong>Local agent permissions</strong>
                         <p>
-                          Codex App Server is restricted to a workspace-write
-                          sandbox for DirectoryBase, with interactive approval
-                          requests denied until an approval UI is available.
-                          Antigravity runs with its own CLI permission and
-                          sandbox settings.
+                          Codex App Server runs in a read-only sandbox. File
+                          changes use GemiHub's proposal tools and still require
+                          Apply in Chat. Antigravity runs with its own CLI
+                          permission and sandbox settings.
                         </p>
                       </section>
                     </>
@@ -5990,15 +6170,22 @@ export default function App() {
                           >
                             <div className="history-item-main">
                               <strong>
-                                {reasonLabel(tr, checkpoint.reason)}
+                                {checkpoint.persistent
+                                  ? tr("history.fileVersion")
+                                  : reasonLabel(tr, checkpoint.reason)}
                               </strong>
                               <span>
                                 {checkpoint.timestamp.toLocaleString()}
+                                {checkpoint.persistent
+                                  ? ` · ${checkpoint.persistent.size.toLocaleString()} bytes`
+                                  : ""}
                               </span>
                               <small>
                                 {changedSummary(tr, checkpoint, previous)}
                                 {previous
-                                  ? `  +${stats.additions} / -${stats.deletions}`
+                                  ? stats.additions > 0 || stats.deletions > 0
+                                    ? `  +${stats.additions} / -${stats.deletions}`
+                                    : ` · ${tr("history.noTextChanges")}`
                                   : ""}
                               </small>
                             </div>
@@ -6007,7 +6194,7 @@ export default function App() {
                               className="history-restore"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                restoreCheckpoint(checkpoint);
+                                void restoreCheckpoint(checkpoint);
                               }}
                               disabled={isCurrent}
                               title={isCurrent

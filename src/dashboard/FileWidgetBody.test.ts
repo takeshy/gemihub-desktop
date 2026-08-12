@@ -2,9 +2,52 @@ import { assertEquals } from "jsr:@std/assert";
 import { docKindFor, isFileWidgetFileName } from "./documentKind.ts";
 import { memoChatDraft, memoEntryChatDraft } from "./memoChat.ts";
 import {
+  fileChangeMatchesWidget,
+  fileWidgetHydrationReady,
+  fileWidgetViewerState,
   resetFileHydrationForDashboard,
   resolvedFileWidgetContent,
 } from "./fileWidgetHydration.ts";
+
+Deno.test("opening Markdown clears stale external-document state", () => {
+  assertEquals(fileWidgetViewerState({ file: { scope: "workspace", path: "note.md" } }), {
+    externalOnly: false,
+    file: { scope: "workspace", path: "note.md" },
+  });
+  assertEquals(fileWidgetViewerState({ externalOnly: true }), {
+    externalOnly: true,
+  });
+});
+
+Deno.test("Markdown document kind is authoritative over stale viewer state", () => {
+  assertEquals(docKindFor("メモ.md"), "markdown");
+  assertEquals(docKindFor("report.docx"), "external");
+});
+
+Deno.test("restored file widgets wait for their backend path context", () => {
+  assertEquals(fileWidgetHydrationReady("files", "", "Workspace"), false);
+  assertEquals(fileWidgetHydrationReady(undefined, "", "Workspace"), false);
+  assertEquals(fileWidgetHydrationReady("files", "/Files", ""), true);
+  assertEquals(fileWidgetHydrationReady("workspace", "/Files", ""), false);
+  assertEquals(
+    fileWidgetHydrationReady("workspace", "", "/Workspace"),
+    true,
+  );
+});
+
+Deno.test("Chat file changes match the open file widget path", () => {
+  assertEquals(
+    fileChangeMatchesWidget(
+      ["Notes/Current.md", "workspace://Notes/Current.md"],
+      "Notes/Current.md",
+    ),
+    true,
+  );
+  assertEquals(
+    fileChangeMatchesWidget(["Notes/Other.md"], "Notes/Current.md"),
+    false,
+  );
+});
 
 Deno.test("file-backed widgets do not show the local document while hydration is pending", () => {
   assertEquals(

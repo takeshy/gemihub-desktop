@@ -5,6 +5,7 @@ import {
   deleteWorkspaceFile,
   duplicateFile,
   listFileHistory,
+  readFileHistoryContent,
   openContainingFolder,
   openExternalEditor,
   openHTMLInBrowser,
@@ -156,6 +157,18 @@ export async function listFileHistoryRef(
     ref.scope === "workspace"
       ? `workspace://${ref.path}`
       : filesBackendPath(ref),
+  );
+}
+
+export async function readFileHistoryContentRef(
+  ref: FileRef,
+  entryId: string,
+): Promise<string> {
+  return await readFileHistoryContent(
+    ref.scope === "workspace"
+      ? `workspace://${ref.path}`
+      : filesBackendPath(ref),
+    entryId,
   );
 }
 

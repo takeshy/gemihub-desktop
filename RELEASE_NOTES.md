@@ -1,7 +1,15 @@
-# GemiHub Desktop v1.2.3
+# GemiHub Desktop v1.2.4
 
 ## What's new
 
+- Added Codex App Server model selection and read-only dynamic Workspace tools,
+  including confirmation-gated file edits and active Skill tools.
+- Unified in-memory checkpoints and persistent file versions in the History
+  view opened from File widgets or the FileTree context menu.
+- Fixed restored Markdown widgets appearing empty after restart by migrating
+  legacy paths to FileRef and clearing stale external-viewer state.
+- Open File widgets now refresh immediately after applying an AI-proposed file
+  change instead of requiring the file to be reopened from FileTree.
 - Fixed binary HTTP proxy responses so Google Drive Sync downloads Office,
   PDF, and image files through `bodyBase64` without creating empty files.
 - Added a quick Timeline post button beside Launcher that opens the Timeline

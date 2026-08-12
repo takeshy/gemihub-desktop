@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +21,36 @@ type CLIVerifyResult struct {
 	Path    string `json:"path,omitempty"`
 	Version string `json:"version,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+
+type CLIModelOption struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+}
+
+func parseCodexModelsCatalog(output []byte) ([]CLIModelOption, error) {
+	var catalog struct {
+		Models []struct {
+			Slug        string `json:"slug"`
+			DisplayName string `json:"display_name"`
+			Visibility  string `json:"visibility"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(output, &catalog); err != nil {
+		return nil, fmt.Errorf("invalid Codex model catalog: %w", err)
+	}
+	models := make([]CLIModelOption, 0, len(catalog.Models))
+	for _, model := range catalog.Models {
+		if strings.TrimSpace(model.Slug) == "" || (model.Visibility != "" && model.Visibility != "list") {
+			continue
+		}
+		displayName := strings.TrimSpace(model.DisplayName)
+		if displayName == "" {
+			displayName = model.Slug
+		}
+		models = append(models, CLIModelOption{ID: model.Slug, DisplayName: displayName})
+	}
+	return models, nil
 }
 
 type cliInvocation struct {
@@ -65,6 +96,32 @@ func (a *App) VerifyCLI(kind, customPath string) (*CLIVerifyResult, error) {
 		}
 	}
 	return &CLIVerifyResult{Success: true, Path: invocation.Command, Version: strings.TrimSpace(string(output))}, nil
+}
+
+// ListCLIModels returns the visible model catalog exposed by Codex. Keeping
+// this in the Go host also makes custom JavaScript entry points work on
+// Windows, where invoking the CLI directly from the webview is not possible.
+func (a *App) ListCLIModels(kind, customPath string) ([]CLIModelOption, error) {
+	if kind != "codex" {
+		return []CLIModelOption{}, nil
+	}
+	invocation, err := resolveCLI(kind, customPath, []string{"debug", "models"})
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, invocation.Command, invocation.Args...)
+	cmd.Env = buildCLIEnvironment()
+	configureCLIProcess(cmd)
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("Codex model catalog timed out")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s", cliError(kind, err, string(output)))
+	}
+	return parseCodexModelsCatalog(output)
 }
 
 func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {

@@ -18,6 +18,7 @@ import {
   emptyDashboard,
   type LayoutPos,
 } from "./types";
+import { fileRefFromBackendPath, isFileRef } from "../lib/fileRef";
 
 const dumpOptions = { lineWidth: -1, noRefs: true, sortKeys: false } as const;
 
@@ -91,10 +92,27 @@ export function parseDashboard(content: string): DashboardData | null {
             h: lg.h,
           })
           : undefined;
-        const config = record.config && typeof record.config === "object" &&
+        const rawConfig = record.config && typeof record.config === "object" &&
             !Array.isArray(record.config)
           ? record.config as Record<string, unknown>
           : {};
+        const widgetType = typeof record.type === "string"
+          ? record.type
+          : "unknown";
+        const config = { ...rawConfig };
+        if (widgetType === "file" || widgetType === "markdown") {
+          if (!isFileRef(config.file)) {
+            const legacyPath = typeof config.filePath === "string" &&
+                config.filePath.trim()
+              ? config.filePath
+              : typeof config.path === "string"
+              ? config.path
+              : "";
+            if (legacyPath) config.file = fileRefFromBackendPath(legacyPath);
+          }
+          delete config.path;
+          delete config.filePath;
+        }
         const requestedId = typeof record.id === "string"
           ? record.id.trim()
           : "";
@@ -105,7 +123,7 @@ export function parseDashboard(content: string): DashboardData | null {
         return [{
           ...record,
           id,
-          type: typeof record.type === "string" ? record.type : "unknown",
+          type: widgetType,
           title: typeof record.title === "string" ? record.title : widgetLabel(
             typeof record.type === "string" ? record.type : "unknown",
           ),

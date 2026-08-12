@@ -201,6 +201,60 @@ func respondToCodexServerRequest(encoder *json.Encoder, message codexRPCMessage)
 	return writeCodexRPC(encoder, map[string]any{"id": json.RawMessage(message.ID), "result": result})
 }
 
+func codexDynamicTools(request ChatRequest) []map[string]any {
+	definitions := chatToolDefinitions(request)
+	tools := make([]map[string]any, 0, len(definitions))
+	for _, definition := range definitions {
+		function, _ := definition["function"].(map[string]any)
+		name, _ := function["name"].(string)
+		if name == "" {
+			continue
+		}
+		tools = append(tools, map[string]any{
+			"type": "function", "name": name,
+			"description": function["description"], "inputSchema": function["parameters"],
+		})
+	}
+	return tools
+}
+
+func codexInitializeParams() map[string]any {
+	return map[string]any{
+		"clientInfo": map[string]any{
+			"name": "gemihub_desktop", "title": appName, "version": "1.2.4",
+		},
+		"capabilities": map[string]any{"experimentalApi": true},
+	}
+}
+
+func (a *App) respondToCodexDynamicTool(encoder *json.Encoder, request ChatRequest, message codexRPCMessage) (*PendingFileAction, error) {
+	var params struct {
+		Tool      string         `json:"tool"`
+		Arguments map[string]any `json:"arguments"`
+	}
+	if err := json.Unmarshal(message.Params, &params); err != nil {
+		return nil, writeCodexRPC(encoder, map[string]any{"id": json.RawMessage(message.ID), "result": map[string]any{"success": false, "contentItems": []any{}}})
+	}
+	arguments, _ := json.Marshal(params.Arguments)
+	result, pending, err := a.executeChatTool(request, params.Tool, string(arguments))
+	success := err == nil
+	var value any = result
+	if pending != nil {
+		value = map[string]any{"result": result, "pendingAction": pending}
+	}
+	if err != nil {
+		value = map[string]any{"error": err.Error()}
+	}
+	text, marshalErr := json.Marshal(value)
+	if marshalErr != nil {
+		text = []byte(fmt.Sprintf("%v", value))
+	}
+	return pending, writeCodexRPC(encoder, map[string]any{
+		"id":     json.RawMessage(message.ID),
+		"result": map[string]any{"success": success, "contentItems": []map[string]any{{"type": "inputText", "text": string(text)}}},
+	})
+}
+
 func readCodexMessage(scanner *bufio.Scanner) (codexRPCMessage, error) {
 	for scanner.Scan() {
 		var message codexRPCMessage
@@ -345,7 +399,7 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
 	encoder := json.NewEncoder(stdin)
-	if _, err := callCodexRPC(scanner, encoder, 1, "initialize", map[string]any{"clientInfo": map[string]any{"name": "gemihub_desktop", "title": appName, "version": "1.2.2"}}, nil); err != nil {
+	if _, err := callCodexRPC(scanner, encoder, 1, "initialize", codexInitializeParams(), nil); err != nil {
 		return nil, codexAppServerError(err, stderr.String())
 	}
 	if err := writeCodexRPC(encoder, map[string]any{"method": "initialized", "params": map[string]any{}}); err != nil {
@@ -355,8 +409,11 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	threadParams := map[string]any{
 		"cwd":                   workingDirectory,
 		"approvalPolicy":        "never",
-		"sandbox":               "workspace-write",
+		"sandbox":               "read-only",
 		"developerInstructions": request.SystemPrompt,
+	}
+	if tools := codexDynamicTools(request); len(tools) > 0 {
+		threadParams["dynamicTools"] = tools
 	}
 	if request.Model != "" {
 		threadParams["model"] = request.Model
@@ -390,13 +447,14 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 		"input":          []map[string]any{{"type": "text", "text": prompt}},
 		"cwd":            workingDirectory,
 		"approvalPolicy": "never",
-		"sandboxPolicy":  map[string]any{"type": "workspaceWrite", "writableRoots": []string{}, "networkAccess": false},
+		"sandboxPolicy":  map[string]any{"type": "readOnly"},
 		"summary":        "auto",
 	}
 	if request.Model != "" {
 		turnParams["model"] = request.Model
 	}
 	output := newCodexTurnOutput()
+	var pendingAction *PendingFileAction
 	output.onDelta = func(eventType, delta string) { a.emitChatStream(request, eventType, delta, "") }
 	output.onTool = func(tool string) { a.emitChatStream(request, "tool", "", tool) }
 	if _, err := callCodexRPC(scanner, encoder, 3, "turn/start", turnParams, output); err != nil {
@@ -408,6 +466,16 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 			return nil, codexAppServerError(err, stderr.String())
 		}
 		if message.Method != "" && len(message.ID) > 0 {
+			if message.Method == "item/tool/call" {
+				pending, err := a.respondToCodexDynamicTool(encoder, request, message)
+				if err != nil {
+					return nil, err
+				}
+				if pending != nil {
+					pendingAction = pending
+				}
+				continue
+			}
 			if err := respondToCodexServerRequest(encoder, message); err != nil {
 				return nil, err
 			}
@@ -424,7 +492,7 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 		if content == "" {
 			return nil, fmt.Errorf("Codex app-server returned no response")
 		}
-		return &ChatResult{Content: content, CLISessionID: threadID, Model: activeModel, ToolsUsed: output.toolsUsed, Thinking: output.thinkingText(), Usage: &output.usage}, nil
+		return &ChatResult{Content: content, PendingAction: pendingAction, CLISessionID: threadID, Model: activeModel, ToolsUsed: output.toolsUsed, Thinking: output.thinkingText(), Usage: &output.usage}, nil
 	}
 }
 

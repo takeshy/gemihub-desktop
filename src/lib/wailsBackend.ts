@@ -480,6 +480,7 @@ interface WailsAppApi {
   ListTrash: () => Promise<TrashEntry[]>;
   RestoreTrash: (id: string) => Promise<void>;
   ListFileHistory: (path: string) => Promise<FileHistoryEntry[]>;
+  ReadFileHistoryContent: (path: string, id: string) => Promise<string>;
   RestoreFileHistory: (path: string, id: string) => Promise<void>;
   SearchFiles: (query: string, limit: number) => Promise<FileSearchResult[]>;
   SearchWorkspaceFiles: (
@@ -534,6 +535,7 @@ interface WailsAppApi {
   CancelChat: (streamID: string) => Promise<boolean>;
   SelectCLIPath: () => Promise<string>;
   VerifyCLI: (kind: string, customPath: string) => Promise<CLIVerifyResult>;
+  ListCLIModels: (kind: string, customPath: string) => Promise<CLIModelOption[]>;
   StopCLI: () => Promise<boolean>;
   ApplyPendingFileAction: (action: PendingFileAction) => Promise<void>;
   ResolveChatTool: (
@@ -1002,6 +1004,14 @@ export async function listFileHistory(
 ): Promise<FileHistoryEntry[]> {
   return await appApi()?.ListFileHistory(path) ?? [];
 }
+export async function readFileHistoryContent(
+  path: string,
+  id: string,
+): Promise<string> {
+  const api = appApi();
+  if (!api) throw new Error("History requires the desktop app.");
+  return await api.ReadFileHistoryContent(path, id);
+}
 export async function restoreFileHistory(
   path: string,
   id: string,
@@ -1199,6 +1209,20 @@ export async function verifyCLI(
     };
   }
   return await api.VerifyCLI(kind, customPath);
+}
+
+export interface CLIModelOption {
+  id: string;
+  displayName: string;
+}
+
+export async function listCLIModels(
+  kind: string,
+  customPath: string,
+): Promise<CLIModelOption[]> {
+  const api = appApi();
+  if (!api) return [];
+  return await api.ListCLIModels(kind, customPath);
 }
 
 export async function stopCLI(): Promise<boolean> {

@@ -3,8 +3,20 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"testing"
 )
+
+func TestParseCodexModelsCatalog(t *testing.T) {
+	models, err := parseCodexModelsCatalog([]byte(`{"models":[{"slug":"gpt-visible","display_name":"GPT Visible","visibility":"list"},{"slug":"gpt-hidden","visibility":"hide"},{"slug":"gpt-fallback","visibility":"list"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []CLIModelOption{{ID: "gpt-visible", DisplayName: "GPT Visible"}, {ID: "gpt-fallback", DisplayName: "gpt-fallback"}}
+	if !reflect.DeepEqual(models, want) {
+		t.Fatalf("models = %#v, want %#v", models, want)
+	}
+}
 
 func TestFormatCLIHistory(t *testing.T) {
 	got := formatCLIHistory([]ChatMessage{
@@ -63,5 +75,36 @@ func TestCodexApprovalRequestsAreDeclinedWithoutUI(t *testing.T) {
 	result := response["result"].(map[string]any)
 	if result["decision"] != "decline" {
 		t.Fatalf("unexpected response: %#v", response)
+	}
+}
+
+func TestCodexDynamicToolsExposeWorkspaceAndCustomTools(t *testing.T) {
+	request := ChatRequest{
+		EnableFileTools: true,
+		FileToolMode:    "all",
+		CustomTools: []ChatToolDefinition{{
+			Name: "run_skill_workflow", Description: "Run a skill workflow",
+			Parameters: map[string]any{"type": "object", "properties": map[string]any{}},
+		}},
+	}
+	tools := codexDynamicTools(request)
+	found := map[string]bool{}
+	for _, tool := range tools {
+		if name, ok := tool["name"].(string); ok {
+			found[name] = true
+		}
+	}
+	for _, name := range []string{"read_file", "propose_file_edit", "run_skill_workflow"} {
+		if !found[name] {
+			t.Fatalf("dynamic tool %q was not exposed", name)
+		}
+	}
+}
+
+func TestCodexInitializeOptsIntoExperimentalAPI(t *testing.T) {
+	params := codexInitializeParams()
+	capabilities, ok := params["capabilities"].(map[string]any)
+	if !ok || capabilities["experimentalApi"] != true {
+		t.Fatalf("initialize capabilities = %#v", params["capabilities"])
 	}
 }

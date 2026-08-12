@@ -66,6 +66,7 @@ export interface TranslationStrings {
   "history.reason.manual": string;
   "history.reason.restore": string;
   "history.reason.reload": string;
+  "history.fileVersion": string;
   "history.changed.fileName": string;
   "history.changed.document": string;
   "history.changed.dashboard": string;
@@ -308,7 +309,7 @@ const en: TranslationStrings = {
   "settings.languageJapanese": "Japanese",
 
   "history.title": "History",
-  "history.checkpointsSuffix": "checkpoints in this session",
+  "history.checkpointsSuffix": "memory checkpoints and saved file versions",
   "history.restore": "Restore",
   "history.current": "Current",
   "history.currentState": "Current state",
@@ -329,6 +330,7 @@ const en: TranslationStrings = {
   "history.reason.manual": "Saved",
   "history.reason.restore": "Restored",
   "history.reason.reload": "Reloaded",
+  "history.fileVersion": "Saved file version",
   "history.changed.fileName": "file name",
   "history.changed.document": "document",
   "history.changed.dashboard": "dashboard",
@@ -571,7 +573,7 @@ const ja: TranslationStrings = {
   "settings.languageJapanese": "日本語",
 
   "history.title": "履歴",
-  "history.checkpointsSuffix": "件のチェックポイント(このセッション)",
+  "history.checkpointsSuffix": "件（メモリ履歴と永続ファイル履歴）",
   "history.restore": "復元",
   "history.current": "現在",
   "history.currentState": "現在の状態",
@@ -592,6 +594,7 @@ const ja: TranslationStrings = {
   "history.reason.manual": "保存",
   "history.reason.restore": "復元",
   "history.reason.reload": "再読込",
+  "history.fileVersion": "永続ファイル履歴",
   "history.changed.fileName": "ファイル名",
   "history.changed.document": "ドキュメント",
   "history.changed.dashboard": "ダッシュボード",
