@@ -276,6 +276,14 @@ func TestFileHistoryDuplicateAndTrashLifecycle(t *testing.T) {
 	if err != nil || len(history) != 1 {
 		t.Fatalf("unexpected history: %#v %v", history, err)
 	}
+	scopedHistory, err := app.ListFileHistory("files://notes/item.md")
+	if err != nil || len(scopedHistory) != 1 || scopedHistory[0].ID != history[0].ID {
+		t.Fatalf("unexpected scoped history: %#v %v", scopedHistory, err)
+	}
+	versionContent, err := app.ReadFileHistoryContent("notes/item.md", history[0].ID)
+	if err != nil || versionContent != "one" {
+		t.Fatalf("history content got %q, %v", versionContent, err)
+	}
 	if err := app.RestoreFileHistory("notes/item.md", history[0].ID); err != nil {
 		t.Fatal(err)
 	}

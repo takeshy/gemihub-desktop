@@ -14,6 +14,18 @@ type SlateEditor = ReturnType<typeof useEditor> & {
   normalizeNode: (entry: SlateEntry) => void;
 };
 
+export function shouldSyncWysiwygValue(
+  editing: boolean,
+  receivedValue: string,
+  nextValue: string,
+): boolean {
+  if (nextValue === receivedValue) return false;
+  // A restored/startup file can finish loading after the editor has already
+  // received focus. That empty -> content transition is hydration, not an
+  // external edit that should be ignored while typing.
+  return !editing || (!receivedValue && !!nextValue);
+}
+
 export function WysiwygEditor({
   value,
   onChange,
@@ -53,7 +65,11 @@ export function WysiwygEditor({
   // document start. Dashboard state can rerender while the user only moves
   // the caret, so keep the editor-owned value authoritative while focused.
   // Changes originating here update the ref before notifying the parent.
-  if (!editingRef.current && value !== receivedValueRef.current) {
+  if (shouldSyncWysiwygValue(
+    editingRef.current,
+    receivedValueRef.current,
+    value,
+  )) {
     editorValueRef.current = value || "\n";
   }
   receivedValueRef.current = value;

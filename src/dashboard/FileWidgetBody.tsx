@@ -1948,6 +1948,9 @@ export function FileWidgetBody({
             className="file-widget-wysiwyg-selection-root"
           >
             <FileWidgetWysiwygEditor
+              key={typeof widget.config.contentRevision === "number"
+                ? widget.config.contentRevision
+                : effectiveFilePath}
               value={markdownBody}
               onImageChange={uploadMarkdownImage}
               workspaceSourcePath={storedFile?.scope === "workspace"

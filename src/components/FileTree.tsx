@@ -47,11 +47,9 @@ import {
   fileRef,
   fileRefBackendPath,
   fileRefFromBackendPath,
-  listFileHistoryRef,
   openContainingFolderRef,
   readFileRef,
   renameFileRef,
-  restoreFileHistoryRef,
   trashFileRef,
   writeFileRef,
 } from "../lib/fileRef";
@@ -65,11 +63,9 @@ import {
   copyPathIntoWorkspace,
   createDirectory,
   duplicateFile,
-  type FileHistoryEntry,
   type FileSearchResult,
   type FileTreeNode,
   inspectLocalPath,
-  listFileHistory,
   listFileTree,
   listTrash,
   listWorkspaceTree,
@@ -79,7 +75,6 @@ import {
   openContainingFolder,
   readFile,
   renameFile,
-  restoreFileHistory,
   restoreTrash,
   searchWorkspaceFiles,
   setDirectoryBase,
@@ -379,6 +374,7 @@ export function FileTree({
   externalFocusPath,
   onOpenFile,
   onOpenFileInNewWidget,
+  onOpenHistory,
   onExternalDirectoryChange,
   onDirectoryBaseUnavailable,
   onCollapse,
@@ -388,6 +384,7 @@ export function FileTree({
   externalFocusPath: string;
   onOpenFile: (file: FileRef, created?: boolean) => void;
   onOpenFileInNewWidget: (file: FileRef) => void;
+  onOpenHistory: (file: FileRef) => void;
   onExternalDirectoryChange: (
     directoryBase: string,
     focusPath: string,
@@ -449,9 +446,6 @@ export function FileTree({
   const [encryptedModalFile, setEncryptedModalFile] = useState<FileRef | null>(
     null,
   );
-  const [historyDialog, setHistoryDialog] = useState<
-    { file: FileRef; entries: FileHistoryEntry[] } | null
-  >(null);
   const [trashDialog, setTrashDialog] = useState<TrashEntry[] | null>(null);
   const [workspaceMove, setWorkspaceMove] = useState<
     {
@@ -888,14 +882,11 @@ export function FileTree({
       alert(error instanceof Error ? error.message : String(error));
     }
   };
-  const showHistory = async () => {
+  const showHistory = () => {
     const selected = contextMenu;
     if (!selected) return;
     setContextMenu(null);
-    setHistoryDialog({
-      file: selected.file,
-      entries: await listFileHistoryRef(selected.file),
-    });
+    onOpenHistory(selected.file);
   };
   const duplicateFromMenu = async () => {
     const selected = contextMenu;
@@ -1465,7 +1456,7 @@ export function FileTree({
               <button type="button" onClick={() => void duplicateFromMenu()}>
                 <Copy size={14} />Duplicate
               </button>
-              <button type="button" onClick={() => void showHistory()}>
+              <button type="button" onClick={showHistory}>
                 <History size={14} />History
               </button>
             </>
@@ -1568,40 +1559,6 @@ export function FileTree({
           onClose={() => setEncryptedModalFile(null)}
           onChanged={() => void reload()}
         />
-      )}
-      {historyDialog && (
-        <div className="encrypted-file-modal-backdrop">
-          <section className="file-lifecycle-dialog">
-            <header>
-              <strong>History · {historyDialog.file.path}</strong>
-              <button onClick={() => setHistoryDialog(null)}>
-                <X size={15} />
-              </button>
-            </header>
-            <div>
-              {historyDialog.entries.length === 0
-                ? <p>No saved versions.</p>
-                : historyDialog.entries.map((entry) => (
-                  <article key={entry.id}>
-                    <span>
-                      {new Date(entry.timestamp).toLocaleString()} ·{" "}
-                      {entry.size.toLocaleString()} bytes
-                    </span>
-                    <button
-                      onClick={() =>
-                        void restoreFileHistoryRef(historyDialog.file, entry.id)
-                          .then(async () => {
-                            await reload();
-                            setHistoryDialog(null);
-                          })}
-                    >
-                      <RotateCcw size={13} />Restore
-                    </button>
-                  </article>
-                ))}
-            </div>
-          </section>
-        </div>
       )}
       {trashDialog && (
         <div className="encrypted-file-modal-backdrop">

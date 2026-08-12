@@ -120,6 +120,7 @@ export interface ChatSettings {
   thinkingEnabledModels: string[];
   cliType: CLIType;
   cliPaths: Record<CLIType, string>;
+  cliModels: Record<CLIType, string>;
   slashCommands: SlashCommand[];
   mcpServers: MCPServerConfig[];
   webSearchEnabled: boolean;
@@ -209,6 +210,7 @@ export const defaultChatSettings: ChatSettings = {
   thinkingEnabledModels: [],
   cliType: "codex",
   cliPaths: { codex: "", antigravity: "" },
+  cliModels: { codex: "", antigravity: "" },
   slashCommands: [{
     id: "cmd_infographic_default",
     name: "infographic",
@@ -634,6 +636,7 @@ export function loadChatSettings(): ChatSettings {
         )
         : [],
       cliPaths: { ...defaultChatSettings.cliPaths, ...(parsed.cliPaths ?? {}) },
+      cliModels: { ...defaultChatSettings.cliModels, ...(parsed.cliModels ?? {}) },
       slashCommands: Array.isArray(parsed.slashCommands)
         ? parsed.slashCommands.map((command) => ({
           ...command,
@@ -774,7 +777,7 @@ export function configuredModelOptions(
     key: `cli:${cliType}`,
     label: cliNames[cliType],
     provider: "cli" as ChatProvider,
-    model: "",
+    model: synced.cliModels[cliType] || "",
     cliType,
   }));
   return [...profiles, ...vertex, ...cli];
@@ -800,7 +803,7 @@ export function selectConfiguredModel(
     return {
       ...syncActiveModelProfile(settings),
       provider: "cli",
-      model: "",
+      model: settings.cliModels[option.cliType] || "",
       cliType: option.cliType,
     };
   }

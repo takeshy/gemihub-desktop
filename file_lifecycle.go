@@ -47,6 +47,25 @@ func historyPathKey(path string) string {
 	sum := sha256.Sum256([]byte(filepath.ToSlash(path)))
 	return hex.EncodeToString(sum[:])
 }
+func canonicalHistoryPath(base, target string) string {
+	if relative, err := filepath.Rel(base, target); err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return filepath.ToSlash(relative)
+	}
+	return filepath.ToSlash(target)
+}
+func historyDirectories(base, target, requestedPath string) []string {
+	paths := []string{canonicalHistoryPath(base, target), filepath.ToSlash(requestedPath)}
+	result := make([]string, 0, len(paths))
+	seen := map[string]bool{}
+	for _, path := range paths {
+		dir := filepath.Join(base, ".llm-hub", "history", historyPathKey(path))
+		if !seen[dir] {
+			seen[dir] = true
+			result = append(result, dir)
+		}
+	}
+	return result
+}
 func (a *App) recordFileVersion(path, target string) error {
 	if info, statErr := os.Stat(target); statErr == nil && info.Size() > 64*1024*1024 {
 		// History is best-effort and must never load multi-gigabyte documents into memory.
@@ -67,7 +86,7 @@ func (a *App) recordFileVersion(path, target string) error {
 	id := fmt.Sprintf("%d", now.UnixNano())
 	binary := isBinaryFileName(filepath.Base(target)) || strings.IndexByte(string(data), 0) >= 0
 	entry := storedFileHistory{FileHistoryEntry: FileHistoryEntry{ID: id, Path: filepath.ToSlash(path), Timestamp: now.UnixMilli(), Size: len(data), Binary: binary}, Content: base64.StdEncoding.EncodeToString(data)}
-	dir := filepath.Join(base, ".llm-hub", "history", historyPathKey(path))
+	dir := historyDirectories(base, target, path)[0]
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -90,27 +109,54 @@ func (a *App) ListFileHistory(path string) ([]FileHistoryEntry, error) {
 		return nil, err
 	}
 	base, _ := a.lifecycleBase(target)
-	dir := filepath.Join(base, ".llm-hub", "history", historyPathKey(path))
-	files, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return []FileHistoryEntry{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 	result := []FileHistoryEntry{}
-	for _, file := range files {
-		data, e := os.ReadFile(filepath.Join(dir, file.Name()))
-		if e != nil {
-			continue
+	seen := map[string]bool{}
+	for _, dir := range historyDirectories(base, target, path) {
+		files, readErr := os.ReadDir(dir)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return nil, readErr
 		}
-		var stored storedFileHistory
-		if json.Unmarshal(data, &stored) == nil {
-			result = append(result, stored.FileHistoryEntry)
+		for _, file := range files {
+			data, e := os.ReadFile(filepath.Join(dir, file.Name()))
+			if e != nil {
+				continue
+			}
+			var stored storedFileHistory
+			if json.Unmarshal(data, &stored) == nil && !seen[stored.ID] {
+				seen[stored.ID] = true
+				result = append(result, stored.FileHistoryEntry)
+			}
 		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Timestamp > result[j].Timestamp })
 	return result, nil
+}
+
+func (a *App) ReadFileHistoryContent(path, id string) (string, error) {
+	target, err := a.directoryPath(path, true)
+	if err != nil {
+		return "", err
+	}
+	base, _ := a.lifecycleBase(target)
+	var data []byte
+	for _, dir := range historyDirectories(base, target, path) {
+		data, err = os.ReadFile(filepath.Join(dir, filepath.Base(id)+".json"))
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	var stored storedFileHistory
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return "", err
+	}
+	content, err := base64.StdEncoding.DecodeString(stored.Content)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
 }
 func (a *App) RestoreFileHistory(path, id string) error {
 	target, err := a.directoryPath(path, true)
@@ -118,7 +164,13 @@ func (a *App) RestoreFileHistory(path, id string) error {
 		return err
 	}
 	base, _ := a.lifecycleBase(target)
-	data, err := os.ReadFile(filepath.Join(base, ".llm-hub", "history", historyPathKey(path), filepath.Base(id)+".json"))
+	var data []byte
+	for _, dir := range historyDirectories(base, target, path) {
+		data, err = os.ReadFile(filepath.Join(dir, filepath.Base(id)+".json"))
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return err
 	}

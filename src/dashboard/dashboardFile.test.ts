@@ -54,6 +54,26 @@ Deno.test("dashboard parser accepts legacy flat layouts and derives mobile stack
   assertEquals(safeDashboardPath("../home"), null);
 });
 
+Deno.test("legacy File widget paths migrate once to FileRef", () => {
+  const parsed = parseDashboard(`widgets:
+  - id: legacy
+    type: file
+    layout: { x: 0, y: 0, w: 6, h: 3 }
+    config: { path: 'C:\\Notes\\restart.md', filePath: '' }
+`)!;
+  assertEquals(parsed.widgets[0].config.file, {
+    scope: "absolute",
+    path: "C:/Notes/restart.md",
+  });
+  assertEquals("path" in parsed.widgets[0].config, false);
+  assertEquals("filePath" in parsed.widgets[0].config, false);
+  const serialized = serializeDashboard(parsed);
+  const reparsed = parseDashboard(serialized)!;
+  assertEquals("path" in reparsed.widgets[0].config, false);
+  assertEquals("filePath" in reparsed.widgets[0].config, false);
+  assertEquals(reparsed.widgets[0].config.file, parsed.widgets[0].config.file);
+});
+
 Deno.test("dashboard parser repairs duplicate widget IDs", () => {
   const parsed = parseDashboard(`widgets:
   - { id: duplicate, type: file, layout: { x: 0, y: 0, w: 6, h: 3 } }

@@ -78,7 +78,12 @@ import {
   isDashboardWidgetConfigured,
 } from "./widgetRegistry";
 import { shouldPersistFileWidgetText } from "./fileWidgetPersistence";
-import { resetFileHydrationForDashboard } from "./fileWidgetHydration";
+import {
+  fileChangeMatchesWidget,
+  fileWidgetHydrationReady,
+  fileWidgetViewerState,
+  resetFileHydrationForDashboard,
+} from "./fileWidgetHydration";
 import {
   docKindFor,
   isBinaryDocumentFileName,
@@ -637,7 +642,11 @@ export function DashboardView({
   onFileNameChange: (value: string) => void;
   onNewDocument: () => void;
   onExportDocument: () => void;
-  onHistoryClick: (source?: { path: string; content: string }) => void;
+  onHistoryClick: (source?: {
+    path: string;
+    content: string;
+    file?: FileRef;
+  }) => void;
   onDiffClick: (source: { path: string; content: string }) => void;
   isDark: boolean;
   aiEnabled: boolean;
@@ -1520,7 +1529,7 @@ export function DashboardView({
           mode: nextMode,
           encrypted: false,
           encryptedSourceContent: undefined,
-          ...extraConfig,
+          ...fileWidgetViewerState(extraConfig),
         },
         expectedFilePath,
       );
@@ -1597,10 +1606,17 @@ export function DashboardView({
       const content = typeof widget.config.content === "string"
         ? widget.config.content
         : "";
+      const storedFile = isFileRef(widget.config.file)
+        ? widget.config.file
+        : null;
+      if (!fileWidgetHydrationReady(
+        storedFile?.scope,
+        directoryBase,
+        workspaceBase,
+      )) return;
       const reloadBinaryFromDisk = isBinaryDocumentFileName(fileName);
       if (
         !fileName || !filePath || (content && !reloadBinaryFromDisk) ||
-        widget.config.externalOnly === true ||
         docKindFor(fileName) === "external"
       ) return;
 
@@ -1617,7 +1633,10 @@ export function DashboardView({
       void (async () => {
         try {
           const result = await readKnownPath(readPath);
-          if (!result) return;
+          if (!result) {
+            hydratedFilePathsRef.current.delete(hydrateKey);
+            return;
+          }
           const opened = await resolveOpenedFile(readPath, result);
           openFileInWidget(
             widget.id,
@@ -1629,17 +1648,65 @@ export function DashboardView({
             readPath,
           );
         } catch (error) {
+          hydratedFilePathsRef.current.delete(hydrateKey);
           console.warn("Could not restore local file content.", error);
         }
       })();
     });
   }, [
     data.widgets,
+    directoryBase,
     openFileInWidget,
     readKnownPath,
     resolveOpenedFile,
     updateFileWidget,
+    workspaceBase,
   ]);
+
+  useEffect(() => {
+    if (!hasWailsBackend()) return;
+    const reloadChangedFile = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path || "";
+      if (!path) return;
+      for (const widget of latestWidgetsRef.current) {
+        if (!isFileWidgetType(widget.type)) continue;
+        const filePath = filePathFromConfig(widget.config);
+        const readPath = fileReadPathFromConfig(widget.config);
+        if (!fileChangeMatchesWidget([filePath, readPath], path)) continue;
+
+        const timer = fileSaveTimersRef.current.get(widget.id);
+        if (timer) window.clearTimeout(timer);
+        fileSaveTimersRef.current.delete(widget.id);
+        pendingFileWritesRef.current.delete(widget.id);
+        hydratedFilePathsRef.current.delete(`${widget.id}:${filePath}`);
+
+        void (async () => {
+          try {
+            const result = await readKnownPath(readPath);
+            if (!result) return;
+            const opened = await resolveOpenedFile(readPath, result);
+            openFileInWidget(
+              widget.id,
+              opened.fileName,
+              opened.content,
+              readFileMode(opened.fileName),
+              opened.filePath,
+              { ...opened.extraConfig, contentRevision: Date.now() },
+              readPath,
+            );
+          } catch (error) {
+            console.warn("Could not reload Chat-updated file content.", error);
+          }
+        })();
+      }
+    };
+    window.addEventListener("llm-hub:file-content-changed", reloadChangedFile);
+    return () =>
+      window.removeEventListener(
+        "llm-hub:file-content-changed",
+        reloadChangedFile,
+      );
+  }, [openFileInWidget, readKnownPath, resolveOpenedFile]);
 
   useEffect(() => {
     if (previousWorkspaceBaseRef.current === workspaceBase) return;
@@ -2601,6 +2668,9 @@ export function DashboardView({
                 const source = {
                   path: widgetFilePath || widgetFileName,
                   content: widgetContent,
+                  file: isFileRef(widget.config.file)
+                    ? widget.config.file
+                    : undefined,
                 };
                 if (id === "diff") onDiffClick(source);
                 else onHistoryClick(source);
