@@ -2110,6 +2110,9 @@ export default function App() {
 
   const restoreCheckpoint = useCallback(async (checkpoint: HistoryCheckpoint) => {
     if (checkpoint.persistent) {
+      window.dispatchEvent(new CustomEvent("llm-hub:file-write-barrier", {
+        detail: { path: checkpoint.persistent.file.path },
+      }));
       await restoreFileHistoryRef(
         checkpoint.persistent.file,
         checkpoint.persistent.entryId,
@@ -3837,6 +3840,7 @@ export default function App() {
                           : "Verify CLI"}
                       </button>
                       {chatSettings.cliType === "codex" && (
+                        <>
                         <label className="settings-field">
                           <span>Codex model</span>
                           <select
@@ -3870,6 +3874,22 @@ export default function App() {
                             model catalog.
                           </small>
                         </label>
+                        <label className="settings-field">
+                          <span>Codex reasoning effort</span>
+                          <select
+                            className="settings-select"
+                            value={chatSettings.codexReasoningEffort}
+                            onChange={(event) => setChatSettings((current) => ({
+                              ...current,
+                              codexReasoningEffort: event.target.value as typeof current.codexReasoningEffort,
+                            }))}
+                          >
+                            {(["minimal", "low", "medium", "high", "xhigh"] as const).map((effort) => (
+                              <option key={effort} value={effort}>{effort}</option>
+                            ))}
+                          </select>
+                        </label>
+                        </>
                       )}
                       {cliStatus && (
                         <div

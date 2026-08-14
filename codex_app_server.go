@@ -221,7 +221,7 @@ func codexDynamicTools(request ChatRequest) []map[string]any {
 func codexInitializeParams() map[string]any {
 	return map[string]any{
 		"clientInfo": map[string]any{
-			"name": "gemihub_desktop", "title": appName, "version": "1.2.5",
+			"name": "gemihub_desktop", "title": appName, "version": "1.3.0",
 		},
 		"capabilities": map[string]any{"experimentalApi": true},
 	}
@@ -344,6 +344,15 @@ func codexThreadInfo(result json.RawMessage) (string, string) {
 	return value.Thread.ID, value.Model
 }
 
+func codexReasoningEffort(value string) string {
+	switch value {
+	case "minimal", "low", "medium", "high", "xhigh":
+		return value
+	default:
+		return "low"
+	}
+}
+
 func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	invocation, err := resolveCLI("codex", request.CLIPath, []string{"app-server"})
 	if err != nil {
@@ -449,6 +458,7 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 		"approvalPolicy": "never",
 		"sandboxPolicy":  map[string]any{"type": "readOnly"},
 		"summary":        "auto",
+		"effort":         codexReasoningEffort(request.CodexReasoningEffort),
 	}
 	if request.Model != "" {
 		turnParams["model"] = request.Model

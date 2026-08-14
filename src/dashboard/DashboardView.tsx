@@ -1665,6 +1665,20 @@ export function DashboardView({
 
   useEffect(() => {
     if (!hasWailsBackend()) return;
+    const cancelPendingFileWrite = (event: Event) => {
+      const path = (event as CustomEvent<{ path?: string }>).detail?.path || "";
+      if (!path) return;
+      for (const widget of latestWidgetsRef.current) {
+        if (!isFileWidgetType(widget.type)) continue;
+        const filePath = filePathFromConfig(widget.config);
+        const readPath = fileReadPathFromConfig(widget.config);
+        if (!fileChangeMatchesWidget([filePath, readPath], path)) continue;
+        const timer = fileSaveTimersRef.current.get(widget.id);
+        if (timer) window.clearTimeout(timer);
+        fileSaveTimersRef.current.delete(widget.id);
+        pendingFileWritesRef.current.delete(widget.id);
+      }
+    };
     const reloadChangedFile = (event: Event) => {
       const path = (event as CustomEvent<{ path?: string }>).detail?.path || "";
       if (!path) return;
@@ -1700,12 +1714,18 @@ export function DashboardView({
         })();
       }
     };
+    window.addEventListener("llm-hub:file-write-barrier", cancelPendingFileWrite);
     window.addEventListener("llm-hub:file-content-changed", reloadChangedFile);
-    return () =>
+    return () => {
+      window.removeEventListener(
+        "llm-hub:file-write-barrier",
+        cancelPendingFileWrite,
+      );
       window.removeEventListener(
         "llm-hub:file-content-changed",
         reloadChangedFile,
       );
+    };
   }, [openFileInWidget, readKnownPath, resolveOpenedFile]);
 
   useEffect(() => {

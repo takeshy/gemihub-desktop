@@ -44,6 +44,7 @@ type ChatRequest struct {
 	CLIType         string               `json:"cliType"`
 	CLIPath         string               `json:"cliPath"`
 	CLISessionID    string               `json:"cliSessionId"`
+	CodexReasoningEffort string           `json:"codexReasoningEffort,omitempty"`
 	SystemPrompt    string               `json:"systemPrompt"`
 	Messages        []ChatMessage        `json:"messages"`
 	EnableFileTools bool                 `json:"enableFileTools"`

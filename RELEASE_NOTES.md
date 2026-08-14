@@ -1,7 +1,13 @@
-# GemiHub Desktop v1.2.5
+# GemiHub Desktop v1.3.0
 
 ## What's new
 
+- Added Codex model and reasoning-effort selectors directly to Chat, with
+  minimal, low, medium, high, and xhigh options.
+- Enabled Workspace file tools for Codex App Server with all, no-search, and
+  off access modes from the Vault tool menu.
+- Fixed restored files being overwritten by a delayed editor auto-save after
+  navigating to another file and back.
 - Replaced Gemini 3.6 Flash with Gemini 3.7 Flash, removed the standard Gemini
   3.5 Flash option, and retained Gemini 3.5 Flash Lite for lightweight use cases.
 - Added Codex App Server model selection and read-only dynamic Workspace tools,

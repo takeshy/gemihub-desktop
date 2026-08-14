@@ -159,6 +159,8 @@ func (a *App) ReadFileHistoryContent(path, id string) (string, error) {
 	return string(content), nil
 }
 func (a *App) RestoreFileHistory(path, id string) error {
+	a.fileWriteMu.Lock()
+	defer a.fileWriteMu.Unlock()
 	target, err := a.directoryPath(path, true)
 	if err != nil {
 		return err
@@ -193,7 +195,7 @@ func (a *App) RestoreFileHistory(path, id string) error {
 	if err = os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(target, content, 0o644)
+	return writeUserFileAtomic(target, content)
 }
 func copyRegularFile(source, destination string) error {
 	data, err := os.ReadFile(source)

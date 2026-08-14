@@ -16,7 +16,7 @@ timestamp: 2026-07-15T00:00:00+09:00
 
 # Local CLI
 
-`Settings > CLI providers`でCLIの種類（CodexまたはAntigravity）と実行pathを指定し、Verifyします。検証に成功したCLIだけがconfigured providerとして利用できます。CLI modeではAPI provider用のfile toolsは無効になり、CLI自身の実行環境と権限に従います。CodexはJSON-RPC経由の`app-server`サブプロセスとして動作するため、Verifyでは`<path> --version`に加えて`app-server`サブコマンドの存在も確認されます。Windowsでは実行ファイルを直接指定しなくても、npmで導入した`@openai/codex`のCLIスクリプトをNode経由で解決できます。
+`Settings > CLI providers`でCLIの種類（CodexまたはAntigravity）と実行pathを指定し、Verifyします。検証に成功したCLIだけがconfigured providerとして利用できます。Codexではチャット入力欄の下からモデルとreasoning effort（minimal / low / medium / high / xhigh）を選択できます。DatabaseメニューのVault設定を有効にすると、WorkspaceファイルツールもCodexへ公開されます。CodexはJSON-RPC経由の`app-server`サブプロセスとして動作するため、Verifyでは`<path> --version`に加えて`app-server`サブコマンドの存在も確認されます。Windowsでは実行ファイルを直接指定しなくても、npmで導入した`@openai/codex`のCLIスクリプトをNode経由で解決できます。
 
 どのproviderも外部サービスまたはローカルprocessの利用条件、料金、data handlingが適用されます。モデル名はprovider側で利用可能なものを指定してください。
 

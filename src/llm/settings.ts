@@ -26,6 +26,7 @@ export const localLLMFrameworks: Record<
 };
 export type CLIType = "codex" | "antigravity";
 export type FileToolMode = "all" | "noSearch" | "none";
+export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export interface MCPServerConfig {
   id: string;
@@ -121,6 +122,7 @@ export interface ChatSettings {
   cliType: CLIType;
   cliPaths: Record<CLIType, string>;
   cliModels: Record<CLIType, string>;
+  codexReasoningEffort: CodexReasoningEffort;
   slashCommands: SlashCommand[];
   mcpServers: MCPServerConfig[];
   webSearchEnabled: boolean;
@@ -209,6 +211,7 @@ export const defaultChatSettings: ChatSettings = {
   cliType: "codex",
   cliPaths: { codex: "", antigravity: "" },
   cliModels: { codex: "", antigravity: "" },
+  codexReasoningEffort: "low",
   slashCommands: [{
     id: "cmd_infographic_default",
     name: "infographic",
@@ -637,6 +640,11 @@ export function loadChatSettings(): ChatSettings {
         : [],
       cliPaths: { ...defaultChatSettings.cliPaths, ...(parsed.cliPaths ?? {}) },
       cliModels: { ...defaultChatSettings.cliModels, ...(parsed.cliModels ?? {}) },
+      codexReasoningEffort: ["minimal", "low", "medium", "high", "xhigh"].includes(
+          parsed.codexReasoningEffort ?? "",
+        )
+        ? parsed.codexReasoningEffort as CodexReasoningEffort
+        : "low",
       slashCommands: Array.isArray(parsed.slashCommands)
         ? parsed.slashCommands.map((command) => ({
           ...command,

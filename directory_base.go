@@ -389,6 +389,8 @@ func (a *App) ReadWorkspaceFile(path string) (*LocalFileResult, error) {
 }
 
 func (a *App) WriteWorkspaceFile(path, content string) error {
+	a.fileWriteMu.Lock()
+	defer a.fileWriteMu.Unlock()
 	target, err := a.workspacePath(path, true)
 	if err != nil {
 		return err
@@ -430,6 +432,8 @@ func (a *App) WriteWorkspaceFile(path, content string) error {
 }
 
 func (a *App) WriteWorkspaceBinaryFile(path, contentBase64 string) error {
+	a.fileWriteMu.Lock()
+	defer a.fileWriteMu.Unlock()
 	target, err := a.workspacePath(path, true)
 	if err != nil {
 		return err
@@ -580,6 +584,8 @@ func (a *App) ReadFile(path string) (*LocalFileResult, error) {
 }
 
 func (a *App) WriteFile(path, content string) error {
+	a.fileWriteMu.Lock()
+	defer a.fileWriteMu.Unlock()
 	target, err := a.directoryPath(path, true)
 	if err != nil {
 		return err
@@ -829,6 +835,8 @@ func fileInventoryForBase(base string) ([]DirectoryFileEntry, error) {
 }
 
 func (a *App) WriteBinaryFile(path, contentBase64 string) error {
+	a.fileWriteMu.Lock()
+	defer a.fileWriteMu.Unlock()
 	target, err := a.directoryPath(path, true)
 	if err != nil {
 		return err

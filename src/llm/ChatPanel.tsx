@@ -27,6 +27,7 @@ import {
   type ChatAttachedFile,
   type ChatMessage,
   type ChatStreamEvent,
+  listCLIModels,
   listWorkspaceFiles,
   listAgentPlugins,
   onChatFunctionLimitRequest,
@@ -88,6 +89,7 @@ import { OkfSelector } from "../okf/OkfSelector";
 import {
   type ChatProvider,
   type ChatSettings,
+  type CodexReasoningEffort,
   chatThinkingCapabilities,
   cliNames,
   type CLIType,
@@ -604,6 +606,22 @@ export function ChatPanel({
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [okfBundles, setOkfBundles] = useState<OkfBundle[]>([]);
+  const [codexModels, setCodexModels] = useState<
+    Array<{ id: string; displayName: string }>
+  >([]);
+
+  useEffect(() => {
+    if (settings.provider !== "cli" || settings.cliType !== "codex") return;
+    let cancelled = false;
+    void listCLIModels("codex", settings.cliPaths.codex).then((models) => {
+      if (!cancelled) setCodexModels(models);
+    }).catch(() => {
+      if (!cancelled) setCodexModels([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.provider, settings.cliType, settings.cliPaths.codex]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1816,6 +1834,7 @@ export function ChatPanel({
         cliType: settings.cliType,
         cliPath: settings.cliPaths[settings.cliType],
         cliSessionId: nativeSessionID,
+        codexReasoningEffort: settings.codexReasoningEffort,
         streamId,
         enableThinking: thinkingEnabled,
         customTools,
@@ -2633,10 +2652,10 @@ export function ChatPanel({
                   ? "active"
                   : ""
               }`}
-              disabled={loading || settings.provider === "cli" ||
+              disabled={loading ||
                 (!workspaceBase && settings.mcpServers.length === 0)}
               onClick={() => setToolMenuOpen((open) => !open)}
-              title="Workspace and MCP tools"
+              title="Workspace (vault) and MCP tools"
             >
               <Database size={15} />
             </button>
@@ -2656,10 +2675,10 @@ export function ChatPanel({
                     }}
                   >
                     {mode === "all"
-                      ? "Files: all"
+                      ? "Vault: all"
                       : mode === "noSearch"
-                      ? "Files: no search"
-                      : "Files: off"}
+                      ? "Vault: no search"
+                      : "Vault: off"}
                   </button>
                 ))}
                 {settings.mcpServers.length > 0 && (
@@ -2808,6 +2827,41 @@ export function ChatPanel({
               </option>
             ))}
           </select>
+          {settings.provider === "cli" && settings.cliType === "codex" && (
+            <select
+              value={settings.cliModels.codex}
+              disabled={loading}
+              onChange={(event) => onSettingsChange({
+                ...settings,
+                cliModels: { ...settings.cliModels, codex: event.target.value },
+              })}
+              title="Codex model"
+            >
+              <option value="">Codex default</option>
+              {settings.cliModels.codex && !codexModels.some((model) =>
+                model.id === settings.cliModels.codex
+              ) && <option value={settings.cliModels.codex}>{settings.cliModels.codex}</option>}
+              {codexModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.displayName} ({model.id})
+                </option>
+              ))}
+            </select>
+          )}
+          {settings.provider === "cli" && settings.cliType === "codex" && (
+            <select
+              value={settings.codexReasoningEffort}
+              disabled={loading}
+              onChange={(event) => onSettingsChange({
+                ...settings,
+                codexReasoningEffort: event.target.value as CodexReasoningEffort,
+              })}
+              title="Codex reasoning effort"
+            >
+              {(["minimal", "low", "medium", "high", "xhigh"] as CodexReasoningEffort[])
+                .map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+            </select>
+          )}
           <select
             value={settings.selectedRagSetting ?? ""}
             disabled={loading}

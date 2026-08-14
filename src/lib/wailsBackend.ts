@@ -256,6 +256,7 @@ export interface ChatRequest {
   cliType: "codex" | "antigravity";
   cliPath: string;
   cliSessionId: string;
+  codexReasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
   streamId?: string;
   enableThinking?: boolean;
   enableWebSearch?: boolean;

@@ -108,3 +108,14 @@ func TestCodexInitializeOptsIntoExperimentalAPI(t *testing.T) {
 		t.Fatalf("initialize capabilities = %#v", params["capabilities"])
 	}
 }
+
+func TestCodexReasoningEffortDefaultsAndValidates(t *testing.T) {
+	for _, effort := range []string{"minimal", "low", "medium", "high", "xhigh"} {
+		if got := codexReasoningEffort(effort); got != effort {
+			t.Fatalf("effort %q became %q", effort, got)
+		}
+	}
+	if got := codexReasoningEffort("invalid"); got != "low" {
+		t.Fatalf("invalid effort became %q", got)
+	}
+}

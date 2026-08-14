@@ -20,6 +20,7 @@ type App struct {
 	ctx                context.Context
 	directoryMu        sync.RWMutex
 	directoryBase      string
+	fileWriteMu        sync.Mutex
 	workspaceMu        sync.Mutex
 	workspaceConfigDir string
 	workspaceState     WorkspaceState
