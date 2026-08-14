@@ -13,21 +13,21 @@ import {
   updateModelProfile,
 } from "./settings.ts";
 
-Deno.test("Gemini 3.5 Flash thinking can be switched on and off", () => {
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.5-flash"), {
+Deno.test("Gemini 3.7 Flash thinking can be switched on and off", () => {
+  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.7-flash"), {
     available: true,
     required: false,
   });
   assertEquals(
     chatThinkingCapabilities(
       "vertex",
-      "publishers/google/models/gemini-3.5-flash",
+      "publishers/google/models/gemini-3.7-flash",
     ),
     { available: true, required: false },
   );
 });
 
-Deno.test("Gemini defaults and legacy Flash Lite settings follow GemiHub", () => {
+Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
   const saved = localStorage.getItem("gemihub-desktop:chat-settings");
   try {
     localStorage.setItem(
@@ -39,6 +39,17 @@ Deno.test("Gemini defaults and legacy Flash Lite settings follow GemiHub", () =>
       }),
     );
     assertEquals(loadChatSettings().model, "gemini-3.5-flash-lite");
+    for (const model of ["gemini-3.5-flash", "gemini-3.6-flash"]) {
+      localStorage.setItem(
+        "gemihub-desktop:chat-settings",
+        JSON.stringify({
+          ...defaultChatSettings,
+          provider: "gemini",
+          model,
+        }),
+      );
+      assertEquals(loadChatSettings().model, "gemini-3.7-flash");
+    }
     assertEquals(defaultChatSettings.model, "gpt-5.5");
   } finally {
     if (saved === null) {
@@ -164,7 +175,7 @@ Deno.test("Gemini Pro models that require thinking cannot be switched off", () =
     available: true,
     required: true,
   });
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.5-flash"), {
+  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.7-flash"), {
     available: true,
     required: false,
   });
@@ -173,7 +184,7 @@ Deno.test("Gemini Pro models that require thinking cannot be switched off", () =
 Deno.test("selecting a CLI clears the previous API model", () => {
   const settings = {
     ...defaultChatSettings,
-    model: "gemini-3.5-flash",
+    model: "gemini-3.7-flash",
     verifiedCliTypes: ["codex" as const],
   };
   const selected = selectConfiguredModel(settings, "cli:codex");

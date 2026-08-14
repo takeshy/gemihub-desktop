@@ -183,9 +183,9 @@ func geminiThinkingConfig(model string, enabled bool) map[string]any {
 	if strings.Contains(lower, "gemma-4") {
 		return nil
 	}
-	// Gemini 3.6 Flash and 3.5 Flash Lite use thinkingLevel rather than a
+	// Gemini 3.7 Flash and 3.5 Flash Lite use thinkingLevel rather than a
 	// thinkingBudget.
-	if strings.Contains(lower, "gemini-3.6-flash") {
+	if strings.Contains(lower, "gemini-3.7-flash") {
 		level := "LOW"
 		if enabled {
 			level = "HIGH"
@@ -198,8 +198,8 @@ func geminiThinkingConfig(model string, enabled bool) map[string]any {
 		}
 		return map[string]any{"includeThoughts": true, "thinkingLevel": "HIGH"}
 	}
-	// Gemini 3/3.1 Pro cannot disable thinking. Other Gemini thinking models,
-	// including Gemini 3.5 Flash, use a zero budget to explicitly turn it off.
+	// Gemini 3/3.1 Pro cannot disable thinking. Other Gemini thinking models use
+	// a zero budget to explicitly turn it off.
 	required := strings.Contains(lower, "gemini-3-pro") || strings.Contains(lower, "gemini-3.1-pro")
 	if !enabled && !required {
 		return map[string]any{"thinkingBudget": 0}

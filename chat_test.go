@@ -312,17 +312,6 @@ func TestOpenAIMultimodalMessageContent(t *testing.T) {
 }
 
 func TestGeminiThinkingConfig(t *testing.T) {
-	off := geminiThinkingConfig("gemini-3.5-flash", false)
-	if off["thinkingBudget"] != 0 {
-		t.Fatalf("unexpected Gemini 3.5 off config: %#v", off)
-	}
-	on := geminiThinkingConfig("gemini-3.5-flash", true)
-	if on["includeThoughts"] != true {
-		t.Fatalf("unexpected Gemini 3.5 on config: %#v", on)
-	}
-	if _, exists := on["thinkingLevel"]; exists {
-		t.Fatalf("Gemini 3.5 should not use thinkingLevel: %#v", on)
-	}
 	legacyOff := geminiThinkingConfig("gemini-2.5-flash", false)
 	if legacyOff["thinkingBudget"] != 0 {
 		t.Fatalf("unexpected Gemini 2.5 off config: %#v", legacyOff)
@@ -331,13 +320,13 @@ func TestGeminiThinkingConfig(t *testing.T) {
 	if liteOn["thinkingLevel"] != "HIGH" || liteOn["includeThoughts"] != true {
 		t.Fatalf("unexpected Gemini 3.5 Flash Lite config: %#v", liteOn)
 	}
-	flashOff := geminiThinkingConfig("gemini-3.6-flash", false)
+	flashOff := geminiThinkingConfig("gemini-3.7-flash", false)
 	if flashOff["thinkingLevel"] != "LOW" || flashOff["includeThoughts"] != false {
-		t.Fatalf("unexpected Gemini 3.6 Flash off config: %#v", flashOff)
+		t.Fatalf("unexpected Gemini 3.7 Flash off config: %#v", flashOff)
 	}
-	flashOn := geminiThinkingConfig("gemini-3.6-flash", true)
+	flashOn := geminiThinkingConfig("gemini-3.7-flash", true)
 	if flashOn["thinkingLevel"] != "HIGH" || flashOn["includeThoughts"] != true {
-		t.Fatalf("unexpected Gemini 3.6 Flash on config: %#v", flashOn)
+		t.Fatalf("unexpected Gemini 3.7 Flash on config: %#v", flashOn)
 	}
 	if got := geminiThinkingConfig("gemini-3.1-pro-preview", false); got["includeThoughts"] != true {
 		t.Fatalf("Gemini 3.1 Pro thinking must remain enabled: %#v", got)

@@ -1,7 +1,9 @@
-# GemiHub Desktop v1.2.4
+# GemiHub Desktop v1.2.5
 
 ## What's new
 
+- Replaced Gemini 3.6 Flash with Gemini 3.7 Flash, removed the standard Gemini
+  3.5 Flash option, and retained Gemini 3.5 Flash Lite for lightweight use cases.
 - Added Codex App Server model selection and read-only dynamic Workspace tools,
   including confirmation-gated file edits and active Skill tools.
 - Unified in-memory checkpoints and persistent file versions in the History
