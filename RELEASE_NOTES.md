@@ -1,7 +1,9 @@
-# GemiHub Desktop v1.3.0
+# GemiHub Desktop v1.3.1
 
 ## What's new
 
+- Increased text sizes in the New file and Workspace move dialogs for improved
+  readability.
 - Added Codex model and reasoning-effort selectors directly to Chat, with
   minimal, low, medium, high, and xhigh options.
 - Enabled Workspace file tools for Codex App Server with all, no-search, and

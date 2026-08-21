@@ -8989,7 +8989,7 @@ body.resizing-side-pane * {
   display: grid;
   gap: 5px;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 13px;
 }
 .workspace-move-dialog input,
 .workspace-move-dialog select {
@@ -9024,6 +9024,14 @@ body.resizing-side-pane * {
   border-color: var(--accent);
   background: var(--accent);
   color: white;
+}
+.create-file-dialog > header {
+  font-size: 16px;
+}
+.create-file-dialog input,
+.create-file-dialog select,
+.create-file-dialog > footer button {
+  font-size: 14px;
 }
 .secret-dialog-form {
   display: grid;
