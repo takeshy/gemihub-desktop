@@ -136,21 +136,18 @@ GitHub Releases から実行ファイルをダウンロードしてください�
 
 - `gemihub-desktop-linux-amd64`（WebKitGTK 4.1）
 - `gemihub-desktop-linux-arm64`（WebKitGTK 4.1）
-- `gemihub-desktop-linux-amd64-webkit2gtk-4.0`
-- `gemihub-desktop-linux-arm64-webkit2gtk-4.0`
 - `gemihub-desktop-darwin-arm64`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
+- `gemihub-desktop-windows-amd64.msix`（Microsoft Store提出用）
+- `gemihub-desktop-windows-arm64.msix`（Microsoft Store提出用）
 
-標準のLinux版はWebKitGTK 4.1を使用し、Debian 12/13やUbuntu 24.04以降に対応
+Linux版はWebKitGTK 4.1を使用し、Debian 12/13やUbuntu 24.04以降に対応
 します。runtime libraryが未installの場合は、次のcommandでinstallしてください。
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-0
 ```
-
-Ubuntu 22.04などWebKitGTK 4.0のみを提供するdistributionでは、file名が
-`-webkit2gtk-4.0`で終わるartifactを使用してください。
 
 各リリースには `THIRD_PARTY_NOTICES.md` も含まれます。同じ内容をアプリ内の
 **Settings → General → Third-party notices** から確認できます。
@@ -187,7 +184,8 @@ gemihub-desktop note.md research.pdf book.epub
 必要な環境：
 
 - Deno 2.9 以上
-- Go 1.23 以上
+- Go 1.25 以上
+- Wails v3.0.0-beta.12（`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12`）
 - 利用する OS 向けの Wails platform dependencies
 
 依存関係をインストールし、Web UI を起動します。
@@ -213,6 +211,17 @@ deno task desktop:build
 
 デスクトップビルドでは Developer Tools が有効です。`Ctrl+Shift+I`（macOS では
 `Cmd+Option+I`）で WebView のインスペクターを開けます。
+
+Windows SDKを導入したWindows環境では、Microsoft Store提出用MSIXを生成できます。
+
+```bash
+wails3 task windows:msix ARCH=amd64
+wails3 task windows:msix ARCH=arm64
+```
+
+Partner Centerへ提出する前に、`build/windows/msix/AppxManifest.xml` の
+`Identity`名とPublisherを、予約したStore製品に割り当てられた正確な値へ
+置き換えてください。
 
 ## 謝辞
 

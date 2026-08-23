@@ -14,8 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // FileTreeNode is a filesystem entry rooted at DirectoryBase. Paths returned
@@ -75,9 +73,7 @@ func streamedFileMD5(path string, info os.FileInfo) (string, error) {
 }
 
 func (a *App) SelectDirectoryBase() (string, error) {
-	path, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "Select Files Directory",
-	})
+	path, err := a.openDirectoryDialog("Select Files Directory")
 	if err != nil || path == "" {
 		return path, err
 	}

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 const (
@@ -56,7 +56,7 @@ type googleTokenResponse struct {
 var vertexOAuthHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 func (a *App) SelectVertexOAuthClient() (*VertexOAuthClient, error) {
-	path, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{Title: "Select Google OAuth desktop client JSON", Filters: []wailsruntime.FileFilter{{DisplayName: "OAuth client JSON", Pattern: "*.json"}}})
+	path, err := a.openFileDialog("Select Google OAuth desktop client JSON", []application.FileFilter{{DisplayName: "OAuth client JSON", Pattern: "*.json"}})
 	if err != nil || path == "" {
 		return nil, err
 	}
@@ -120,7 +120,9 @@ func (a *App) ConnectVertexOAuth(clientID, clientSecret string) (*VertexOAuthSta
 		_, _ = io.WriteString(response, "<!doctype html><meta charset=utf-8><title>GemiHub Desktop</title><p>Google authorization completed. You can close this window and return to GemiHub Desktop.</p>")
 	})
 	go func() { _ = server.Serve(listener) }()
-	wailsruntime.BrowserOpenURL(a.ctx, googleOAuthAuthorizationURL+"?"+values.Encode())
+	if err := a.openURL(googleOAuthAuthorizationURL + "?" + values.Encode()); err != nil {
+		return nil, err
+	}
 	var result callbackResult
 	select {
 	case result = <-callback:

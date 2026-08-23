@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type CLIVerifyResult struct {
@@ -59,12 +59,9 @@ type cliInvocation struct {
 }
 
 func (a *App) SelectCLIPath() (string, error) {
-	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "Select CLI executable",
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "CLI programs", Pattern: "*.exe;*.js;*.cmd;*.bat;*"},
-			{DisplayName: "All files", Pattern: "*.*"},
-		},
+	return a.openFileDialog("Select CLI executable", []application.FileFilter{
+		{DisplayName: "CLI programs", Pattern: "*.exe;*.js;*.cmd;*.bat;*"},
+		{DisplayName: "All files", Pattern: "*.*"},
 	})
 }
 
@@ -175,12 +172,6 @@ func (a *App) chatCLI(request ChatRequest) (*ChatResult, error) {
 		return nil, fmt.Errorf("CLI returned no response")
 	}
 	return &ChatResult{Content: content}, nil
-}
-
-func (a *App) shutdown(_ context.Context) {
-	a.StopDiscordBot()
-	a.StopCLI()
-	a.closeAllMCPStdio()
 }
 
 func (a *App) StopCLI() bool {

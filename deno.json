@@ -4,8 +4,8 @@
     "dev": "deno task generate:builtin-okf && vite --host 127.0.0.1",
     "build": "deno task generate:builtin-okf && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "desktop": "go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 dev",
-    "desktop:build": "go run github.com/wailsapp/wails/v2/cmd/wails@v2.10.2 build -devtools",
+    "desktop": "wails3 dev",
+    "desktop:build": "wails3 task build",
     "check": "deno check src/main.tsx",
     "test": "deno test --allow-read --allow-env src"
   },

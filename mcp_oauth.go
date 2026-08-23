@@ -14,8 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const mcpOAuthRefreshBuffer = 5 * time.Minute
@@ -173,7 +171,9 @@ func (a *App) ConnectMCPOAuth(request MCPOAuthConnectRequest) (*MCPOAuthStatus, 
 		_, _ = io.WriteString(response, "<!doctype html><meta charset=utf-8><title>GemiHub Desktop</title><p>Authorization completed. You can close this window and return to GemiHub Desktop.</p>")
 	})
 	go func() { _ = server.Serve(listener) }()
-	wailsruntime.BrowserOpenURL(a.ctx, discovery.Config.AuthorizationURL+"?"+values.Encode())
+	if err := a.openURL(discovery.Config.AuthorizationURL + "?" + values.Encode()); err != nil {
+		return nil, err
+	}
 
 	var result callbackResult
 	select {

@@ -1,0 +1,21 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    deps: [common:tidy, common:frontend]
+    cmds:
+      - go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o {{.BIN_DIR}}/{{.APP_NAME}}
+    env:
+      GOOS: darwin
+      GOARCH: '{{.ARCH | default ARCH}}'
+      CGO_ENABLED: 1
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+  package:
+    cmds:
+      - task: build
+  run:
+    cmds:
+      - '{{.BIN_DIR}}/{{.APP_NAME}}'

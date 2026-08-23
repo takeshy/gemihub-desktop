@@ -3,6 +3,11 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   assetsInclude: ["**/*.json.gz"],
+  build: {
+    rollupOptions: {
+      external: ["/wails/runtime.js"],
+    },
+  },
   plugins: [react()],
   server: {
     host: "127.0.0.1",

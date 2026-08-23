@@ -177,22 +177,19 @@ Available release artifacts:
 
 - `gemihub-desktop-linux-amd64` (WebKitGTK 4.1)
 - `gemihub-desktop-linux-arm64` (WebKitGTK 4.1)
-- `gemihub-desktop-linux-amd64-webkit2gtk-4.0`
-- `gemihub-desktop-linux-arm64-webkit2gtk-4.0`
 - `gemihub-desktop-darwin-arm64`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
+- `gemihub-desktop-windows-amd64.msix` (Microsoft Store package)
+- `gemihub-desktop-windows-arm64.msix` (Microsoft Store package)
 
-The standard Linux binaries use WebKitGTK 4.1 and support distributions such
-as Debian 12/13 and Ubuntu 24.04 or newer. Install the runtime library if it is
+The Linux binaries use WebKitGTK 4.1 and support distributions such as Debian
+12/13 and Ubuntu 24.04 or newer. Install the runtime library if it is
 not already present:
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-0
 ```
-
-For distributions that provide only WebKitGTK 4.0, such as Ubuntu 22.04, use
-the artifact whose name ends in `-webkit2gtk-4.0` instead.
 
 Each release also includes `THIRD_PARTY_NOTICES.md`. The same notices are
 available in the app under **Settings → General → Third-party notices**.
@@ -231,7 +228,8 @@ gemihub-desktop note.md research.pdf book.epub
 Requirements:
 
 - Deno 2.9 or newer
-- Go 1.23 or newer
+- Go 1.25 or newer
+- Wails v3.0.0-beta.12 (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12`)
 - Wails platform dependencies for your OS
 
 Install dependencies and run the web UI:
@@ -257,6 +255,17 @@ deno task desktop:build
 
 Developer Tools are enabled in desktop builds. Press `Ctrl+Shift+I`
 (`Cmd+Option+I` on macOS) to open the WebView inspector.
+
+Build Microsoft Store MSIX packages on Windows with the Windows SDK installed:
+
+```bash
+wails3 task windows:msix ARCH=amd64
+wails3 task windows:msix ARCH=arm64
+```
+
+Before Partner Center submission, replace the `Identity` name and publisher in
+`build/windows/msix/AppxManifest.xml` with the exact values assigned to the
+reserved Store product.
 
 ## Acknowledgments
 

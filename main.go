@@ -2,14 +2,12 @@ package main
 
 import (
 	"embed"
+	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	linuxoptions "github.com/wailsapp/wails/v2/pkg/options/linux"
-	windowsoptions "github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:dist
@@ -25,32 +23,42 @@ func main() {
 		webviewUserDataPath = filepath.Join(configDir, appID, "webview")
 	}
 
-	err := wails.Run(&options.App{
-		Title:  appName,
-		Width:  1200,
-		Height: 820,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 20, G: 23, B: 29, A: 1},
-		Linux: &linuxoptions.Options{
-			Icon:             appIcon,
-			ProgramName:      appID,
-			WebviewGpuPolicy: linuxoptions.WebviewGpuPolicyNever,
-		},
-		Windows: &windowsoptions.Options{
+	wailsApp := application.New(application.Options{
+		Name:        appName,
+		Description: "GemiHub-compatible local desktop workspace",
+		Icon:        appIcon,
+		Windows: application.WindowsOptions{
 			WebviewUserDataPath: webviewUserDataPath,
 		},
-		OnStartup:  app.startup,
-		OnShutdown: app.shutdown,
-		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop: true,
-		},
-		Bind: []interface{}{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.BundledAssetFileServer(assets),
 		},
 	})
-	if err != nil {
-		println("Error:", err.Error())
+	app.application = wailsApp
+	wailsApp.RegisterService(application.NewService(app))
+
+	window := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "main",
+		Title:            appName,
+		Width:            1200,
+		Height:           820,
+		BackgroundType:   application.BackgroundTypeSolid,
+		BackgroundColour: application.NewRGBA(20, 23, 29, 255),
+		EnableFileDrop:   true,
+		URL:              "/",
+	})
+	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		details := event.Context().DropTargetDetails()
+		x, y := 0, 0
+		if details != nil {
+			x, y = details.X, details.Y
+		}
+		wailsApp.Event.Emit("wails:file-drop", map[string]any{
+			"x": x, "y": y, "paths": event.Context().DroppedFiles(),
+		})
+	})
+
+	if err := wailsApp.Run(); err != nil {
+		log.Fatal(err)
 	}
 }

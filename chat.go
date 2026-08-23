@@ -15,8 +15,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type ChatMessage struct {
@@ -32,29 +30,29 @@ type ChatAttachment struct {
 }
 
 type ChatRequest struct {
-	Provider        string               `json:"provider"`
-	Endpoint        string               `json:"endpoint"`
-	APIKey          string               `json:"apiKey"`
-	LocalFramework  string               `json:"localFramework,omitempty"`
-	LocalUsername   string               `json:"localUsername,omitempty"`
-	LocalPassword   string               `json:"localPassword,omitempty"`
-	Model           string               `json:"model"`
-	VertexProjectID string               `json:"vertexProjectId"`
-	VertexLocation  string               `json:"vertexLocation"`
-	CLIType         string               `json:"cliType"`
-	CLIPath         string               `json:"cliPath"`
-	CLISessionID    string               `json:"cliSessionId"`
-	CodexReasoningEffort string           `json:"codexReasoningEffort,omitempty"`
-	SystemPrompt    string               `json:"systemPrompt"`
-	Messages        []ChatMessage        `json:"messages"`
-	EnableFileTools bool                 `json:"enableFileTools"`
-	FileToolMode    string               `json:"fileToolMode"`
-	StreamID        string               `json:"streamId,omitempty"`
-	EnableThinking  bool                 `json:"enableThinking,omitempty"`
-	EnableWebSearch bool                 `json:"enableWebSearch,omitempty"`
-	CustomTools     []ChatToolDefinition `json:"customTools,omitempty"`
-	WorkflowSpec    WorkflowSpecContext  `json:"workflowSpecContext,omitempty"`
-	ctx             context.Context
+	Provider             string               `json:"provider"`
+	Endpoint             string               `json:"endpoint"`
+	APIKey               string               `json:"apiKey"`
+	LocalFramework       string               `json:"localFramework,omitempty"`
+	LocalUsername        string               `json:"localUsername,omitempty"`
+	LocalPassword        string               `json:"localPassword,omitempty"`
+	Model                string               `json:"model"`
+	VertexProjectID      string               `json:"vertexProjectId"`
+	VertexLocation       string               `json:"vertexLocation"`
+	CLIType              string               `json:"cliType"`
+	CLIPath              string               `json:"cliPath"`
+	CLISessionID         string               `json:"cliSessionId"`
+	CodexReasoningEffort string               `json:"codexReasoningEffort,omitempty"`
+	SystemPrompt         string               `json:"systemPrompt"`
+	Messages             []ChatMessage        `json:"messages"`
+	EnableFileTools      bool                 `json:"enableFileTools"`
+	FileToolMode         string               `json:"fileToolMode"`
+	StreamID             string               `json:"streamId,omitempty"`
+	EnableThinking       bool                 `json:"enableThinking,omitempty"`
+	EnableWebSearch      bool                 `json:"enableWebSearch,omitempty"`
+	CustomTools          []ChatToolDefinition `json:"customTools,omitempty"`
+	WorkflowSpec         WorkflowSpecContext  `json:"workflowSpecContext,omitempty"`
+	ctx                  context.Context
 }
 
 type ChatToolDefinition struct {
@@ -98,7 +96,7 @@ func (a *App) emitChatStream(request ChatRequest, eventType, delta, tool string)
 	if request.StreamID == "" || a.ctx == nil {
 		return
 	}
-	wailsruntime.EventsEmit(a.ctx, "chat:stream", ChatStreamEvent{StreamID: request.StreamID, Type: eventType, Delta: delta, Tool: tool})
+	a.emitEvent("chat:stream", ChatStreamEvent{StreamID: request.StreamID, Type: eventType, Delta: delta, Tool: tool})
 }
 
 func (a *App) emitChatUsage(request ChatRequest, usage ChatUsage) {
@@ -106,7 +104,7 @@ func (a *App) emitChatUsage(request ChatRequest, usage ChatUsage) {
 		return
 	}
 	copy := usage
-	wailsruntime.EventsEmit(a.ctx, "chat:stream", ChatStreamEvent{StreamID: request.StreamID, Type: "usage", Usage: &copy})
+	a.emitEvent("chat:stream", ChatStreamEvent{StreamID: request.StreamID, Type: "usage", Usage: &copy})
 }
 
 type PendingFileAction struct {
@@ -1109,7 +1107,7 @@ func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any,
 		delete(a.chatToolCalls, requestID)
 		a.chatToolMu.Unlock()
 	}()
-	wailsruntime.EventsEmit(a.ctx, "chat:tool-request", ChatToolRequest{RequestID: requestID, StreamID: request.StreamID, Name: name, Arguments: args})
+	a.emitEvent("chat:tool-request", ChatToolRequest{RequestID: requestID, StreamID: request.StreamID, Name: name, Arguments: args})
 	select {
 	case value := <-response:
 		if value.Error != "" {
@@ -1157,7 +1155,7 @@ func (a *App) requestChatFunctionLimitExtension(request ChatRequest, used, curre
 		delete(a.chatLimitCalls, requestID)
 		a.chatLimitMu.Unlock()
 	}()
-	wailsruntime.EventsEmit(a.ctx, "chat:function-limit-request", ChatFunctionLimitRequest{RequestID: requestID, StreamID: request.StreamID, Used: used, CurrentLimit: currentLimit, Remaining: currentLimit - used, ExtensionAmount: 50})
+	a.emitEvent("chat:function-limit-request", ChatFunctionLimitRequest{RequestID: requestID, StreamID: request.StreamID, Used: used, CurrentLimit: currentLimit, Remaining: currentLimit - used, ExtensionAmount: 50})
 	select {
 	case extension := <-response:
 		if extension > 0 {

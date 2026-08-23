@@ -1,4 +1,4 @@
-# GemiHub Desktop v1.3.2
+# GemiHub Desktop v1.4.0
 
 ## What's new
 
@@ -46,6 +46,10 @@ GemiHub Desktop is a local-first desktop workspace that brings files, AI chat,
 dashboards, workflows, memos, and plugins together in one application.
 
 ## Highlights
+
+- Upgraded the desktop application runtime and build system to Wails v3.
+- Added signed-package-ready MSIX builds for Microsoft Store submission on
+  Windows x64 and ARM64.
 
 - **Flexible dashboards** — Arrange File, Memo List, Base, Kanban, Timeline,
   Secret Manager, Workflow, and Web widgets in multiple customizable

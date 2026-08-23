@@ -13,11 +13,12 @@ import (
 	"strings"
 	"sync"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type App struct {
 	ctx                context.Context
+	application        *application.App
 	directoryMu        sync.RWMutex
 	directoryBase      string
 	fileWriteMu        sync.Mutex
@@ -60,7 +61,7 @@ func NewApp() *App {
 	return &App{chatToolCalls: make(map[string]chan chatToolResponse), chatLimitCalls: make(map[string]chan int), chatCancels: make(map[string]context.CancelFunc), mcpStdio: make(map[string]*mcpStdioSession), ragCancelled: make(map[string]bool)}
 }
 
-func (a *App) startup(ctx context.Context) {
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 	paths := startupFilePaths()
 	if len(paths) > 0 {
@@ -71,6 +72,51 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.initializeWorkspaces(); err != nil {
 		fmt.Println("Could not initialize Workspace:", err)
 	}
+	return nil
+}
+
+// startup keeps backend tests and non-Wails callers independent of the Wails
+// service wrapper while ServiceStartup remains the production lifecycle hook.
+func (a *App) startup(ctx context.Context) {
+	_ = a.ServiceStartup(ctx, application.ServiceOptions{})
+}
+
+func (a *App) ServiceShutdown() error {
+	a.StopDiscordBot()
+	a.StopCLI()
+	a.closeAllMCPStdio()
+	return nil
+}
+
+func (a *App) openFileDialog(title string, filters []application.FileFilter) (string, error) {
+	if a.application == nil {
+		return "", fmt.Errorf("application is not running")
+	}
+	return a.application.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
+		Title: title, Filters: filters,
+	}).PromptForSingleSelection()
+}
+
+func (a *App) openDirectoryDialog(title string) (string, error) {
+	if a.application == nil {
+		return "", fmt.Errorf("application is not running")
+	}
+	return a.application.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
+		Title: title, CanChooseDirectories: true, CanChooseFiles: false,
+	}).PromptForSingleSelection()
+}
+
+func (a *App) emitEvent(name string, data any) {
+	if a.application != nil {
+		a.application.Event.Emit(name, data)
+	}
+}
+
+func (a *App) openURL(url string) error {
+	if a.application == nil {
+		return fmt.Errorf("application is not running")
+	}
+	return a.application.Browser.OpenURL(url)
 }
 
 func (a *App) SelectLocalFile() (*LocalFileResult, error) {
@@ -85,15 +131,12 @@ func (a *App) SelectLocalFile() (*LocalFileResult, error) {
 }
 
 func (a *App) SelectLocalFilePath() (string, error) {
-	path, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "Open File",
-		Filters: []wailsruntime.FileFilter{
-			{
-				DisplayName: "Documents and images",
-				Pattern:     "*.md;*.markdown;*.txt;*.html;*.htm;*.epub;*.pdf;*.png;*.jpg;*.jpeg;*.gif;*.webp;*.avif;*.bmp;*.svg",
-			},
-			{DisplayName: "All files", Pattern: "*.*"},
+	path, err := a.openFileDialog("Open File", []application.FileFilter{
+		{
+			DisplayName: "Documents and images",
+			Pattern:     "*.md;*.markdown;*.txt;*.html;*.htm;*.epub;*.pdf;*.png;*.jpg;*.jpeg;*.gif;*.webp;*.avif;*.bmp;*.svg",
 		},
+		{DisplayName: "All files", Pattern: "*.*"},
 	})
 	if err != nil {
 		return "", err
@@ -102,18 +145,13 @@ func (a *App) SelectLocalFilePath() (string, error) {
 }
 
 func (a *App) SelectDirectoryPath() (string, error) {
-	return wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "Select Memo Directory",
-	})
+	return a.openDirectoryDialog("Select Memo Directory")
 }
 
 func (a *App) SelectExternalEditor() (string, error) {
-	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "Select External Editor",
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "Applications", Pattern: "*.exe;*.cmd;*.bat;*.ps1;*.app;*"},
-			{DisplayName: "All files", Pattern: "*.*"},
-		},
+	return a.openFileDialog("Select External Editor", []application.FileFilter{
+		{DisplayName: "Applications", Pattern: "*.exe;*.cmd;*.bat;*.ps1;*.app;*"},
+		{DisplayName: "All files", Pattern: "*.*"},
 	})
 }
 

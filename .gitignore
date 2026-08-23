@@ -3,7 +3,9 @@ node_modules/
 
 # Build output
 dist/
+bin/
 build/bin/
+.task/
 wailsjs/
 frontend/
 package.json.md5

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	pdfsplit "github.com/takeshy/minipdfsplit"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -114,9 +113,7 @@ type RAGSyncProgress struct {
 }
 
 func (a *App) emitRAGSyncProgress(progress RAGSyncProgress) {
-	if a.ctx != nil {
-		wailsruntime.EventsEmit(a.ctx, "rag:sync-progress", progress)
-	}
+	a.emitEvent("rag:sync-progress", progress)
 }
 
 type RAGSearchResult struct {

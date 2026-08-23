@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const defaultWorkspaceDirectoryName = "GemiHubWorkspace"
@@ -196,7 +194,7 @@ func (a *App) SetWorkspaceDirectory(path string) (WorkspaceState, error) {
 }
 
 func (a *App) SelectWorkspaceDirectory() (string, error) {
-	return wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{Title: "Select Workspace Directory"})
+	return a.openDirectoryDialog("Select Workspace Directory")
 }
 
 func (a *App) workspaceStateUnlocked() WorkspaceState {

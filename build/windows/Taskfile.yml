@@ -1,0 +1,43 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    deps: [common:tidy, common:frontend]
+    cmds:
+      - task: syso
+      - go build {{.BUILD_FLAGS}} -o {{.BIN_DIR}}/{{.APP_NAME}}.exe
+      - cmd: powershell Remove-Item -ErrorAction SilentlyContinue wails_windows_*.syso
+        platforms: [windows]
+      - cmd: rm -f wails_windows_*.syso
+        platforms: [linux, darwin]
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      BUILD_FLAGS: '-tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui"'
+    env:
+      GOOS: windows
+      GOARCH: '{{.ARCH}}'
+      CGO_ENABLED: 0
+
+  syso:
+    cmds:
+      - wails3 generate syso -arch {{.ARCH}} -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info build/windows/info.json -out wails_windows_{{.ARCH}}.syso
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
+  package:
+    cmds:
+      - task: msix
+
+  msix:
+    deps: [build]
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File build/windows/msix/package.ps1 -Arch {{.ARCH}}
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
+  run:
+    cmds:
+      - '{{.BIN_DIR}}/{{.APP_NAME}}.exe'

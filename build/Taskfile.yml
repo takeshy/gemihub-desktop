@@ -1,0 +1,19 @@
+version: '3'
+
+tasks:
+  frontend:
+    sources:
+      - index.html
+      - src/**/*
+      - package.json
+      - deno.json
+      - vite.config.ts
+    generates:
+      - dist/**/*
+    cmds:
+      - deno task build
+
+  tidy:
+    internal: true
+    cmds:
+      - go mod tidy
