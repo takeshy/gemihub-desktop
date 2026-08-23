@@ -11,6 +11,8 @@
 
 [日本語 README](README_ja.md)
 
+[Privacy Policy](https://takeshy.github.io/gemihub-desktop/privacy.html)
+
 ![GemiHub workspace comparing a PDF with an HTML research note](docs/images/col.png)
 
 ## Start with the work, not the prompt

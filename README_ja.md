@@ -7,6 +7,8 @@
 > **AI が賢くなった今、データの価値はどんどん高まっています。**<br> **GemiHub DesktopはアイデアのためのIDE。感想、メモ、資料、活動記録や秘密のトークンなどあらゆる情報を自分のパソコンのディスクに集めて、AIのコンテキストに変える、オープンなワークスペースです。**
 [English README](README.md)
 
+[プライバシーポリシー](https://takeshy.github.io/gemihub-desktop/privacy.html)
+
 ![PDFとHTMLの調査ノートを比較するGemiHubワークスペース](docs/images/col.png)
 
 ## プロンプトではなく、いま取り組んでいるものから始める
