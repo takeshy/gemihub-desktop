@@ -1,7 +1,11 @@
-# GemiHub Desktop v1.3.1
+# GemiHub Desktop v1.3.2
 
 ## What's new
 
+- Protected internal application files from plugin file API access, including
+  normalized and Windows-style paths.
+- Improved the built-in Markdown Skill guidance for bold spans embedded in
+  Japanese and other prose.
 - Increased text sizes in the New file and Workspace move dialogs for improved
   readability.
 - Added Codex model and reasoning-effort selectors directly to Chat, with
