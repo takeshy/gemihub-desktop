@@ -11,7 +11,7 @@
 
 [日本語 README](README_ja.md)
 
-![GemiHub workspace with Markdown, PDF, and EPUB side by side](docs/images/col.png)
+![GemiHub workspace comparing a PDF with an HTML research note](docs/images/col.png)
 
 ## Start with the work, not the prompt
 
@@ -117,17 +117,25 @@ GemiHub remains a local document and knowledge workspace.
 
 ## Screenshots
 
+### Review AI changes before they touch your files
+
+Chat can propose edits across Workspace files. Inspect the exact diff, choose
+individual hunks when needed, and apply only the changes you approve.
+
+![Reviewing an AI-proposed file replacement](docs/images/ai_file_review.png)
+
 ### Ideas stay linked to their sources
 
-Select text in Markdown, PDF, or EPUB and create an anchored memo. Highlights
-navigate to memos, and memo quotes navigate back to the source.
+Select text in Markdown, PDF, or EPUB and create an anchored memo alongside the
+document. Highlights navigate to memos, and memo quotes navigate back to the
+source.
 
 ![Memo timeline with source-linked notes](docs/images/memo_timeline.png)
 
 ### A workspace shaped around the project
 
-Arrange documents and tools in rows or columns, then save dashboards as portable
-YAML files.
+Arrange PDFs, HTML research notes, Markdown documents, and tools in rows or
+columns, then save dashboards as portable YAML files.
 
 ![GemiHub row layout](docs/images/row.png)
 
@@ -136,6 +144,13 @@ YAML files.
 Browse every document with memos, ordered by recent activity.
 
 ![Memo list](docs/images/memo_list.png)
+
+### Every edit has a way back
+
+Review saved file versions and idle checkpoints, compare them with the current
+file, and restore an earlier state when needed.
+
+![File history with a side-by-side diff](docs/images/file_history.png)
 
 ## Architecture
 

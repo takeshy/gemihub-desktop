@@ -7,7 +7,7 @@
 > **AI が賢くなった今、データの価値はどんどん高まっています。**<br> **GemiHub DesktopはアイデアのためのIDE。感想、メモ、資料、活動記録や秘密のトークンなどあらゆる情報を自分のパソコンのディスクに集めて、AIのコンテキストに変える、オープンなワークスペースです。**
 [English README](README.md)
 
-![Markdown、PDF、EPUBを並べたGemiHubワークスペース](docs/images/col.png)
+![PDFとHTMLの調査ノートを比較するGemiHubワークスペース](docs/images/col.png)
 
 ## プロンプトではなく、いま取り組んでいるものから始める
 
@@ -79,17 +79,21 @@ account、network接続がなくても、GemiHubはローカルのドキュメ�
 
 ## スクリーンショット
 
+### AIの変更をファイルへ反映する前に確認する
+
+ChatはWorkspace内のファイル変更を提案できます。実際のdiffを確認し、必要ならhunk単位で選び、承認した変更だけを適用できます。
+
+![AIが提案したファイル変更のレビュー](docs/images/ai_file_review.png)
+
 ### アイデアと出典をつないだままにする
 
-Markdown、PDF、EPUB
-の文章を選択し、引用付きのメモを作成できます。本文のハイライトからメモへ、メモの引用から原文へ移動できます。
+Markdown、PDF、EPUBの文章を選択し、ドキュメントの横で引用付きメモを作成できます。本文のハイライトからメモへ、メモの引用から原文へ移動できます。
 
 ![出典とつながったメモタイムライン](docs/images/memo_timeline.png)
 
 ### プロジェクトに合わせてワークスペースを組み立てる
 
-資料やツールを行・列に配置し、Dashboard を可搬な YAML
-ファイルとして保存できます。
+PDF、HTMLの調査ノート、Markdown、各種ツールを行・列に配置し、Dashboardを可搬なYAMLファイルとして保存できます。
 
 ![GemiHubの行レイアウト](docs/images/row.png)
 
@@ -98,6 +102,12 @@ Markdown、PDF、EPUB
 メモのあるすべてのドキュメントを、最近の活動順に確認できます。
 
 ![メモ一覧](docs/images/memo_list.png)
+
+### 編集前の状態へいつでも戻る
+
+保存済みのファイルversionとidle checkpointを確認し、現在の内容との差分を比較して、必要な時点へ復元できます。
+
+![左右のdiffを表示したファイル履歴](docs/images/file_history.png)
 
 ## アーキテクチャ
 
