@@ -1,4 +1,4 @@
-# GemiHub Desktop v1.4.0
+# GemiHub Desktop v1.4.1
 
 ## What's new
 
@@ -47,6 +47,8 @@ dashboards, workflows, memos, and plugins together in one application.
 
 ## Highlights
 
+- Corrected the Microsoft Store package display name to match the reserved
+  product name.
 - Upgraded the desktop application runtime and build system to Wails v3.
 - Added signed-package-ready MSIX builds for Microsoft Store submission on
   Windows x64 and ARM64.

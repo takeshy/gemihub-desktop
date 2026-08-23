@@ -11,7 +11,7 @@
     Version="@VERSION@"
     ProcessorArchitecture="@ARCH@" />
   <Properties>
-    <DisplayName>GemiHub Desktop</DisplayName>
+    <DisplayName>gemihub-desktop</DisplayName>
     <PublisherDisplayName>takeshy</PublisherDisplayName>
     <Description>Local-first AI workspace</Description>
     <Logo>Assets\StoreLogo.png</Logo>
@@ -26,7 +26,7 @@
   <Applications>
     <Application Id="App" Executable="gemihub-desktop.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="GemiHub Desktop"
+        DisplayName="gemihub-desktop"
         Description="Local-first AI workspace"
         BackgroundColor="transparent"
         Square44x44Logo="Assets\Square44x44Logo.png"
