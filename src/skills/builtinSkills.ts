@@ -35,6 +35,7 @@ Create and edit the extended Markdown supported by GemiHub Desktop. In addition 
 3. **Link related notes** using wikilinks (\`[[Note]]\`) for internal vault connections, or standard Markdown links for external URLs.
 4. **Embed images** using the \`![[image.png]]\` syntax.
 5. **Add callouts** for highlighted information using \`> [!type]\` syntax.
+6. **Space inline bold spans** with one space outside both delimiters when they are embedded in prose. This is especially important around Japanese text or punctuation: write \`次は **「変化の検知」** と **「自動化」** に進みます。\`, not \`次は**「変化の検知」**と**「自動化」**に進みます。\` Never put spaces inside the \`**\` delimiters.
 
 > Use \`[[wikilinks]]\` for workspace files and \`[text](url)\` for external URLs.
 
