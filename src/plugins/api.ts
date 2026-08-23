@@ -43,6 +43,16 @@ function pluginFilePath(path: string, scope: "workspace" | "files"): string {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
     throw new Error(`${scope} file API accepts relative paths only.`);
   }
+  const segments: string[] = [];
+  for (const segment of value.replace(/\\/g, "/").split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  const normalized = segments.join("/").toLowerCase();
+  if (normalized === ".llm-hub" || normalized.startsWith(".llm-hub/")) {
+    throw new Error(`${scope} file API cannot access protected application files.`);
+  }
   return value;
 }
 

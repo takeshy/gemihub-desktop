@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
 import { createPluginAPI } from "./api.ts";
 import type { PluginSlashCommand } from "./types.ts";
 import { dashboardWidgetDefinition } from "../dashboard/widgetRegistry.ts";
@@ -51,4 +51,42 @@ Deno.test("plugin file APIs expose explicit Workspace and Files roots", () => {
   assertEquals(typeof api.workspaceFiles?.read, "function");
   assertEquals(typeof api.files?.read, "function");
   assertEquals("projectFiles" in api, false);
+});
+
+Deno.test("plugin file APIs deny access to protected application files", async () => {
+  const api = createPluginAPI("example", "en", ["files"], {
+    onRegisterView: () => undefined,
+    onRegisterSettingsTab: () => undefined,
+    onRegisterSlashCommand: () => undefined,
+  });
+
+  for (const path of [
+    ".llm-hub/plugins/other/main.js",
+    "./.llm-hub/plugin-data/other.json",
+    ".llm-hub\\plugins\\other\\main.js",
+    "notes/../.llm-hub/plugins/other/main.js",
+    ".LLM-HUB/plugins/other/main.js",
+  ]) {
+    await assertRejects(
+      () => api.workspaceFiles!.read(path),
+      Error,
+      "protected application files",
+    );
+    await assertRejects(
+      () => api.files!.create(path, "malicious"),
+      Error,
+      "protected application files",
+    );
+  }
+
+  assertThrows(
+    () => api.workspaceFiles!.rename("notes/safe.md", ".llm-hub/plugins/other/main.js"),
+    Error,
+    "protected application files",
+  );
+  assertThrows(
+    () => api.files!.delete(".llm-hub"),
+    Error,
+    "protected application files",
+  );
 });
