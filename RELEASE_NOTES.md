@@ -1,4 +1,4 @@
-# GemiHub Desktop v1.4.1
+# GemiHub Desktop v1.4.2
 
 ## What's new
 

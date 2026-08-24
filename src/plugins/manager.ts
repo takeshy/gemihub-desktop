@@ -149,7 +149,13 @@ async function getText(url: string): Promise<string> {
   if (response.status < 200 || response.status >= 300) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
-  return response.body;
+  if (response.body) return response.body;
+  if (!response.bodyBase64) return "";
+  const binary = atob(response.bodyBase64);
+  const bytes = Uint8Array.from(binary, (character) =>
+    character.charCodeAt(0)
+  );
+  return new TextDecoder().decode(bytes);
 }
 
 async function sha256Text(content: string): Promise<string> {

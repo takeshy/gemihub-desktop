@@ -24,7 +24,10 @@ function pluginManifest(overrides: Record<string, unknown> = {}): string {
   });
 }
 
-function mockRuntime(manifest = pluginManifest()) {
+function mockRuntime(
+  manifest = pluginManifest(),
+  releaseAssetsAsBase64 = false,
+) {
   const installed: Array<
     { id: string; files: Record<string, string>; metadata: string }
   > = [];
@@ -45,19 +48,23 @@ function mockRuntime(manifest = pluginManifest()) {
   const patch =
     "--- a/main.js\n+++ b/main.js\n@@ -1,1 +1,1 @@\n-original\n+workspace\n";
   const backend = {
-    ExternalHTTPRequest: ({ url }: { url: string }) =>
-      Promise.resolve({
+    ExternalHTTPRequest: ({ url }: { url: string }) => {
+      const body = url.includes("/releases/latest")
+        ? JSON.stringify({ tag_name: "v0.1.0", assets })
+        : url.endsWith("manifest.json")
+        ? manifest
+        : url.endsWith("workspace.patch")
+        ? patch
+        : "original\n";
+      const encodeAsBase64 = releaseAssetsAsBase64 &&
+        !url.includes("/releases/latest");
+      return Promise.resolve({
         status: 200,
         headers: {},
-        bodyBase64: "",
-        body: url.includes("/releases/latest")
-          ? JSON.stringify({ tag_name: "v0.1.0", assets })
-          : url.endsWith("manifest.json")
-          ? manifest
-          : url.endsWith("workspace.patch")
-          ? patch
-          : "original\n",
-      }),
+        bodyBase64: encodeAsBase64 ? btoa(body) : "",
+        body: encodeAsBase64 ? "" : body,
+      });
+    },
     InstallPluginFiles: (
       id: string,
       files: Record<string, string>,
@@ -69,6 +76,21 @@ function mockRuntime(manifest = pluginManifest()) {
   };
   return { backend, installed };
 }
+
+Deno.test("plugin release decodes octet-stream assets from bodyBase64", async () => {
+  const runtime = globalThis as unknown as { window?: { go?: unknown } };
+  const previous = runtime.window;
+  const mock = mockRuntime(pluginManifest(), true);
+  runtime.window = { go: { main: { App: mock.backend } } };
+  try {
+    const preview = await previewPluginRelease("owner/repo");
+    assertEquals(preview.manifest.id, "demo");
+    await installPluginRelease("owner/repo", undefined, preview);
+    assertEquals(mock.installed[0].files["main.js"], "workspace\n");
+  } finally {
+    runtime.window = previous;
+  }
+});
 
 Deno.test("plugin release install validates and applies the workspace patch", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
