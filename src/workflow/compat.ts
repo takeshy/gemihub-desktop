@@ -24,7 +24,16 @@ function mergeUsage(total: ChatUsage | undefined, next: ChatUsage | undefined): 
   };
 }
 
-export async function runWorkflowChatWithAutoApply(request: ChatRequest, call: (request: ChatRequest) => Promise<ChatResult>, apply: (action: PendingFileAction) => Promise<void>, limit = 7): Promise<ChatResult> {
+/**
+ * Outcome of handing a proposed file action to the host. A rejected action is
+ * not an error: the model is told so it can revise or finish without it.
+ */
+export interface WorkflowFileActionOutcome {
+  applied: boolean;
+  feedback?: string;
+}
+
+export async function runWorkflowChatWithAutoApply(request: ChatRequest, call: (request: ChatRequest) => Promise<ChatResult>, apply: (action: PendingFileAction) => Promise<void | WorkflowFileActionOutcome>, limit = 7): Promise<ChatResult> {
   let result: ChatResult | undefined, usage: ChatUsage | undefined, thinking = "";
   const images: NonNullable<ChatResult["generatedImages"]> = [], tools = new Set<string>();
   for (let iteration = 0; iteration < limit; iteration++) {
@@ -36,9 +45,15 @@ export async function runWorkflowChatWithAutoApply(request: ChatRequest, call: (
     if (next.cliSessionId) request.cliSessionId = next.cliSessionId;
     result = { ...next, usage, thinking, generatedImages: images, toolsUsed: [...tools] };
     if (!next.pendingAction) return result;
-    await apply(next.pendingAction);
+    const outcome = await apply(next.pendingAction);
+    const applied = outcome === undefined || outcome.applied;
     if (next.content.trim()) request.messages.push({ role: "assistant", content: next.content });
-    request.messages.push({ role: "user", content: `The proposed ${next.pendingAction.kind} operation for ${next.pendingAction.path} was applied successfully. Continue the original workflow task and provide the final result.` });
+    request.messages.push({
+      role: "user",
+      content: applied
+        ? `The proposed ${next.pendingAction.kind} operation for ${next.pendingAction.path} was applied successfully. Continue the original workflow task and provide the final result.`
+        : `The user rejected the proposed ${next.pendingAction.kind} operation for ${next.pendingAction.path}.${outcome && outcome.feedback ? ` Their feedback: ${outcome.feedback}` : ""} Do not repeat the same change; revise it according to the feedback or finish the task without it.`,
+    });
   }
   if (result?.pendingAction) throw new Error("Workflow command file action iteration limit exceeded.");
   throw new Error("Workflow command returned no result.");

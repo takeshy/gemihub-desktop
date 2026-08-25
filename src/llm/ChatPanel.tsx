@@ -1511,9 +1511,13 @@ export function ChatPanel({
   const send = async (override?: string) => {
     const text = (override ?? input).trim();
     if (!text || loading || !activeSession) return;
-    rememberPrompt(text);
-    historyIndexRef.current = null;
-    historyDraftRef.current = "";
+    // Only what the user typed belongs in recall; continuation prompts the panel
+    // sends itself (after applying a file action) would just be noise.
+    if (override === undefined) {
+      rememberPrompt(text);
+      historyIndexRef.current = null;
+      historyDraftRef.current = "";
+    }
     const skillInvocation = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
     const invokedPluginCommand = skillInvocation
       ? pluginCommands.find((command) =>

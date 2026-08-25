@@ -1,7 +1,10 @@
-# GemiHub Desktop v1.4.3
+# GemiHub Desktop v1.4.4
 
 ## What's new
 
+- Workflow AI steps now show their proposed file changes in a diff before
+  writing, with a per-line Regenerate feedback path. Set `confirm: false` on a
+  command node to keep applying edits unattended.
 - Chat now recalls previously sent prompts with the Up and Down arrow keys,
   kept per workspace.
 - Declared MCP Apps client capabilities during initialize and accepted the flat

@@ -16,6 +16,7 @@ const suggestedProperties: Partial<Record<WorkflowNodeType, string[]>> = {
     "model",
     "ragSetting",
     "vaultTools",
+    "confirm",
     "mcpServers",
     "enableThinking",
     "attachments",

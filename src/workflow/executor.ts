@@ -22,6 +22,7 @@ import {
   duplicateFileRef,
   type FileRef,
   fileRef,
+  fileRefFromBackendPath,
   renameFileRef,
   saveHTMLExportRef,
   trashFileRef,
@@ -65,8 +66,10 @@ import {
   expandMultipartFields,
   runWorkflowChatWithAutoApply,
   sanitizeWorkflowNotePath,
+  type WorkflowFileActionOutcome,
   workflowNameFromPath,
 } from "./compat";
+import { pendingFileConfirmRequest } from "./pendingConfirm";
 import { readWorkflowWorkspaceFile } from "./encryptedFile";
 
 export interface WorkflowExecutionServices {
@@ -1208,6 +1211,10 @@ async function executeNode(
           : node.properties.vaultTools === "none"
           ? "none"
           : "all") as ChatRequest["fileToolMode"];
+      // File edits the model proposes are reviewed in a diff before they land,
+      // unless the workflow opts out with confirm: false.
+      const confirmFileEdits = fileMode !== "none" &&
+        boolProperty(node, "confirm", true);
       const attachmentNames = property(node, "attachments", variables).split(
         ",",
       ).map((value) => value.trim()).filter(Boolean);
@@ -1456,7 +1463,42 @@ async function executeNode(
         result = await runWorkflowChatWithAutoApply(
           chatRequest,
           chat,
-          applyPendingFileAction,
+          confirmFileEdits
+            ? async (action): Promise<WorkflowFileActionOutcome> => {
+              // Raised only once an edit is actually proposed, so headless runs
+              // that never touch a file keep working, as with the note node.
+              if (services.interactionMode === "headless") {
+                throw new Error(
+                  `Headless workflow cannot confirm the AI edit for ${action.path}. Set confirm: false to allow it.`,
+                );
+              }
+              const target = fileRefFromBackendPath(action.path).path;
+              const existing = action.kind === "write"
+                ? (await readWorkspaceFile(target).catch(() => null))
+                  ?.content ??
+                  null
+                : null;
+              const confirmation = pendingFileConfirmRequest(action, existing);
+              // The file already holds the proposed content, so there is
+              // nothing for the reviewer to decide.
+              if (!confirmation) {
+                await applyPendingFileAction(action);
+                return { applied: true };
+              }
+              const answer = await requestWorkflowPrompt(confirmation);
+              const review = answer === true
+                ? { confirmed: true }
+                : answer as WorkflowConfirmationResult | null;
+              if (!review?.confirmed) {
+                return {
+                  applied: false,
+                  feedback: review?.additionalRequest,
+                };
+              }
+              await applyPendingFileAction(action);
+              return { applied: true };
+            }
+            : applyPendingFileAction,
         );
       } finally {
         unsubscribe();
