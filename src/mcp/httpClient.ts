@@ -95,6 +95,17 @@ function responseResult(
 export const MCP_PROTOCOL_VERSION = "2026-07-28";
 const LEGACY_PROTOCOL_VERSION = "2025-11-25";
 const CLIENT_INFO = { name: "gemihub-desktop", version: "1.1.0" } as const;
+/**
+ * MCP Apps interop: servers only offer HTML app resources to clients that
+ * declare they can render them.
+ */
+export const MCP_APPS_CLIENT_CAPABILITIES = {
+  extensions: {
+    "io.modelcontextprotocol/ui": {
+      mimeTypes: ["text/html;profile=mcp-app"],
+    },
+  },
+} as const;
 type ProtocolMode = "unknown" | "modern" | "legacy";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -167,7 +178,7 @@ export class McpHttpClient {
           ...(isRecord(params._meta) ? params._meta : {}),
           "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
           "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
-          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientCapabilities": MCP_APPS_CLIENT_CAPABILITIES,
         },
       }
       : params;
@@ -209,7 +220,7 @@ export class McpHttpClient {
   private async initializeLegacy(requestedVersion: string): Promise<void> {
     const { result } = await this.sendRaw("initialize", {
       protocolVersion: requestedVersion,
-      capabilities: {},
+      capabilities: MCP_APPS_CLIENT_CAPABILITIES,
       clientInfo: CLIENT_INFO,
     }, "legacy-initialize");
     this.protocolMode = "legacy";

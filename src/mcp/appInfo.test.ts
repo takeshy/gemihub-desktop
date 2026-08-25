@@ -13,3 +13,15 @@ Deno.test("MCP Apps metadata loads ui resources and remains reopenable", async (
   assertEquals(app?.serverConfig?.transport, "http");
   assertEquals((app?.toolResult.content as Array<{ text?: string }>)[0].text, "done");
 });
+
+Deno.test("MCP Apps metadata accepts the flat ui/resourceUri key", async () => {
+  const app = await mcpAppInfoFromResult({ readResource: (uri) => Promise.resolve({ uri, mimeType: "text/html", text: "<main>Flat</main>" }) }, { content: [{ type: "text", text: "done" }], _meta: { "ui/resourceUri": "ui://result/app.html" } }, "render", server);
+  assertStringIncludes(app?.html ?? "", "<main>Flat</main>");
+});
+
+Deno.test("MCP Apps metadata ignores a resource uri outside the ui scheme", async () => {
+  let requested = "";
+  const app = await mcpAppInfoFromResult({ readResource: (uri) => { requested = uri; return Promise.resolve(null); } }, { content: [{ type: "text", text: "done" }], _meta: { ui: { resourceUri: "https://example.com/app.html" } } }, "render", server);
+  assertEquals(requested, "");
+  assertEquals(app, undefined);
+});

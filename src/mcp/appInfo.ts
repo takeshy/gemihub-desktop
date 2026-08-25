@@ -6,11 +6,20 @@ export interface McpAppResourceClient {
   readResource: (uri: string) => Promise<McpAppResource | null>;
 }
 
+/**
+ * Servers announce the app resource either as nested `_meta.ui.resourceUri` or
+ * as the flat `_meta["ui/resourceUri"]` key; accept both.
+ */
+export function mcpAppResourceUri(rawMeta: unknown): string {
+  const meta = rawMeta && typeof rawMeta === "object" ? rawMeta as Record<string, unknown> : {};
+  const ui = meta.ui && typeof meta.ui === "object" ? meta.ui as Record<string, unknown> : {};
+  const uri = typeof ui.resourceUri === "string" ? ui.resourceUri : meta["ui/resourceUri"];
+  return typeof uri === "string" && uri.startsWith("ui://") ? uri : "";
+}
+
 export async function mcpAppInfoFromResult(client: McpAppResourceClient, result: Record<string, unknown>, title: string, server: MCPServerConfig): Promise<McpAppInfo | undefined> {
   const content = Array.isArray(result.content) ? result.content as Array<{ resource?: McpAppResource }> : [];
-  const meta = result._meta && typeof result._meta === "object" ? result._meta as Record<string, unknown> : {};
-  const ui = meta.ui && typeof meta.ui === "object" ? meta.ui as Record<string, unknown> : {};
-  const uri = typeof ui.resourceUri === "string" ? ui.resourceUri : "";
+  const uri = mcpAppResourceUri(result._meta);
   let resource = content.find((item) => item.resource?.text || item.resource?.blob)?.resource;
   if (!resource && uri) resource = await client.readResource(uri) ?? undefined;
   let html = resource?.text || "";

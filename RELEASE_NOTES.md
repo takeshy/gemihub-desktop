@@ -1,7 +1,13 @@
-# GemiHub Desktop v1.4.2
+# GemiHub Desktop v1.4.3
 
 ## What's new
 
+- Chat now recalls previously sent prompts with the Up and Down arrow keys,
+  kept per workspace.
+- Declared MCP Apps client capabilities during initialize and accepted the flat
+  `ui/resourceUri` metadata key, so more servers return their app UI.
+- PDF viewers now detect corrupted or truncated stored content and reload the
+  file from disk instead of failing every retry.
 - Protected internal application files from plugin file API access, including
   normalized and Windows-style paths.
 - Improved the built-in Markdown Skill guidance for bold spans embedded in

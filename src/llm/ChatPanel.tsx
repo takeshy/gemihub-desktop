@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   BookOpen,
   Bot,
@@ -69,6 +70,13 @@ import {
 import { discoverMcpHttpTools, McpHttpClient } from "../mcp/httpClient";
 import { discoverMcpStdioTools, McpStdioClient } from "../mcp/stdioClient";
 import { mcpAppInfoFromResult } from "../mcp/appInfo";
+import {
+  appendPromptHistory,
+  isCaretOnFirstLine,
+  isCaretOnLastLine,
+  loadPromptHistory,
+  savePromptHistory,
+} from "./promptHistory";
 import { isEncryptedFile } from "../lib/hybridEncryption";
 import {
   decryptHistoryPayload,
@@ -587,6 +595,7 @@ export function ChatPanel({
   const [sessionsLocked, setSessionsLocked] = useState(false);
   const [activeID, setActiveID] = useState("");
   const [input, setInput] = useState("");
+  const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingFileAction | null>(null);
@@ -688,6 +697,60 @@ export function ChatPanel({
   const filePickerRef = useRef<HTMLDivElement | null>(null);
   const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const historyIndexRef = useRef<number | null>(null);
+  const historyDraftRef = useRef("");
+
+  useEffect(() => {
+    setPromptHistory(loadPromptHistory(workspaceBase));
+    historyIndexRef.current = null;
+    historyDraftRef.current = "";
+  }, [workspaceBase]);
+
+  const rememberPrompt = useCallback((prompt: string) => {
+    setPromptHistory((previous) => {
+      const next = appendPromptHistory(previous, prompt);
+      savePromptHistory(workspaceBase, next);
+      return next;
+    });
+  }, [workspaceBase]);
+
+  const recallPrompt = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      const target = event.currentTarget;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return false;
+      }
+      if (target.selectionStart !== target.selectionEnd) return false;
+      const caret = target.selectionStart;
+      let next: string | null = null;
+      if (event.key === "ArrowUp" && promptHistory.length > 0 && isCaretOnFirstLine(input, caret)) {
+        if (historyIndexRef.current === null) historyDraftRef.current = input;
+        const index = historyIndexRef.current === null
+          ? promptHistory.length - 1
+          : Math.max(0, historyIndexRef.current - 1);
+        historyIndexRef.current = index;
+        next = promptHistory[index];
+      } else if (
+        event.key === "ArrowDown" && historyIndexRef.current !== null &&
+        isCaretOnLastLine(input, caret)
+      ) {
+        const index = historyIndexRef.current + 1;
+        const beyondHistory = index >= promptHistory.length;
+        historyIndexRef.current = beyondHistory ? null : index;
+        next = beyondHistory ? historyDraftRef.current : promptHistory[index];
+      }
+      if (next === null) return false;
+      event.preventDefault();
+      setInput(next);
+      const caretEnd = next.length;
+      // Wait for the controlled value to land before moving the caret.
+      requestAnimationFrame(() =>
+        composerRef.current?.setSelectionRange(caretEnd, caretEnd)
+      );
+      return true;
+    },
+    [input, promptHistory],
+  );
 
   useEffect(() => {
     if (!draftRequest?.id || !draftRequest.text) return;
@@ -1448,6 +1511,9 @@ export function ChatPanel({
   const send = async (override?: string) => {
     const text = (override ?? input).trim();
     if (!text || loading || !activeSession) return;
+    rememberPrompt(text);
+    historyIndexRef.current = null;
+    historyDraftRef.current = "";
     const skillInvocation = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
     const invokedPluginCommand = skillInvocation
       ? pluginCommands.find((command) =>
@@ -2489,8 +2555,14 @@ export function ChatPanel({
           <textarea
             ref={composerRef}
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              historyIndexRef.current = null;
+              setInput(event.target.value);
+            }}
             onKeyDown={(event) => {
+              const menuOpen = slashMatches.length > 0 ||
+                skillSlashMatches.length > 0 || mentionMatches.length > 0;
+              if (!menuOpen && recallPrompt(event)) return;
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void send();

@@ -16,6 +16,7 @@ import {
 import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useI18n } from "../i18n/context";
+import { hasPdfHeader } from "../lib/pdfBytes";
 import {
   buildTextIndex,
   clearHighlight,
@@ -213,8 +214,16 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
         setError(tr("pdf.openFailed"));
         return;
       }
+      // Stored content can be truncated or hold an error payload instead of the
+      // file. Fail fast so the host can refetch rather than retrying pdf.js.
+      if (!hasPdfHeader(bytes)) {
+        setError(tr("pdf.openFailed"));
+        onLoadErrorRef.current?.();
+        return;
+      }
 
       let cancelled = false;
+      let loadingTask: ReturnType<typeof getDocument> | null = null;
       void (async () => {
         let lastError: unknown;
         for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -231,7 +240,8 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
             // needed here.
             // pdf.js transfers this buffer to its worker. Use a fresh copy so a
             // startup retry never receives an already-detached ArrayBuffer.
-            const doc = await getDocument({ data: bytes.slice() }).promise;
+            loadingTask = getDocument({ data: bytes.slice() });
+            const doc = await loadingTask.promise;
             if (cancelled || generation !== generationRef.current) {
               doc.loadingTask.destroy().catch(() => undefined);
               return;
@@ -256,6 +266,9 @@ export const PdfViewer = forwardRef<PdfViewerHandle, {
 
       return () => {
         cancelled = true;
+        // Drop a load still in flight; otherwise its worker keeps running and
+        // can outlive the document this effect already tore down.
+        loadingTask?.destroy().catch(() => undefined);
       };
     }, [content]);
 
