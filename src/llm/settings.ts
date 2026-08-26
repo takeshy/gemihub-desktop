@@ -559,10 +559,12 @@ export function configuredChatProviders(
   return settings.verifiedCliTypes.length > 0 ? [...combined, "cli"] : combined;
 }
 
-export function loadChatSettings(): ChatSettings {
+export function loadChatSettings(
+  storage: Pick<Storage, "getItem"> = localStorage,
+): ChatSettings {
   try {
-    const legacy = localStorage.getItem("llm-hub:chat-settings");
-    const stored = localStorage.getItem(CHAT_SETTINGS_KEY) ?? legacy ?? "{}";
+    const legacy = storage.getItem("llm-hub:chat-settings");
+    const stored = storage.getItem(CHAT_SETTINGS_KEY) ?? legacy ?? "{}";
     const parsed = JSON.parse(stored) as Partial<ChatSettings>;
     const provider = parsed.provider ?? defaultChatSettings.provider;
     const legacyProfiles =

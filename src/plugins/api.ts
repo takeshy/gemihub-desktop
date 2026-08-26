@@ -41,6 +41,24 @@ import {
   registerFileViewerAction,
 } from "./fileActions";
 
+interface FileActionRegistrationState {
+  active: boolean;
+  disposers: Set<() => void>;
+}
+
+const fileActionRegistrations = new WeakMap<
+  PluginAPI,
+  FileActionRegistrationState
+>();
+
+export function unregisterPluginAPIFileActions(api: PluginAPI): void {
+  const state = fileActionRegistrations.get(api);
+  if (!state) return;
+  state.active = false;
+  for (const dispose of state.disposers) dispose();
+  state.disposers.clear();
+}
+
 export interface PluginRegistrationCallbacks {
   onRegisterView: (view: PluginView) => void;
   onRegisterSettingsTab: (tab: PluginSettingsTab) => void;
@@ -100,6 +118,23 @@ export function createPluginAPI(
   callbacks: PluginRegistrationCallbacks,
 ): PluginAPI {
   safePluginId(pluginId);
+  const fileActionState: FileActionRegistrationState = {
+    active: true,
+    disposers: new Set(),
+  };
+  const trackFileAction = (register: () => () => void): () => void => {
+    if (!fileActionState.active) return () => undefined;
+    const disposeRegistration = register();
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      fileActionState.disposers.delete(dispose);
+      disposeRegistration();
+    };
+    fileActionState.disposers.add(dispose);
+    return dispose;
+  };
   const has = (permission: PluginPermission) => {
     if (!permissions) return true;
     if (permission === "files") {
@@ -171,12 +206,16 @@ export function createPluginAPI(
       },
       refreshDecorations: refreshFileTreeDecorations,
       registerContextMenuItem(action) {
-        return registerFileTreeContextMenuItem(pluginId, action);
+        return trackFileAction(() =>
+          registerFileTreeContextMenuItem(pluginId, action)
+        );
       },
     };
     api.fileViewer = {
       registerAction(action) {
-        return registerFileViewerAction(pluginId, action);
+        return trackFileAction(() =>
+          registerFileViewerAction(pluginId, action)
+        );
       },
     };
     api.files = {
@@ -338,5 +377,6 @@ export function createPluginAPI(
     };
   }
 
+  fileActionRegistrations.set(api, fileActionState);
   return api;
 }

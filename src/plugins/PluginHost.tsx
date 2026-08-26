@@ -37,7 +37,7 @@ import { WorkflowPanel } from "../workflow/WorkflowPanel";
 import { WorkflowAutomationHost } from "../workflow/WorkflowAutomationHost";
 import { WorkflowPromptHost } from "../workflow/WorkflowPromptHost";
 import { WorkflowMcpAppHost } from "../workflow/McpAppHost";
-import { createPluginAPI } from "./api";
+import { createPluginAPI, unregisterPluginAPIFileActions } from "./api";
 import { loadPlugin, readPluginManifest, unloadPlugin } from "./loader";
 import type {
   PluginAPI,
@@ -427,6 +427,7 @@ export function PluginHost({
     const registeredSettings: PluginSettingsTab[] = [];
     const registeredCommands: PluginSlashCommand[] = [];
     const instances: PluginInstance[] = [];
+    const pluginAPIs: PluginAPI[] = [];
     apiMapRef.current.clear();
     unregisterPluginWidgets();
     unregisterFileTreeDecorationProviders();
@@ -537,6 +538,7 @@ export function PluginHost({
             manifest.permissions,
             callbacks,
           );
+          pluginAPIs.push(api);
           apiMapRef.current.set(manifest.id, api);
           const loaded = await loadPlugin({
             ...config,
@@ -544,6 +546,7 @@ export function PluginHost({
             source: "local",
           }, api);
           if (cancelled) {
+            unregisterPluginAPIFileActions(api);
             await unloadPlugin(loaded);
             return;
           }
@@ -564,6 +567,7 @@ export function PluginHost({
 
     return () => {
       cancelled = true;
+      for (const api of pluginAPIs) unregisterPluginAPIFileActions(api);
       const loaded = instancesRef.current;
       instancesRef.current = [];
       for (const plugin of loaded) void unloadPlugin(plugin);

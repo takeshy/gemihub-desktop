@@ -4,7 +4,7 @@
     "productName": "GemiHub Desktop",
     "productIdentifier": "takeshy.gemihub-desktop",
     "description": "Local-first AI workspace",
-    "version": "1.4.4",
+    "version": "1.4.5",
     "copyright": "Copyright takeshy",
     "comments": "GemiHub-compatible local desktop workspace"
   },
