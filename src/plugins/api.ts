@@ -3,38 +3,55 @@ import ReactDOM from "react-dom";
 import {
   createDirectory,
   createWorkspaceDirectory,
-  deleteWorkspaceFile,
   deleteFile,
+  deleteWorkspaceFile,
   externalHTTPRequest,
-  fileInventory,
   fetchManagedPluginAsset,
-  listWorkspaceFiles,
+  fileInventory,
+  getDirectoryBase,
   getWorkspaceState,
   listFileTree,
+  listWorkspaceFiles,
   readFile,
   readWorkspaceFile,
-  getDirectoryBase,
   renameFile,
   renameWorkspaceFile,
   searchFiles,
-  writeFile,
   writeBinaryFile,
+  writeFile,
   writeWorkspaceBinaryFile,
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
-import type { PluginAPI, PluginLLMChatOptions, PluginLLMModel, PluginPermission, PluginSettingsTab, PluginSlashCommand, PluginView } from "./types";
+import type {
+  PluginAPI,
+  PluginLLMChatOptions,
+  PluginLLMModel,
+  PluginPermission,
+  PluginSettingsTab,
+  PluginSlashCommand,
+  PluginView,
+} from "./types";
 import { registerPluginWidget } from "../dashboard/widgetRegistry";
+import {
+  refreshFileTreeDecorations,
+  registerFileTreeDecorationProvider,
+} from "./fileTreeExtensions";
 
 export interface PluginRegistrationCallbacks {
   onRegisterView: (view: PluginView) => void;
   onRegisterSettingsTab: (tab: PluginSettingsTab) => void;
   onRegisterSlashCommand: (command: PluginSlashCommand) => void;
-  onLLMChat?: (messages: Array<{ role: string; content: string }>, options?: PluginLLMChatOptions) => Promise<string>;
+  onLLMChat?: (
+    messages: Array<{ role: string; content: string }>,
+    options?: PluginLLMChatOptions,
+  ) => Promise<string>;
   onLLMListModels?: () => Promise<PluginLLMModel[]>;
 }
 
 function safePluginId(pluginId: string): string {
-  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(pluginId)) throw new Error("Invalid plugin id");
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(pluginId)) {
+    throw new Error("Invalid plugin id");
+  }
   return pluginId;
 }
 
@@ -51,9 +68,25 @@ function pluginFilePath(path: string, scope: "workspace" | "files"): string {
   }
   const normalized = segments.join("/").toLowerCase();
   if (normalized === ".llm-hub" || normalized.startsWith(".llm-hub/")) {
-    throw new Error(`${scope} file API cannot access protected application files.`);
+    throw new Error(
+      `${scope} file API cannot access protected application files.`,
+    );
   }
   return value;
+}
+
+function notifyFileChanged(
+  scope: "workspace" | "files",
+  path: string,
+  kind: "created" | "updated" | "renamed" | "deleted",
+  oldPath?: string,
+): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("llm-hub:file-tree-refresh", {
+      detail: { scope, path, oldPath, kind },
+    }),
+  );
 }
 
 export function createPluginAPI(
@@ -65,14 +98,22 @@ export function createPluginAPI(
   safePluginId(pluginId);
   const has = (permission: PluginPermission) => {
     if (!permissions) return true;
-    if (permission === "files") return permissions.includes("files") || permissions.includes("drive");
-    if (permission === "llm") return permissions.includes("llm") || permissions.includes("gemini");
+    if (permission === "files") {
+      return permissions.includes("files") || permissions.includes("drive");
+    }
+    if (permission === "llm") {
+      return permissions.includes("llm") || permissions.includes("gemini");
+    }
     return permissions.includes(permission);
   };
   const api: PluginAPI = {
     language,
     registerView(view) {
-      callbacks.onRegisterView({ ...view, id: `${pluginId}:${view.id}`, pluginId });
+      callbacks.onRegisterView({
+        ...view,
+        id: `${pluginId}:${view.id}`,
+        pluginId,
+      });
     },
     registerSettingsTab(tab) {
       callbacks.onRegisterSettingsTab({ ...tab, pluginId });
@@ -84,12 +125,18 @@ export function createPluginAPI(
       registerPluginWidget(pluginId, widget);
     },
     onActiveFileChanged(callback) {
-      const listener = (event: Event) => callback((event as CustomEvent<{ path: string | null; name: string | null }>).detail);
+      const listener = (event: Event) =>
+        callback(
+          (event as CustomEvent<{ path: string | null; name: string | null }>)
+            .detail,
+        );
       window.addEventListener("llm-hub:active-file", listener);
       return () => window.removeEventListener("llm-hub:active-file", listener);
     },
     selectFile(path) {
-      window.dispatchEvent(new CustomEvent("llm-hub:select-file", { detail: { path } }));
+      window.dispatchEvent(
+        new CustomEvent("llm-hub:select-file", { detail: { path } }),
+      );
     },
     React,
     ReactDOM,
@@ -97,6 +144,29 @@ export function createPluginAPI(
   };
 
   if (has("files")) {
+    api.onFilesChanged = (callback) => {
+      if (typeof window === "undefined") return () => undefined;
+      const listener = (event: Event) => {
+        const detail = (event as CustomEvent<
+          {
+            scope?: "workspace" | "files";
+            path?: string;
+            oldPath?: string;
+            kind?: "created" | "updated" | "renamed" | "deleted" | "refresh";
+          }
+        >).detail;
+        callback({ ...detail, kind: detail?.kind ?? "refresh" });
+      };
+      window.addEventListener("llm-hub:file-tree-refresh", listener);
+      return () =>
+        window.removeEventListener("llm-hub:file-tree-refresh", listener);
+    };
+    api.fileTree = {
+      registerDecorationProvider(provider) {
+        return registerFileTreeDecorationProvider(pluginId, provider);
+      },
+      refreshDecorations: refreshFileTreeDecorations,
+    };
     api.files = {
       async current() {
         const path = await getDirectoryBase();
@@ -118,50 +188,108 @@ export function createPluginAPI(
       search: searchFiles,
       tree: listFileTree,
       async create(path, content) {
+        const target = pluginFilePath(path, "files");
         if (content instanceof ArrayBuffer) {
           const bytes = new Uint8Array(content);
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
-          await writeBinaryFile(pluginFilePath(path, "files"), btoa(binary));
-        } else await writeFile(pluginFilePath(path, "files"), content);
+          await writeBinaryFile(target, btoa(binary));
+        } else await writeFile(target, content);
+        notifyFileChanged("files", target, "created");
       },
       async update(path, content) {
+        const target = pluginFilePath(path, "files");
         if (content instanceof ArrayBuffer) {
           const bytes = new Uint8Array(content);
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
-          await writeBinaryFile(pluginFilePath(path, "files"), btoa(binary));
-        } else await writeFile(pluginFilePath(path, "files"), content);
+          await writeBinaryFile(target, btoa(binary));
+        } else await writeFile(target, content);
+        notifyFileChanged("files", target, "updated");
       },
-      createDirectory(path) { return createDirectory(pluginFilePath(path, "files")); },
-      rename(oldPath, newPath) { return renameFile(pluginFilePath(oldPath, "files"), pluginFilePath(newPath, "files")); },
-      delete(path) { return deleteFile(pluginFilePath(path, "files")); },
+      async createDirectory(path) {
+        const target = pluginFilePath(path, "files");
+        await createDirectory(target);
+        notifyFileChanged("files", target, "created");
+      },
+      rename(oldPath, newPath) {
+        const source = pluginFilePath(oldPath, "files");
+        const target = pluginFilePath(newPath, "files");
+        return renameFile(source, target).then(() => {
+          notifyFileChanged("files", target, "renamed", source);
+        });
+      },
+      delete(path) {
+        const target = pluginFilePath(path, "files");
+        return deleteFile(target).then(() => {
+          notifyFileChanged("files", target, "deleted");
+        });
+      },
     };
-    const writeWorkspaceContent = async (path: string, content: string | ArrayBuffer) => {
+    const writeWorkspaceContent = async (
+      path: string,
+      content: string | ArrayBuffer,
+    ) => {
+      const target = pluginFilePath(path, "workspace");
       if (content instanceof ArrayBuffer) {
         const bytes = new Uint8Array(content);
         let binary = "";
         for (const byte of bytes) binary += String.fromCharCode(byte);
-        await writeWorkspaceBinaryFile(pluginFilePath(path, "workspace"), btoa(binary));
-      } else await writeWorkspaceFile(pluginFilePath(path, "workspace"), content);
+        await writeWorkspaceBinaryFile(target, btoa(binary));
+      } else await writeWorkspaceFile(target, content);
     };
     api.workspaceFiles = {
       async current() {
         const state = await getWorkspaceState();
-        const workspace = state.workspaces.find((item) => item.id === state.activeWorkspaceId);
-        return workspace ? { ...workspace, id: "workspace", name: "Workspace" } : null;
+        const workspace = state.workspaces.find((item) =>
+          item.id === state.activeWorkspaceId
+        );
+        return workspace
+          ? { ...workspace, id: "workspace", name: "Workspace" }
+          : null;
       },
       inventory: listWorkspaceFiles,
       async read(path) {
-        const result = await readWorkspaceFile(pluginFilePath(path, "workspace"));
+        const result = await readWorkspaceFile(
+          pluginFilePath(path, "workspace"),
+        );
         if (!result) throw new Error(`Workspace file not found: ${path}`);
         return result.content;
       },
-      create: writeWorkspaceContent,
-      update: writeWorkspaceContent,
-      createDirectory(path) { return createWorkspaceDirectory(pluginFilePath(path, "workspace")); },
-      rename(oldPath, newPath) { return renameWorkspaceFile(pluginFilePath(oldPath, "workspace"), pluginFilePath(newPath, "workspace")); },
-      delete(path) { return deleteWorkspaceFile(pluginFilePath(path, "workspace")); },
+      async create(path, content) {
+        await writeWorkspaceContent(path, content);
+        notifyFileChanged(
+          "workspace",
+          pluginFilePath(path, "workspace"),
+          "created",
+        );
+      },
+      async update(path, content) {
+        await writeWorkspaceContent(path, content);
+        notifyFileChanged(
+          "workspace",
+          pluginFilePath(path, "workspace"),
+          "updated",
+        );
+      },
+      async createDirectory(path) {
+        const target = pluginFilePath(path, "workspace");
+        await createWorkspaceDirectory(target);
+        notifyFileChanged("workspace", target, "created");
+      },
+      rename(oldPath, newPath) {
+        const source = pluginFilePath(oldPath, "workspace");
+        const target = pluginFilePath(newPath, "workspace");
+        return renameWorkspaceFile(source, target).then(() => {
+          notifyFileChanged("workspace", target, "renamed", source);
+        });
+      },
+      delete(path) {
+        const target = pluginFilePath(path, "workspace");
+        return deleteWorkspaceFile(target).then(() => {
+          notifyFileChanged("workspace", target, "deleted");
+        });
+      },
     };
   }
   if (has("network")) api.network = { request: externalHTTPRequest };
@@ -178,13 +306,17 @@ export function createPluginAPI(
     const readAll = async (): Promise<Record<string, unknown>> => {
       try {
         const result = await readWorkspaceFile(storagePath);
-        return result?.content ? JSON.parse(result.content) as Record<string, unknown> : {};
+        return result?.content
+          ? JSON.parse(result.content) as Record<string, unknown>
+          : {};
       } catch {
         return {};
       }
     };
     api.storage = {
-      async get(key) { return (await readAll())[key]; },
+      async get(key) {
+        return (await readAll())[key];
+      },
       async set(key, value) {
         const current = await readAll();
         current[key] = value;

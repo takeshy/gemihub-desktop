@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Bot,
@@ -45,7 +52,10 @@ import type {
 import { SkillWorkflowToolHost } from "../skills/SkillWorkflowToolHost";
 import { AgentPluginsSection } from "../agentPlugins/AgentPluginsSection";
 import { listAgentPlugins } from "../lib/wailsBackend";
-import { loadInstalledAgentPlugin, mergeAgentPluginMcpServer } from "../agentPlugins/manager";
+import {
+  loadInstalledAgentPlugin,
+  mergeAgentPluginMcpServer,
+} from "../agentPlugins/manager";
 import {
   checkPluginUpdate,
   installPluginRelease,
@@ -65,6 +75,7 @@ import {
   pluginViewForPath,
   readPluginViewFile,
 } from "./pluginViews";
+import { unregisterFileTreeDecorationProviders } from "./fileTreeExtensions";
 
 const CONFIG_KEY = "llm-hub:plugins";
 const SELECTED_PLUGIN_KEY = "llm-hub:selected-plugin";
@@ -233,27 +244,67 @@ export function PluginHost({
     void (async () => {
       const installed = await listAgentPlugins();
       const enabled = installed.filter((item) => item.enabled);
-      const settled = await Promise.allSettled(enabled.map(async (item) => ({ name: item.name, package: await loadInstalledAgentPlugin(item.name, workspaceBase) })));
+      const settled = await Promise.allSettled(
+        enabled.map(async (item) => ({
+          name: item.name,
+          package: await loadInstalledAgentPlugin(item.name, workspaceBase),
+        })),
+      );
       if (cancelled) return;
-      const loaded = new Map(settled.flatMap((result) => result.status === "fulfilled" ? [[result.value.name, result.value.package] as const] : []));
+      const loaded = new Map(
+        settled.flatMap((result) =>
+          result.status === "fulfilled"
+            ? [[result.value.name, result.value.package] as const]
+            : []
+        ),
+      );
       const installedNames = new Set(installed.map((item) => item.name));
       onChatSettingsChange((current) => {
-        const unmanaged = current.mcpServers.filter((server) => !server.agentPlugin);
+        const unmanaged = current.mcpServers.filter((server) =>
+          !server.agentPlugin
+        );
         const previousByPlugin = new Map<string, typeof current.mcpServers>();
-        for (const server of current.mcpServers) if (server.agentPlugin && installedNames.has(server.agentPlugin.pluginName)) previousByPlugin.set(server.agentPlugin.pluginName, [...(previousByPlugin.get(server.agentPlugin.pluginName) ?? []), server]);
+        for (const server of current.mcpServers) {
+          if (
+            server.agentPlugin &&
+            installedNames.has(server.agentPlugin.pluginName)
+          ) {
+            previousByPlugin.set(server.agentPlugin.pluginName, [
+              ...(previousByPlugin.get(server.agentPlugin.pluginName) ?? []),
+              server,
+            ]);
+          }
+        }
         const managed = installed.flatMap((plugin) => {
           const previous = previousByPlugin.get(plugin.name) ?? [];
-          if (!plugin.enabled) return previous.map((server) => ({ ...server, enabled: false }));
+          if (!plugin.enabled) {
+            return previous.map((server) => ({ ...server, enabled: false }));
+          }
           const contents = loaded.get(plugin.name);
           if (!contents) return previous;
-          const byName = new Map(previous.map((server) => [server.agentPlugin!.serverName, server]));
-          return contents.mcpServers.map((server) => mergeAgentPluginMcpServer(server, byName.get(server.agentPlugin!.serverName)));
+          const byName = new Map(
+            previous.map((server) => [server.agentPlugin!.serverName, server]),
+          );
+          return contents.mcpServers.map((server) =>
+            mergeAgentPluginMcpServer(
+              server,
+              byName.get(server.agentPlugin!.serverName),
+            )
+          );
         });
         const next = [...unmanaged, ...managed];
-        return JSON.stringify(next) === JSON.stringify(current.mcpServers) ? current : { ...current, mcpServers: next };
+        return JSON.stringify(next) === JSON.stringify(current.mcpServers)
+          ? current
+          : { ...current, mcpServers: next };
       });
-    })().catch((error) => { if (!cancelled) console.error("Failed to synchronize Agent Plugins:", error); });
-    return () => { cancelled = true; };
+    })().catch((error) => {
+      if (!cancelled) {
+        console.error("Failed to synchronize Agent Plugins:", error);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [agentPluginRefresh, onChatSettingsChange, workspaceBase]);
   const apiMapRef = useRef(new Map<string, PluginAPI>());
   const handledPluginViewRequestRef = useRef(0);
@@ -377,6 +428,7 @@ export function PluginHost({
     const instances: PluginInstance[] = [];
     apiMapRef.current.clear();
     unregisterPluginWidgets();
+    unregisterFileTreeDecorationProviders();
     setViews([]);
     setSettingsTabs([]);
     setSlashCommands([]);
@@ -513,6 +565,7 @@ export function PluginHost({
       const loaded = instancesRef.current;
       instancesRef.current = [];
       for (const plugin of loaded) void unloadPlugin(plugin);
+      unregisterFileTreeDecorationProviders();
     };
   }, [chatSettings, configs, language, manifests]);
 
@@ -984,7 +1037,23 @@ export function PluginHost({
           {managerMessage && (
             <p className="plugin-manager-message">{managerMessage}</p>
           )}
-          {workspaceBase && <AgentPluginsSection workspaceBase={workspaceBase} mcpServers={chatSettings.mcpServers} onChanged={() => setAgentPluginRefresh((value) => value + 1)} onMcpServersTested={(pluginName, servers) => onChatSettingsChange((current) => ({ ...current, mcpServers: [...current.mcpServers.filter((server) => server.agentPlugin?.pluginName !== pluginName), ...servers] }))} />}
+          {workspaceBase && (
+            <AgentPluginsSection
+              workspaceBase={workspaceBase}
+              mcpServers={chatSettings.mcpServers}
+              onChanged={() => setAgentPluginRefresh((value) => value + 1)}
+              onMcpServersTested={(pluginName, servers) =>
+                onChatSettingsChange((current) => ({
+                  ...current,
+                  mcpServers: [
+                    ...current.mcpServers.filter((server) =>
+                      server.agentPlugin?.pluginName !== pluginName
+                    ),
+                    ...servers,
+                  ],
+                }))}
+            />
+          )}
           {manifests.map((manifest) => {
             const config = configs.find((item) => item.id === manifest.id);
             const enabled = !!config?.enabled;

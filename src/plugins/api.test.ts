@@ -16,17 +16,39 @@ Deno.test("plugin API registers slash commands and exposes the LLM compatibility
       receivedModelId = options?.modelId || "";
       return messages.at(-1)?.content ?? "";
     },
-    onLLMListModels: async () => [{ id: "profile:test:model-a", label: "Test — model-a", provider: "openai", model: "model-a" }],
+    onLLMListModels: async () => [{
+      id: "profile:test:model-a",
+      label: "Test — model-a",
+      provider: "openai",
+      model: "model-a",
+    }],
   });
 
-  api.registerSlashCommand({ name: "summarize", description: "Summarize text", execute: (args) => args });
+  api.registerSlashCommand({
+    name: "summarize",
+    description: "Summarize text",
+    execute: (args) => args,
+  });
 
   assertEquals(registered?.pluginId, "example");
   assertEquals(registered?.name, "summarize");
-  assertEquals(await api.llm?.chat([{ role: "user", content: "hello" }], { modelId: "profile:test:model-a" }), "hello");
+  assertEquals(
+    await api.llm?.chat([{ role: "user", content: "hello" }], {
+      modelId: "profile:test:model-a",
+    }),
+    "hello",
+  );
   assertEquals(receivedModelId, "profile:test:model-a");
-  assertEquals(await api.gemini?.chat([{ role: "user", content: "hello" }]), "hello");
-  assertEquals(await api.llm?.listModels(), [{ id: "profile:test:model-a", label: "Test — model-a", provider: "openai", model: "model-a" }]);
+  assertEquals(
+    await api.gemini?.chat([{ role: "user", content: "hello" }]),
+    "hello",
+  );
+  assertEquals(await api.llm?.listModels(), [{
+    id: "profile:test:model-a",
+    label: "Test — model-a",
+    provider: "openai",
+    model: "model-a",
+  }]);
 });
 
 Deno.test("plugin API exposes the Web registerWidget contract", () => {
@@ -36,7 +58,12 @@ Deno.test("plugin API exposes the Web registerWidget contract", () => {
     onRegisterSlashCommand: () => undefined,
   });
   const render = () => "widget";
-  api.registerWidget({ type: "summary", label: "Summary", defaultConfig: {}, render });
+  api.registerWidget({
+    type: "summary",
+    label: "Summary",
+    defaultConfig: {},
+    render,
+  });
 
   assertEquals(dashboardWidgetDefinition("summary")?.render, render);
   assertEquals(dashboardWidgetDefinition("example:summary"), null);
@@ -53,6 +80,24 @@ Deno.test("plugin file APIs expose explicit Workspace and Files roots", () => {
   assertEquals("projectFiles" in api, false);
 });
 
+Deno.test("plugin API exposes file notifications and FileTree decorations", async () => {
+  const api = createPluginAPI("example", "en", ["files"], {
+    onRegisterView: () => undefined,
+    onRegisterSettingsTab: () => undefined,
+    onRegisterSlashCommand: () => undefined,
+  });
+  const stop = api.onFilesChanged!(() => undefined);
+  const removeDecoration = api.fileTree!.registerDecorationProvider(
+    ({ path }) => path === "note.md" ? { title: "Modified" } : null,
+  );
+
+  assertEquals(typeof api.onFilesChanged, "function");
+  assertEquals(typeof api.fileTree!.refreshDecorations, "function");
+
+  stop();
+  removeDecoration();
+});
+
 Deno.test("plugin file APIs deny access to protected application files", async () => {
   const api = createPluginAPI("example", "en", ["files"], {
     onRegisterView: () => undefined,
@@ -60,13 +105,15 @@ Deno.test("plugin file APIs deny access to protected application files", async (
     onRegisterSlashCommand: () => undefined,
   });
 
-  for (const path of [
-    ".llm-hub/plugins/other/main.js",
-    "./.llm-hub/plugin-data/other.json",
-    ".llm-hub\\plugins\\other\\main.js",
-    "notes/../.llm-hub/plugins/other/main.js",
-    ".LLM-HUB/plugins/other/main.js",
-  ]) {
+  for (
+    const path of [
+      ".llm-hub/plugins/other/main.js",
+      "./.llm-hub/plugin-data/other.json",
+      ".llm-hub\\plugins\\other\\main.js",
+      "notes/../.llm-hub/plugins/other/main.js",
+      ".LLM-HUB/plugins/other/main.js",
+    ]
+  ) {
     await assertRejects(
       () => api.workspaceFiles!.read(path),
       Error,
@@ -80,7 +127,11 @@ Deno.test("plugin file APIs deny access to protected application files", async (
   }
 
   assertThrows(
-    () => api.workspaceFiles!.rename("notes/safe.md", ".llm-hub/plugins/other/main.js"),
+    () =>
+      api.workspaceFiles!.rename(
+        "notes/safe.md",
+        ".llm-hub/plugins/other/main.js",
+      ),
     Error,
     "protected application files",
   );

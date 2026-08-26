@@ -82,6 +82,10 @@ import {
   trashFile,
   writeFile,
 } from "../lib/wailsBackend";
+import {
+  type FileTreeDecoration,
+  fileTreeDecorationFor,
+} from "../plugins/fileTreeExtensions";
 
 type TreeMode = FileTreeScope;
 
@@ -127,6 +131,21 @@ function treeFilePaths(nodes: FileTreeNode[], expanded: Set<string>): string[] {
   );
 }
 
+function decorationKey(scope: TreeMode, path: string): string {
+  return `${scope}:${path}`;
+}
+
+function treeDecorationTargets(
+  nodes: FileTreeNode[],
+  scope: TreeMode,
+): Array<{ scope: TreeMode; path: string; isDirectory: boolean }> {
+  return nodes.flatMap((node) => [{
+    scope,
+    path: node.path,
+    isDirectory: node.isDir,
+  }, ...treeDecorationTargets(node.children ?? [], scope)]);
+}
+
 function TreeRow({
   node,
   depth,
@@ -145,6 +164,7 @@ function TreeRow({
   externalDropTarget,
   isTreeRoot = false,
   scope,
+  decorations,
 }: {
   node: FileTreeNode;
   depth: number;
@@ -171,6 +191,7 @@ function TreeRow({
   externalDropTarget?: string | null;
   isTreeRoot?: boolean;
   scope: TreeMode;
+  decorations: ReadonlyMap<string, FileTreeDecoration>;
 }) {
   const expansionKey = `${scope}:${node.path}`;
   const isOpen = expanded.has(expansionKey);
@@ -301,7 +322,20 @@ function TreeRow({
           {node.isDir
             ? (isOpen ? <FolderOpen size={15} /> : <Folder size={15} />)
             : <File size={15} />}
-          <span>{node.name}</span>
+          <span className="file-tree-entry-name">{node.name}</span>
+          {decorations.get(decorationKey(scope, node.path)) && (
+            <span
+              className="file-tree-decoration-dot"
+              style={{
+                backgroundColor: decorations.get(
+                  decorationKey(scope, node.path),
+                )?.color || "var(--accent)",
+              }}
+              title={decorations.get(decorationKey(scope, node.path))?.title}
+              aria-label={decorations.get(decorationKey(scope, node.path))
+                ?.title}
+            />
+          )}
         </button>
         <div className="file-tree-row-actions">
           {node.isDir && !isTreeRoot && (
@@ -362,6 +396,7 @@ function TreeRow({
           externalDropTarget={externalDropTarget}
           isTreeRoot={false}
           scope={scope}
+          decorations={decorations}
         />
       ))}
     </>
@@ -395,6 +430,10 @@ export function FileTree({
   const { t: tr } = useI18n();
   const [nodes, setNodes] = useState<FileTreeNode[]>([]);
   const [workspaceNodes, setWorkspaceNodes] = useState<FileTreeNode[]>([]);
+  const [decorations, setDecorations] = useState<
+    Map<string, FileTreeDecoration>
+  >(new Map());
+  const [decorationVersion, setDecorationVersion] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(() =>
     new Set(["files:."])
   );
@@ -483,6 +522,38 @@ export function FileTree({
   useEffect(() => {
     void reload();
   }, [reload]);
+  useEffect(() => {
+    const refresh = () => setDecorationVersion((value) => value + 1);
+    window.addEventListener("llm-hub:file-tree-decorations-changed", refresh);
+    return () =>
+      window.removeEventListener(
+        "llm-hub:file-tree-decorations-changed",
+        refresh,
+      );
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const targets = [
+      ...treeDecorationTargets(workspaceNodes, "workspace"),
+      ...treeDecorationTargets(nodes, "files"),
+    ];
+    void Promise.all(targets.map(async (target) => ({
+      target,
+      decoration: await fileTreeDecorationFor(target),
+    }))).then((results) => {
+      if (cancelled) return;
+      const next = new Map<string, FileTreeDecoration>();
+      for (const { target, decoration } of results) {
+        if (decoration) {
+          next.set(decorationKey(target.scope, target.path), decoration);
+        }
+      }
+      setDecorations(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [decorationVersion, nodes, workspaceNodes]);
   useEffect(() => {
     const dispose = onWailsFileDrop((x, y, paths) => {
       if (!paths.length) return;
@@ -1286,6 +1357,7 @@ export function FileTree({
                     });
                   }}
                   scope="workspace"
+                  decorations={decorations}
                 />
               ))}
               {filtered.length === 0 && (
@@ -1391,6 +1463,7 @@ export function FileTree({
                     }}
                     isTreeRoot={!externalFocusActive}
                     scope="files"
+                    decorations={decorations}
                   />
                 ))}
               </section>

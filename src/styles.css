@@ -6080,10 +6080,18 @@ body.resizing-side-pane * {
   padding: 5px 0;
 }
 
-.file-tree-entry > span:last-child {
+.file-tree-entry-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-tree-decoration-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-left: auto;
+  border-radius: 50%;
 }
 
 .file-tree-chevron {
@@ -10675,7 +10683,6 @@ body.resizing-modal {
   border-radius: 0;
   border-color: var(--border);
   box-shadow: 0 24px 90px rgb(0 0 0 / 0.32);
-  container-type: normal;
   grid-template-rows: 48px minmax(0, 1fr);
 }
 
@@ -10933,16 +10940,6 @@ body.resizing-modal {
 .widget-mode-group,
 .widget-font-group,
 .widget-action-group {
-  display: none;
-}
-
-.dashboard-widget.maximized .widget-mode-group,
-.dashboard-widget.maximized .widget-font-group,
-.dashboard-widget.maximized .widget-action-group {
-  display: flex;
-}
-
-.dashboard-widget.maximized .widget-more {
   display: none;
 }
 

@@ -9,6 +9,7 @@ import type {
 } from "../lib/wailsBackend";
 import type { PluginWidgetDefinition } from "../dashboard/widgetRegistry";
 import type { FileScope } from "../lib/fileRef";
+import type { FileTreeDecorationProvider } from "./fileTreeExtensions";
 
 export type PluginPermission =
   | "files"
@@ -104,6 +105,13 @@ export interface PluginFileRoot {
   createdAt: number;
 }
 
+export interface PluginFileChange {
+  scope?: FileScope;
+  path?: string;
+  oldPath?: string;
+  kind: "created" | "updated" | "renamed" | "deleted" | "refresh";
+}
+
 export interface PluginAPI {
   language: string;
   registerView(
@@ -118,6 +126,15 @@ export interface PluginAPI {
     callback: (detail: { path: string | null; name: string | null }) => void,
   ): () => void;
   selectFile(path: string): void;
+  onFilesChanged?(
+    callback: (change: PluginFileChange) => void,
+  ): () => void;
+  fileTree?: {
+    registerDecorationProvider(
+      provider: FileTreeDecorationProvider,
+    ): () => void;
+    refreshDecorations(): void;
+  };
   files?: {
     current(): Promise<PluginFileRoot | null>;
     inventory(): Promise<DirectoryFileEntry[]>;
