@@ -10,6 +10,7 @@ import type {
 import type { PluginWidgetDefinition } from "../dashboard/widgetRegistry";
 import type { FileScope } from "../lib/fileRef";
 import type { FileTreeDecorationProvider } from "./fileTreeExtensions";
+import type { PluginFileAction } from "./fileActions";
 
 export type PluginPermission =
   | "files"
@@ -134,6 +135,10 @@ export interface PluginAPI {
       provider: FileTreeDecorationProvider,
     ): () => void;
     refreshDecorations(): void;
+    registerContextMenuItem(action: PluginFileAction): () => void;
+  };
+  fileViewer?: {
+    registerAction(action: PluginFileAction): () => void;
   };
   files?: {
     current(): Promise<PluginFileRoot | null>;

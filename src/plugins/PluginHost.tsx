@@ -76,6 +76,7 @@ import {
   readPluginViewFile,
 } from "./pluginViews";
 import { unregisterFileTreeDecorationProviders } from "./fileTreeExtensions";
+import { unregisterPluginFileActions } from "./fileActions";
 
 const CONFIG_KEY = "llm-hub:plugins";
 const SELECTED_PLUGIN_KEY = "llm-hub:selected-plugin";
@@ -429,6 +430,7 @@ export function PluginHost({
     apiMapRef.current.clear();
     unregisterPluginWidgets();
     unregisterFileTreeDecorationProviders();
+    unregisterPluginFileActions();
     setViews([]);
     setSettingsTabs([]);
     setSlashCommands([]);
@@ -566,6 +568,7 @@ export function PluginHost({
       instancesRef.current = [];
       for (const plugin of loaded) void unloadPlugin(plugin);
       unregisterFileTreeDecorationProviders();
+      unregisterPluginFileActions();
     };
   }, [chatSettings, configs, language, manifests]);
 

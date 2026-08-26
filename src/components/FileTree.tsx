@@ -18,6 +18,7 @@ import {
   FolderOpen,
   FolderPlus,
   FolderSearch,
+  GitCompareArrows,
   History,
   LockKeyhole,
   Pencil,
@@ -86,6 +87,7 @@ import {
   type FileTreeDecoration,
   fileTreeDecorationFor,
 } from "../plugins/fileTreeExtensions";
+import { fileTreeContextMenuItemsFor } from "../plugins/fileActions";
 
 type TreeMode = FileTreeScope;
 
@@ -434,6 +436,7 @@ export function FileTree({
     Map<string, FileTreeDecoration>
   >(new Map());
   const [decorationVersion, setDecorationVersion] = useState(0);
+  const [, setFileActionVersion] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(() =>
     new Set(["files:."])
   );
@@ -528,6 +531,15 @@ export function FileTree({
     return () =>
       window.removeEventListener(
         "llm-hub:file-tree-decorations-changed",
+        refresh,
+      );
+  }, []);
+  useEffect(() => {
+    const refresh = () => setFileActionVersion((value) => value + 1);
+    window.addEventListener("llm-hub:plugin-file-actions-changed", refresh);
+    return () =>
+      window.removeEventListener(
+        "llm-hub:plugin-file-actions-changed",
         refresh,
       );
   }, []);
@@ -642,6 +654,16 @@ export function FileTree({
   const showExternal = !!directoryBase && !!workspacePath &&
     !isSameOrNestedPath(directoryBase, workspacePath) &&
     !isSameOrNestedPath(workspacePath, directoryBase);
+  const pluginContextActions = contextMenu &&
+      (contextMenu.file.scope === "workspace" ||
+        contextMenu.file.scope === "files")
+    ? fileTreeContextMenuItemsFor({
+      scope: contextMenu.file.scope,
+      path: contextMenu.file.path,
+      name: contextMenu.node.name,
+      isDirectory: contextMenu.node.isDir,
+    })
+    : [];
 
   const beginExternalMove = (node: FileTreeNode, file: FileRef | null) => {
     if (!file) {
@@ -1477,6 +1499,26 @@ export function FileTree({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          {pluginContextActions.map((action) => (
+            <button
+              key={`${action.pluginId}:${action.id}`}
+              type="button"
+              onClick={() => {
+                const target = {
+                  scope: contextMenu.file.scope as "workspace" | "files",
+                  path: contextMenu.file.path,
+                  name: contextMenu.node.name,
+                  isDirectory: contextMenu.node.isDir,
+                };
+                setContextMenu(null);
+                void Promise.resolve(action.onClick(target)).catch((error) =>
+                  alert(error instanceof Error ? error.message : String(error))
+                );
+              }}
+            >
+              <GitCompareArrows size={14} />{action.label}
+            </button>
+          ))}
           <button
             type="button"
             onClick={() => void openContainingFolderFromMenu()}

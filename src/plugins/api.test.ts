@@ -93,6 +93,8 @@ Deno.test("plugin API exposes file notifications and FileTree decorations", asyn
 
   assertEquals(typeof api.onFilesChanged, "function");
   assertEquals(typeof api.fileTree!.refreshDecorations, "function");
+  assertEquals(typeof api.fileTree!.registerContextMenuItem, "function");
+  assertEquals(typeof api.fileViewer!.registerAction, "function");
 
   stop();
   removeDecoration();

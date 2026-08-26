@@ -36,6 +36,10 @@ import {
   refreshFileTreeDecorations,
   registerFileTreeDecorationProvider,
 } from "./fileTreeExtensions";
+import {
+  registerFileTreeContextMenuItem,
+  registerFileViewerAction,
+} from "./fileActions";
 
 export interface PluginRegistrationCallbacks {
   onRegisterView: (view: PluginView) => void;
@@ -166,6 +170,14 @@ export function createPluginAPI(
         return registerFileTreeDecorationProvider(pluginId, provider);
       },
       refreshDecorations: refreshFileTreeDecorations,
+      registerContextMenuItem(action) {
+        return registerFileTreeContextMenuItem(pluginId, action);
+      },
+    };
+    api.fileViewer = {
+      registerAction(action) {
+        return registerFileViewerAction(pluginId, action);
+      },
     };
     api.files = {
       async current() {

@@ -110,6 +110,7 @@ import {
   saveHTMLExportRef,
   writeFileRef,
 } from "../lib/fileRef";
+import { fileViewerActionsFor } from "../plugins/fileActions";
 
 const DEFAULT_COLS = 12;
 const DEFAULT_ROW_HEIGHT = 80;
@@ -826,8 +827,14 @@ export function DashboardView({
   useEffect(() => {
     const refresh = () => setWidgetRegistryVersion((value) => value + 1);
     window.addEventListener("llm-hub:dashboard-widgets-changed", refresh);
-    return () =>
+    window.addEventListener("llm-hub:plugin-file-actions-changed", refresh);
+    return () => {
       window.removeEventListener("llm-hub:dashboard-widgets-changed", refresh);
+      window.removeEventListener(
+        "llm-hub:plugin-file-actions-changed",
+        refresh,
+      );
+    };
   }, []);
   void widgetRegistryVersion;
 
@@ -2647,6 +2654,31 @@ export function DashboardView({
               const canAdjustView =
                 (fileIsMarkdown && widgetMode === "preview") || fileIsHtml ||
                 fileIsPdf;
+              const storedWidgetFile = isFileRef(widget.config.file) &&
+                  (widget.config.file.scope === "workspace" ||
+                    widget.config.file.scope === "files")
+                ? widget.config.file
+                : null;
+              const viewerActionTarget = storedWidgetFile
+                ? {
+                  scope: storedWidgetFile.scope as "workspace" | "files",
+                  path: storedWidgetFile.path,
+                  name: widgetFileName,
+                  isDirectory: false,
+                }
+                : null;
+              const pluginViewerActions = viewerActionTarget
+                ? fileViewerActionsFor(viewerActionTarget)
+                : [];
+              const runPluginViewerAction = (
+                action: (typeof pluginViewerActions)[number],
+              ) => {
+                if (!viewerActionTarget) return;
+                void Promise.resolve(action.onClick(viewerActionTarget)).catch(
+                  (error) =>
+                    alert(error instanceof Error ? error.message : String(error)),
+                );
+              };
               const memoPanelOpen = widget.config.memoPanelOpen === true;
               const widgetNavigation = navigationHistoryRef.current.get(
                 widget.id,
@@ -3074,6 +3106,17 @@ export function DashboardView({
                               </button>
                             );
                           })}
+                          {pluginViewerActions.map((action) => (
+                            <button
+                              key={`${action.pluginId}:${action.id}`}
+                              type="button"
+                              className="widget-icon-button"
+                              onClick={() => runPluginViewerAction(action)}
+                              title={action.label}
+                            >
+                              <GitCompareArrows size={15} />
+                            </button>
+                          ))}
                         </div>
                         <div className="widget-more">
                           <button
@@ -3267,6 +3310,19 @@ export function DashboardView({
                                     </button>
                                   );
                                 })}
+                                {pluginViewerActions.map((action) => (
+                                  <button
+                                    key={`${action.pluginId}:${action.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      runPluginViewerAction(action);
+                                      setMoreOpenId(null);
+                                    }}
+                                  >
+                                    <GitCompareArrows size={15} />
+                                    <span>{action.label}</span>
+                                  </button>
+                                ))}
                               </div>
                             </>
                           )}
