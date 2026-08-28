@@ -34,6 +34,23 @@
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
       </uap:VisualElements>
       <Extensions>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="gemihub.documents">
+            <uap:DisplayName>GemiHub documents</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.md</uap:FileType>
+              <uap:FileType>.txt</uap:FileType>
+              <uap:FileType>.html</uap:FileType>
+              <uap:FileType>.pdf</uap:FileType>
+              <uap:FileType>.epub</uap:FileType>
+              <uap:FileType>.dashboard</uap:FileType>
+              <uap:FileType>.yaml</uap:FileType>
+              <uap:FileType>.json</uap:FileType>
+              <uap:FileType>.canvas</uap:FileType>
+              <uap:FileType>.encrypted</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
         <desktop:Extension Category="windows.fullTrustProcess" Executable="gemihub-desktop.exe" />
       </Extensions>
     </Application>

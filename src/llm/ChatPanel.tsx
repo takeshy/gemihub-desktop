@@ -118,6 +118,7 @@ import {
 import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
+import { chatLinkFileRef } from "./chatLinks";
 import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory";
 
 const CHAT_HISTORY_STATE_FILE = "chat-history";
@@ -2237,7 +2238,19 @@ export function ChatPanel({
               )
               : null}
             {message.role === "assistant"
-              ? <MarkdownPreview content={message.content} isDark={isDark} />
+              ? (
+                <MarkdownPreview
+                  content={message.content}
+                  isDark={isDark}
+                  onLinkClick={(href, event) => {
+                    const target = chatLinkFileRef(href, workspaceBase);
+                    if (!target) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenFile(target);
+                  }}
+                />
+              )
               : <p>{message.content}</p>}
             {message.role === "assistant" && message.generatedImages?.length
               ? (
