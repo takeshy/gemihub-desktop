@@ -43,21 +43,19 @@ without making an online service mandatory. It is distributed as a single
 executable with no runtime dependency; the current Windows amd64 build is under
 20 MB.
 
-**Codex made “build instead of buy” a one-hour decision.** It made the first
-working implementation inexpensive enough to explore immediately, and it has
-remained part of the development loop for implementation, testing, and product
-iteration. GemiHub is both a product built with Codex and an environment where
-Codex can work with the user's own context.
-
 Files remain ordinary local files. Reading, editing, memos, Dashboards, Canvas,
 Base, Kanban, history, and Trash work without AI. When needed, the same
 Workspace can connect to OpenAI, Gemini, Vertex AI, Anthropic, Codex,
 Antigravity CLI, or a local LLM.
 
-Codex is not limited to developing GemiHub. A configured Codex CLI can power
-Chat, draft and revise Workflows, and run LLM steps inside a Workflow. GemiHub
-provides a complete environment for using AI together with MCP servers, Agent
-Skills, OKF bundles, and Plugins.
+**No single model is the product.** Whichever provider is configured—a hosted
+API, a coding CLI already installed on the machine, or a model running
+locally—it reads the same Workspace and reaches the same tools. A configured CLI
+can power Chat, draft and revise Workflows, and run the LLM steps inside a
+Workflow, so changing providers is a settings change rather than a migration.
+
+GemiHub provides a complete environment for using AI together with MCP servers,
+Agent Skills, OKF bundles, and Plugins.
 
 ## What you can do
 

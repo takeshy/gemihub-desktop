@@ -1,7 +1,21 @@
-# GemiHub Desktop v1.4.4
+# GemiHub Desktop v1.4.5
 
 ## What's new
 
+- Chat can now search the selected RAG index itself: when the automatic
+  retrieval is thin or off-topic, the model re-queries with a focused question,
+  up to three searches per turn.
+- Chat tool chips name the call in their tooltip — the search query, the file
+  path, the shell command — including tools run through Codex.
+- Local file links in chat answers open in the app instead of the browser, and
+  scheme-less web links now open externally instead of doing nothing.
+- Workspace: off no longer lets a model reach Workspace file tools it was never
+  offered by registering a frontend tool.
+- The file tree scrolls while dragging, so a file can be dropped on a folder
+  that is out of view, and dropping on empty tree space moves it to the
+  Workspace root.
+- The dragged file now follows the cursor, the selected file keeps a distinct
+  background, and only the drop target lights up during a drag.
 - Workflow AI steps now show their proposed file changes in a diff before
   writing, with a per-line Regenerate feedback path. Set `confirm: false` on a
   command node to keep applying edits unattended.

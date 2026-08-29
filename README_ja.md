@@ -30,12 +30,13 @@ Desktopは、これまで自作してきた3つのプロジェクトの発想を
 
 目標は、オンラインサービスを必須にせず、普段使いできる軽量なMarkdownアプリでAIをフル活用することです。runtimeを必要としない単一実行ファイルとして配布し、現在のWindows amd64 buildは20 MB未満です。
 
-**Codexによって、「買う代わりに作る」は1時間で判断できる選択肢になりました。**
-最初に動く実装をすぐ試せるほど開発コストが下がり、その後も実装、test、productの改善にCodexを活用しています。GemiHubはCodexで作られたproductであると同時に、ユーザー自身のコンテキストとCodexを組み合わせるための環境でもあります。
+ファイルは通常のローカルファイルのままです。AIを使わなくても、閲覧・編集、引用付きメモ、Dashboard、Canvas、Base、Kanban、履歴、Trashを利用できます。必要なときだけ、OpenAI、Gemini、Vertex AI、Anthropic、Codex、Antigravity CLI、Local LLMへ同じWorkspaceから接続します。
 
-ファイルは通常のローカルファイルのままです。AIを使わなくても、閲覧・編集、引用付きメモ、Dashboard、Canvas、Base、Kanban、履歴、Trashを利用できます。必要なときだけ、OpenAI、Gemini、Vertex AI、Anthropic、Codex、Antigravity CLI,Local LLMへ同じWorkspaceから接続します。
-CodexはGemiHubの開発に使うだけではありません。設定したCodex
-CLIをChat、Workflowの作成・修正、Workflow内のLLM stepにも利用できます。
+**特定のmodelに依存しない設計です。**
+hosted APIでも、すでに入っているcoding CLIでも、手元で動くlocal
+modelでも、同じWorkspaceを読み、同じtoolを使います。設定したCLIはChat、Workflowの作成・修正、Workflow内のLLM
+stepにも利用でき、providerの変更は設定の切り替えだけで済みます。
+
 MCP Server、Agent Skill、OKF bundle、PluginとAIをフルで活用できる環境が整っています。
 
 ## できること
