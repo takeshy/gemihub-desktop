@@ -11,6 +11,7 @@
 
 [日本語 README](README_ja.md)
 
+[Get it from the Microsoft Store](https://apps.microsoft.com/detail/9PH8RH26NTD5) ·
 [Privacy Policy](https://takeshy.github.io/gemihub-desktop/privacy.html)
 
 ![GemiHub workspace comparing a PDF with an HTML research note](docs/images/col.png)
@@ -185,8 +186,12 @@ extensible intelligence layer.
 
 ## Install
 
-Download a binary from the GitHub Releases page. Deno and Go are not required at
-runtime.
+On Windows, install it from the
+[Microsoft Store](https://apps.microsoft.com/detail/9PH8RH26NTD5), which keeps
+the app updated automatically.
+
+Everywhere else, download a binary from the GitHub Releases page. Deno and Go
+are not required at runtime.
 
 Available release artifacts:
 
@@ -195,8 +200,10 @@ Available release artifacts:
 - `gemihub-desktop-darwin-arm64`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
-- `gemihub-desktop-windows-amd64.msix` (Microsoft Store package)
-- `gemihub-desktop-windows-arm64.msix` (Microsoft Store package)
+- `gemihub-desktop-windows-amd64.msix` (the Microsoft Store package, also
+  installable directly)
+- `gemihub-desktop-windows-arm64.msix` (the Microsoft Store package, also
+  installable directly)
 
 The Linux binaries use WebKitGTK 4.1 and support distributions such as Debian
 12/13 and Ubuntu 24.04 or newer. Install the runtime library if it is

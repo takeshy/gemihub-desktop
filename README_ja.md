@@ -7,6 +7,7 @@
 > **AI が賢くなった今、データの価値はどんどん高まっています。**<br> **GemiHub DesktopはアイデアのためのIDE。感想、メモ、資料、活動記録や秘密のトークンなどあらゆる情報を自分のパソコンのディスクに集めて、AIのコンテキストに変える、オープンなワークスペースです。**
 [English README](README.md)
 
+[Microsoft Storeで入手](https://apps.microsoft.com/detail/9PH8RH26NTD5) ·
 [プライバシーポリシー](https://takeshy.github.io/gemihub-desktop/privacy.html)
 
 ![PDFとHTMLの調査ノートを比較するGemiHubワークスペース](docs/images/col.png)
@@ -142,8 +143,10 @@ Provider、ローカル CLI、MCP Server、Skill、Plugin、YAML Workflow
 
 ## インストール
 
-GitHub Releases から実行ファイルをダウンロードしてください。実行時に Deno や Go
-は必要ありません。
+Windowsでは[Microsoft Store](https://apps.microsoft.com/detail/9PH8RH26NTD5)からインストールできます。更新は自動で適用されます。
+
+それ以外の環境では、GitHub Releases から実行ファイルをダウンロードしてください。実行時に
+Deno や Go は必要ありません。
 
 配布される実行ファイル：
 
@@ -152,8 +155,8 @@ GitHub Releases から実行ファイルをダウンロードしてください�
 - `gemihub-desktop-darwin-arm64`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
-- `gemihub-desktop-windows-amd64.msix`（Microsoft Store提出用）
-- `gemihub-desktop-windows-arm64.msix`（Microsoft Store提出用）
+- `gemihub-desktop-windows-amd64.msix`（Microsoft Storeと同じpackage。直接installも可能）
+- `gemihub-desktop-windows-arm64.msix`（Microsoft Storeと同じpackage。直接installも可能）
 
 Linux版はWebKitGTK 4.1を使用し、Debian 12/13やUbuntu 24.04以降に対応
 します。runtime libraryが未installの場合は、次のcommandでinstallしてください。
