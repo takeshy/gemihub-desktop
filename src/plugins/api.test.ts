@@ -1,7 +1,11 @@
 import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
-import { createPluginAPI } from "./api.ts";
+import { createPluginAPI, unregisterPluginAPIFileActions } from "./api.ts";
 import type { PluginSlashCommand } from "./types.ts";
 import { dashboardWidgetDefinition } from "../dashboard/widgetRegistry.ts";
+import {
+  fileViewerActionsFor,
+  unregisterPluginFileActions,
+} from "./fileActions.ts";
 
 Deno.test("plugin API registers slash commands and exposes the LLM compatibility alias", async () => {
   let registered: PluginSlashCommand | undefined;
@@ -98,6 +102,33 @@ Deno.test("plugin API exposes file notifications and FileTree decorations", asyn
 
   stop();
   removeDecoration();
+});
+
+Deno.test("unloaded plugin APIs cannot leave or add file actions", () => {
+  unregisterPluginFileActions();
+  const api = createPluginAPI("example", "en", ["files"], {
+    onRegisterView: () => undefined,
+    onRegisterSettingsTab: () => undefined,
+    onRegisterSlashCommand: () => undefined,
+  });
+  const target = {
+    scope: "workspace" as const,
+    path: "note.md",
+    name: "note.md",
+    isDirectory: false,
+  };
+  const action = {
+    id: "compare",
+    label: "Compare",
+    onClick: () => undefined,
+  };
+  api.fileViewer!.registerAction(action);
+  assertEquals(fileViewerActionsFor(target).length, 1);
+
+  unregisterPluginAPIFileActions(api);
+  api.fileViewer!.registerAction(action);
+
+  assertEquals(fileViewerActionsFor(target), []);
 });
 
 Deno.test("plugin file APIs deny access to protected application files", async () => {

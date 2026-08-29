@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import {
@@ -225,6 +225,8 @@ export function MarkdownPreview({
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCallouts]}
         rehypePlugins={[rehypeHighlight]}
+        urlTransform={(url) =>
+          isLocalDocumentHref(url) ? url : defaultUrlTransform(url)}
         components={{
           h1: ({ children }) => (
             <h1 id={slugify(textFromChildren(children))}>{children}</h1>

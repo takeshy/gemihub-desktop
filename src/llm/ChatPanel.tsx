@@ -2338,12 +2338,14 @@ export function ChatPanel({
                     const ref = chatLocalFileRef(href, workspaceBase);
                     if (ref) {
                       event.preventDefault();
+                      event.stopPropagation();
                       onOpenFile(ref);
                       return;
                     }
                     const external = chatExternalUrl(href);
                     if (!external) return;
                     event.preventDefault();
+                    event.stopPropagation();
                     window.open(external, "_blank", "noopener,noreferrer");
                   }}
                 />

@@ -62,3 +62,23 @@ Deno.test("chat links accept top-level files with arbitrary extensions", () => {
     path: "script.py",
   });
 });
+
+// Ported from the chatLinks module this one replaced.
+Deno.test("chat links convert a Windows Workspace path to a Workspace path", () => {
+  assertEquals(
+    chatLocalFileRef(
+      "C:\\Users\\takes\\takeshy\\人材マッチング.canvas",
+      "C:\\Users\\takes\\takeshy",
+    ),
+    { scope: "workspace", path: "人材マッチング.canvas" },
+  );
+  assertEquals(
+    chatLocalFileRef("資料/overview.canvas", "C:\\Vault"),
+    { scope: "workspace", path: "資料/overview.canvas" },
+  );
+  assertEquals(
+    chatLocalFileRef("C:\\Temp\\outside.pdf", "C:\\Vault"),
+    { scope: "absolute", path: "C:/Temp/outside.pdf" },
+  );
+  assertEquals(chatLocalFileRef("https://example.com", "C:\\Vault"), null);
+});

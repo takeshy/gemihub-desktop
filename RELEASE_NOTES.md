@@ -1,4 +1,4 @@
-# GemiHub Desktop v1.4.5
+# GemiHub Desktop v1.4.6
 
 ## What's new
 
@@ -16,6 +16,10 @@
   Workspace root.
 - The dragged file now follows the cursor, the selected file keeps a distinct
   background, and only the drop target lights up during a drag.
+- Added plugin-provided actions to FileTree context menus and File widget
+  viewers.
+- Fixed plugin file actions surviving an asynchronous plugin reload or being
+  removed by a stale disposer after replacement.
 - Workflow AI steps now show their proposed file changes in a diff before
   writing, with a per-line Regenerate feedback path. Set `confirm: false` on a
   command node to keep applying edits unattended.

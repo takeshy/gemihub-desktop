@@ -28,34 +28,25 @@ Deno.test("Gemini 3.7 Flash thinking can be switched on and off", () => {
 });
 
 Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
-  const saved = localStorage.getItem("gemihub-desktop:chat-settings");
-  try {
-    localStorage.setItem(
-      "gemihub-desktop:chat-settings",
-      JSON.stringify({
-        ...defaultChatSettings,
-        provider: "gemini",
-        model: "gemini-3.1-flash-lite",
-      }),
-    );
-    assertEquals(loadChatSettings().model, "gemini-3.5-flash-lite");
-    for (const model of ["gemini-3.5-flash", "gemini-3.6-flash"]) {
-      localStorage.setItem(
-        "gemihub-desktop:chat-settings",
-        JSON.stringify({
-          ...defaultChatSettings,
-          provider: "gemini",
-          model,
-        }),
-      );
-      assertEquals(loadChatSettings().model, "gemini-3.7-flash");
-    }
-    assertEquals(defaultChatSettings.model, "gpt-5.5");
-  } finally {
-    if (saved === null) {
-      localStorage.removeItem("gemihub-desktop:chat-settings");
-    } else localStorage.setItem("gemihub-desktop:chat-settings", saved);
+  let stored = JSON.stringify({
+    ...defaultChatSettings,
+    provider: "gemini",
+    model: "gemini-3.1-flash-lite",
+  });
+  const storage = {
+    getItem: (key: string) =>
+      key === "gemihub-desktop:chat-settings" ? stored : null,
+  };
+  assertEquals(loadChatSettings(storage).model, "gemini-3.5-flash-lite");
+  for (const model of ["gemini-3.5-flash", "gemini-3.6-flash"]) {
+    stored = JSON.stringify({
+      ...defaultChatSettings,
+      provider: "gemini",
+      model,
+    });
+    assertEquals(loadChatSettings(storage).model, "gemini-3.7-flash");
   }
+  assertEquals(defaultChatSettings.model, "gpt-5.5");
 });
 
 Deno.test("multiple API and local profiles become distinct selectable models", () => {

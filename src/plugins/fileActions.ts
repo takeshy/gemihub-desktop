@@ -31,9 +31,11 @@ function register(
   action: PluginFileAction,
 ): () => void {
   const key = `${pluginId}:${action.id}`;
-  collection.set(key, { ...action, pluginId });
+  const registered = { ...action, pluginId };
+  collection.set(key, registered);
   notifyChanged();
   return () => {
+    if (collection.get(key) !== registered) return;
     collection.delete(key);
     notifyChanged();
   };
