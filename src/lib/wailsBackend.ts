@@ -172,8 +172,12 @@ export interface ChatMessage {
   provider?: string;
   model?: string;
   toolsUsed?: string[];
+  /** Per-tool call arguments (query, path, …) shown in the tool chip tooltip. */
+  toolDetails?: Record<string, string[]>;
   skillsUsed?: string[];
   ragUsed?: boolean;
+  /** Query the automatic RAG retrieval ran for this turn. */
+  ragQuery?: string;
   ragSources?: Array<{ path: string; pageLabel?: string; score?: number }>;
   webSearchUsed?: boolean;
   webSearchSources?: WebSearchSource[];
@@ -297,6 +301,8 @@ export interface ChatStreamEvent {
   type: "text" | "thinking" | "tool" | "usage";
   delta?: string;
   tool?: string;
+  /** Argument that identifies the call, e.g. the search query or the file path. */
+  detail?: string;
   usage?: ChatUsage;
 }
 

@@ -62,6 +62,41 @@ func TestCodexTurnOutputPrefersFinalAnswerAndDeduplicates(t *testing.T) {
 	}
 }
 
+func TestCodexToolItemsCarryTheCallDetail(t *testing.T) {
+	output := newCodexTurnOutput()
+	var announced []string
+	output.onTool = func(name, detail string) {
+		announced = append(announced, name+"|"+detail)
+	}
+	output.addCompletedItem(json.RawMessage(`{"item":{"id":"1","type":"commandExecution","command":["rg","-n","needle"]}}`))
+	output.addCompletedItem(json.RawMessage(`{"item":{"id":"2","type":"commandExecution","command":"ls -la"}}`))
+	output.addCompletedItem(json.RawMessage(`{"item":{"id":"3","type":"fileChange","changes":[{"path":"a.md"},{"path":"b.md"}]}}`))
+	output.addCompletedItem(json.RawMessage(`{"item":{"id":"4","type":"webSearch","query":"退職金 規程"}}`))
+	output.addCompletedItem(json.RawMessage(`{"item":{"id":"5","type":"dynamicToolCall","tool":"read_file","arguments":{"path":"Notes/a.md"}}}`))
+	output.addCompletedItem(json.RawMessage(`{"item":{"id":"6","type":"imageView"}}`))
+
+	want := []string{
+		"shell|rg -n needle",
+		"shell|ls -la",
+		"file_change|a.md, b.md",
+		"web_search|退職金 規程",
+		"read_file|Notes/a.md",
+		"image_view|",
+	}
+	if len(announced) != len(want) {
+		t.Fatalf("announced=%#v", announced)
+	}
+	for index, value := range want {
+		if announced[index] != value {
+			t.Fatalf("announced[%d]=%q, want %q", index, announced[index], value)
+		}
+	}
+	// Repeated calls stay a single chip while each one is still announced.
+	if len(output.toolsUsed) != 5 || output.toolsUsed[0] != "shell" {
+		t.Fatalf("toolsUsed=%#v", output.toolsUsed)
+	}
+}
+
 func TestCodexApprovalRequestsAreDeclinedWithoutUI(t *testing.T) {
 	var buffer bytes.Buffer
 	message := codexRPCMessage{ID: json.RawMessage(`42`), Method: "item/fileChange/requestApproval"}

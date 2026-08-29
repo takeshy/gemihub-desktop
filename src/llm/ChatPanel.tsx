@@ -125,9 +125,16 @@ import {
   MAX_RAG_SEARCHES_PER_TURN,
   mergeRagSources,
   RAG_SEARCH_TOOL_NAME,
+  ragSearchSystemPrompt,
   ragSearchTool,
 } from "./chatRagTool";
-import { chatLocalFileRef } from "./chatLocalLink";
+import { buildNoDiscoverySystemPrompt } from "./chatNoDiscoveryPrompt";
+import {
+  ragQueryTitle,
+  toolChipTitle,
+  withToolDetail,
+} from "./chatToolDetails";
+import { chatExternalUrl, chatLocalFileRef } from "./chatLocalLink";
 
 const CHAT_HISTORY_STATE_FILE = "chat-history";
 const initializedHistoryScopes = new Set<string>();
@@ -1407,6 +1414,11 @@ export function ChatPanel({
                     toolsUsed: next.toolsUsed?.includes(event.tool)
                       ? next.toolsUsed
                       : [...(next.toolsUsed ?? []), event.tool],
+                    toolDetails: withToolDetail(
+                      next.toolDetails,
+                      event.tool,
+                      event.detail,
+                    ),
                   };
                 }
                 if (event.type === "usage" && event.usage) {
@@ -1682,6 +1694,7 @@ export function ChatPanel({
       provider: providerAtSend,
       model: modelAtSend,
       ragUsed: ragContext.length > 0,
+      ragQuery: ragContext.length > 0 ? text : undefined,
       ragSources: ragSources.length ? ragSources : undefined,
       thinkingEnabled: thinkingAvailable ? thinkingEnabled : undefined,
     } satisfies ChatMessage;
@@ -1966,11 +1979,13 @@ export function ChatPanel({
             ? `MCP resource context:\n${mcpResourceContext}`
             : "",
           settings.fileToolMode === "noSearch"
-            ? "No-discovery mode is active for the Workspace. Workspace search and file listing are unavailable. Do not guess paths, probe likely filenames, or use other tools as a substitute for discovering files. Read a file only when its exact path was explicitly supplied by the user, an attachment, or retrieved context. If the available sources are insufficient, say what is missing and ask the user to attach or reference the file, or switch to Workspace: all."
+            ? buildNoDiscoverySystemPrompt({
+              ragRequested: Boolean(ragName && ragSetting),
+              hasRagContext: ragContext.length > 0,
+              ragSearchAvailable: dynamicRagEnabled,
+            })
             : "",
-          dynamicRagEnabled
-            ? `The selected RAG index is available through the ${RAG_SEARCH_TOOL_NAME} tool. The automatic search used the user's message verbatim, so treat its context as a starting point. When it is off-topic, thin, or too broad, call ${RAG_SEARCH_TOOL_NAME} with a self-contained, rephrased query. At most ${MAX_RAG_SEARCHES_PER_TURN} searches are allowed per turn including automatic retrieval; each additional search returns at most ${MAX_DYNAMIC_RAG_RESULTS} chunks.`
-            : "",
+          dynamicRagEnabled ? ragSearchSystemPrompt(ragContext.length > 0) : "",
         ].filter(Boolean).join("\n\n"),
         enableFileTools: settings.enableFileTools,
         fileToolMode: settings.fileToolMode,
@@ -2057,6 +2072,7 @@ export function ChatPanel({
               ? skillsAtSend.map((skill) => skill.name)
               : undefined,
             ragUsed: ragContext.length > 0,
+            ragQuery: ragContext.length > 0 ? text : undefined,
             ragSources: ragSources.length ? ragSources : undefined,
             webSearchUsed: Boolean(result.webSearchSources?.length),
             webSearchSources: result.webSearchSources?.length
@@ -2254,7 +2270,10 @@ export function ChatPanel({
             {message.role === "assistant" && message.ragSources?.length
               ? (
                 <div className="chat-response-sources">
-                  <span className="chat-grounding-badge">
+                  <span
+                    className="chat-grounding-badge"
+                    title={ragQueryTitle(message)}
+                  >
                     <Database size={11} />RAG
                   </span>
                   {message.ragSources.map((source) => (
@@ -2317,9 +2336,15 @@ export function ChatPanel({
                   isDark={isDark}
                   onLinkClick={(href, event) => {
                     const ref = chatLocalFileRef(href, workspaceBase);
-                    if (!ref) return;
+                    if (ref) {
+                      event.preventDefault();
+                      onOpenFile(ref);
+                      return;
+                    }
+                    const external = chatExternalUrl(href);
+                    if (!external) return;
                     event.preventDefault();
-                    onOpenFile(ref);
+                    window.open(external, "_blank", "noopener,noreferrer");
                   }}
                 />
               )
@@ -2355,12 +2380,15 @@ export function ChatPanel({
               (
                 <div className="chat-response-tools">
                   {message.ragUsed && !message.ragSources?.length && (
-                    <span>
+                    <span title={ragQueryTitle(message)}>
                       <Database size={11} />RAG
                     </span>
                   )}
                   {message.toolsUsed?.map((tool) => (
-                    <span key={tool} title={tool}>
+                    <span
+                      key={tool}
+                      title={toolChipTitle(tool, message.toolDetails?.[tool])}
+                    >
                       <Wrench size={11} />
                       {toolNames[tool] || tool}
                     </span>

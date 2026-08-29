@@ -87,6 +87,7 @@ type ChatStreamEvent struct {
 	Type     string     `json:"type"`
 	Delta    string     `json:"delta,omitempty"`
 	Tool     string     `json:"tool,omitempty"`
+	Detail   string     `json:"detail,omitempty"`
 	Usage    *ChatUsage `json:"usage,omitempty"`
 }
 
@@ -97,6 +98,49 @@ func (a *App) emitChatStream(request ChatRequest, eventType, delta, tool string)
 		return
 	}
 	a.emitEvent("chat:stream", ChatStreamEvent{StreamID: request.StreamID, Type: eventType, Delta: delta, Tool: tool})
+}
+
+// The chat UI lists the tools a turn used; the argument that identifies the call
+// (the search query, the file path) is what makes that list readable, so it
+// travels with the event instead of being reconstructed in the frontend.
+var toolDetailKeys = []string{"query", "path", "name", "workflowId", "url", "date", "newPath"}
+
+func toolCallDetail(arguments string) string {
+	if strings.TrimSpace(arguments) == "" {
+		return ""
+	}
+	args := map[string]any{}
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return ""
+	}
+	for _, key := range toolDetailKeys {
+		value, _ := args[key].(string)
+		if value = strings.TrimSpace(value); value != "" {
+			return truncateRunes(value, 200)
+		}
+	}
+	return ""
+}
+
+func truncateRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit]) + "…"
+}
+
+func (a *App) emitChatStreamTool(request ChatRequest, name, arguments string) {
+	a.emitChatToolEvent(request, name, toolCallDetail(arguments))
+}
+
+func (a *App) emitChatToolEvent(request ChatRequest, name, detail string) {
+	if request.StreamID == "" || a.ctx == nil {
+		return
+	}
+	a.emitEvent("chat:stream", ChatStreamEvent{
+		StreamID: request.StreamID, Type: "tool", Tool: name, Detail: detail,
+	})
 }
 
 func (a *App) emitChatUsage(request ChatRequest, usage ChatUsage) {
@@ -291,11 +335,23 @@ func fileToolDefinitionsForMode(mode string) []map[string]any {
 	for _, definition := range fileToolDefinitions {
 		function, _ := definition["function"].(map[string]any)
 		name, _ := function["name"].(string)
-		if name != "search_files" && name != "list_files" {
+		if !discoveryToolNames[name] {
 			filtered = append(filtered, definition)
 		}
 	}
 	return filtered
+}
+
+var discoveryToolNames = map[string]bool{"search_files": true, "list_files": true}
+
+// builtinToolAllowed keeps backend tools reachable only in the modes that
+// advertise them: registering frontend tools must not reopen Workspace access
+// the user turned off, even if the model calls a tool it was never offered.
+func builtinToolAllowed(mode, name string) bool {
+	if mode == "none" {
+		return false
+	}
+	return mode != "noSearch" || !discoveryToolNames[name]
 }
 
 func chatToolDefinitions(request ChatRequest) []map[string]any {
@@ -743,7 +799,7 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 		messages = append(messages, assistant)
 		for _, call := range assistant.ToolCalls {
 			toolsUsed = append(toolsUsed, call.Function.Name)
-			a.emitChatStream(request, "tool", "", call.Function.Name)
+			a.emitChatStreamTool(request, call.Function.Name, call.Function.Arguments)
 			result, pending, err := a.executeChatTool(request, call.Function.Name, call.Function.Arguments)
 			if err != nil {
 				result = map[string]any{"success": false, "error": err.Error()}
@@ -905,7 +961,7 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 			}
 			result, pending, err := a.executeChatTool(request, call.Name, call.Arguments)
 			toolsUsed = append(toolsUsed, call.Name)
-			a.emitChatStream(request, "tool", "", call.Name)
+			a.emitChatStreamTool(request, call.Name, call.Arguments)
 			if pending != nil {
 				return &ChatResult{Content: text.String(), PendingAction: pending, ToolsUsed: toolsUsed, Usage: usage}, nil
 			}
@@ -1057,6 +1113,10 @@ func aiWorkspacePath(path string) (string, error) {
 }
 
 func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any, *PendingFileAction, error) {
+	if !customToolRegistered(request, name) &&
+		!builtinToolAllowed(requestFileToolMode(request), name) {
+		return nil, nil, fmt.Errorf("tool %s is not available in the current Workspace access mode", name)
+	}
 	if name == "get_workflow_spec" {
 		args := map[string]any{}
 		if strings.TrimSpace(arguments) != "" {
@@ -1469,7 +1529,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 				result, pending, err = a.executeChatTool(request, call.Name, string(arguments))
 			}
 			toolsUsed = append(toolsUsed, call.Name)
-			a.emitChatStream(request, "tool", "", call.Name)
+			a.emitChatStreamTool(request, call.Name, string(arguments))
 			if err != nil {
 				result = map[string]any{"success": false, "error": err.Error(), "instruction": "Do not call another tool to work around this failure. Report the error and required corrective action to the user."}
 				forceAnswer = true
@@ -1757,7 +1817,7 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 			arguments, _ := json.Marshal(input)
 			result, pending, err := a.executeChatTool(request, call.Name, string(arguments))
 			toolsUsed = append(toolsUsed, call.Name)
-			a.emitChatStream(request, "tool", "", call.Name)
+			a.emitChatStreamTool(request, call.Name, string(arguments))
 			isError := err != nil
 			if err != nil {
 				result = map[string]any{"success": false, "error": err.Error()}

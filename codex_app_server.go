@@ -33,23 +33,81 @@ type codexTurnOutput struct {
 	thinking      []string
 	usage         ChatUsage
 	onDelta       func(string, string)
-	onTool        func(string)
+	onTool        func(name, detail string)
 }
 
 func newCodexTurnOutput() *codexTurnOutput {
 	return &codexTurnOutput{deltas: map[string]*strings.Builder{}, completedIDs: map[string]bool{}, toolSet: map[string]bool{}}
 }
 
-func (output *codexTurnOutput) addTool(name string) {
+func (output *codexTurnOutput) addTool(name, detail string) {
 	name = strings.TrimSpace(name)
-	if name == "" || output.toolSet[name] {
+	if name == "" {
 		return
 	}
-	output.toolSet[name] = true
-	output.toolsUsed = append(output.toolsUsed, name)
-	if output.onTool != nil {
-		output.onTool(name)
+	// The chip list stays deduplicated by name, but every call is announced so
+	// the tooltip can show each command, path, or query the turn went through.
+	if !output.toolSet[name] {
+		output.toolSet[name] = true
+		output.toolsUsed = append(output.toolsUsed, name)
 	}
+	if output.onTool != nil {
+		output.onTool(name, detail)
+	}
+}
+
+// Codex app-server items describe a call in one of a few shapes, and the shape
+// is not guaranteed across versions, so try the plausible fields and fall back
+// to showing the bare tool name.
+func codexItemDetail(item map[string]any) string {
+	switch arguments := item["arguments"].(type) {
+	case string:
+		if detail := toolCallDetail(arguments); detail != "" {
+			return detail
+		}
+	case map[string]any:
+		if encoded, err := json.Marshal(arguments); err == nil {
+			if detail := toolCallDetail(string(encoded)); detail != "" {
+				return detail
+			}
+		}
+	}
+	for _, key := range []string{"command", "query", "path", "url", "prompt"} {
+		if detail := codexItemValue(item[key]); detail != "" {
+			return detail
+		}
+	}
+	changes, _ := item["changes"].([]any)
+	paths := make([]string, 0, len(changes))
+	for _, raw := range changes {
+		change, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if path := codexItemValue(change["path"]); path != "" {
+			paths = append(paths, path)
+		}
+	}
+	if len(paths) > 0 {
+		return truncateRunes(strings.Join(paths, ", "), 200)
+	}
+	return ""
+}
+
+func codexItemValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return truncateRunes(strings.TrimSpace(typed), 200)
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, entry := range typed {
+			if text, ok := entry.(string); ok {
+				parts = append(parts, text)
+			}
+		}
+		return truncateRunes(strings.TrimSpace(strings.Join(parts, " ")), 200)
+	}
+	return ""
 }
 
 func (output *codexTurnOutput) addDelta(params json.RawMessage) {
@@ -98,25 +156,25 @@ func (output *codexTurnOutput) addCompletedItem(params json.RawMessage) {
 		}
 		return
 	case "commandExecution":
-		output.addTool("shell")
+		output.addTool("shell", codexItemDetail(value.Item))
 		return
 	case "fileChange":
-		output.addTool("file_change")
+		output.addTool("file_change", codexItemDetail(value.Item))
 		return
 	case "webSearch":
-		output.addTool("web_search")
+		output.addTool("web_search", codexItemDetail(value.Item))
 		return
 	case "imageView":
-		output.addTool("image_view")
+		output.addTool("image_view", codexItemDetail(value.Item))
 		return
 	case "mcpToolCall":
 		server, _ := value.Item["server"].(string)
 		tool, _ := value.Item["tool"].(string)
-		output.addTool(strings.Trim(strings.Join([]string{server, tool}, ":"), ":"))
+		output.addTool(strings.Trim(strings.Join([]string{server, tool}, ":"), ":"), codexItemDetail(value.Item))
 		return
 	case "dynamicToolCall", "collabToolCall":
 		tool, _ := value.Item["tool"].(string)
-		output.addTool(tool)
+		output.addTool(tool, codexItemDetail(value.Item))
 		return
 	case "agentMessage":
 	default:
@@ -221,7 +279,7 @@ func codexDynamicTools(request ChatRequest) []map[string]any {
 func codexInitializeParams() map[string]any {
 	return map[string]any{
 		"clientInfo": map[string]any{
-			"name": "gemihub_desktop", "title": appName, "version": "1.4.4",
+			"name": "gemihub_desktop", "title": appName, "version": "1.4.5",
 		},
 		"capabilities": map[string]any{"experimentalApi": true},
 	}
@@ -236,6 +294,7 @@ func (a *App) respondToCodexDynamicTool(encoder *json.Encoder, request ChatReque
 		return nil, writeCodexRPC(encoder, map[string]any{"id": json.RawMessage(message.ID), "result": map[string]any{"success": false, "contentItems": []any{}}})
 	}
 	arguments, _ := json.Marshal(params.Arguments)
+	a.emitChatStreamTool(request, params.Tool, string(arguments))
 	result, pending, err := a.executeChatTool(request, params.Tool, string(arguments))
 	success := err == nil
 	var value any = result
@@ -466,7 +525,7 @@ func (a *App) chatCodexAppServer(request ChatRequest) (*ChatResult, error) {
 	output := newCodexTurnOutput()
 	var pendingAction *PendingFileAction
 	output.onDelta = func(eventType, delta string) { a.emitChatStream(request, eventType, delta, "") }
-	output.onTool = func(tool string) { a.emitChatStream(request, "tool", "", tool) }
+	output.onTool = func(tool, detail string) { a.emitChatToolEvent(request, tool, detail) }
 	if _, err := callCodexRPC(scanner, encoder, 3, "turn/start", turnParams, output); err != nil {
 		return nil, codexAppServerError(err, stderr.String())
 	}

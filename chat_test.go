@@ -218,7 +218,7 @@ func TestGeminiFunctionDeclarationsNoSearch(t *testing.T) {
 func TestAppendTimelineToolWritesSystemTimeline(t *testing.T) {
 	workspace := t.TempDir()
 	app := &App{workspaceState: testWorkspaceState(t, workspace)}
-	value, pending, err := app.executeChatTool(ChatRequest{}, "append_timeline", `{"content":"回答の要点\n\n- 保存する"}`)
+	value, pending, err := app.executeChatTool(ChatRequest{FileToolMode: "all"}, "append_timeline", `{"content":"回答の要点\n\n- 保存する"}`)
 	if err != nil || pending != nil {
 		t.Fatalf("append_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}
@@ -248,7 +248,7 @@ func TestFilesOffDisablesAllChatTools(t *testing.T) {
 func TestFilesOffKeepsRegisteredFrontendTools(t *testing.T) {
 	definitions := chatToolDefinitions(ChatRequest{
 		FileToolMode: "none",
-		CustomTools: []ChatToolDefinition{{Name: "rag_search"}},
+		CustomTools:  []ChatToolDefinition{{Name: "rag_search"}},
 	})
 	if len(definitions) != 1 {
 		t.Fatalf("expected one custom tool, got %#v", definitions)
@@ -256,6 +256,54 @@ func TestFilesOffKeepsRegisteredFrontendTools(t *testing.T) {
 	function, _ := definitions[0]["function"].(map[string]any)
 	if function["name"] != "rag_search" {
 		t.Fatalf("unexpected custom tool definition: %#v", function)
+	}
+}
+
+func TestToolCallDetailNamesTheCall(t *testing.T) {
+	cases := map[string]string{
+		`{"query":"退職金 規程"}`:                     "退職金 規程",
+		`{"path":"Notes/a.md"}`:                  "Notes/a.md",
+		`{"limit":5,"query":"needle"}`:           "needle",
+		`{"name":"index.md","content":"# Demo"}`: "index.md",
+		`{}`:                                     "",
+		"":                                       "",
+		"not json":                               "",
+		`{"content":"no identifying argument"}`:  "",
+	}
+	for arguments, want := range cases {
+		if got := toolCallDetail(arguments); got != want {
+			t.Fatalf("toolCallDetail(%s) = %q, want %q", arguments, got, want)
+		}
+	}
+	long := `{"query":"` + strings.Repeat("あ", 250) + `"}`
+	detail := toolCallDetail(long)
+	if runes := []rune(detail); len(runes) != 201 || runes[200] != '…' {
+		t.Fatalf("long query was not truncated: %d runes", len(runes))
+	}
+}
+
+func TestFilesOffRejectsToolsThatWereNeverOffered(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "note.md"), []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.workspaceState = testWorkspaceState(t, workspace)
+	request := ChatRequest{
+		FileToolMode: "none",
+		CustomTools:  []ChatToolDefinition{{Name: "rag_search"}},
+	}
+	for _, name := range []string{"read_file", "search_files", "append_timeline"} {
+		if _, _, err := app.executeChatTool(request, name, `{"path":"note.md","content":"x","query":"x"}`); err == nil {
+			t.Fatalf("%s ran while Workspace access is off", name)
+		}
+	}
+	noSearch := ChatRequest{FileToolMode: "noSearch"}
+	if _, _, err := app.executeChatTool(noSearch, "search_files", `{"query":"hello"}`); err == nil {
+		t.Fatal("search_files ran in no-discovery mode")
+	}
+	if _, _, err := app.executeChatTool(noSearch, "read_file", `{"path":"note.md"}`); err != nil {
+		t.Fatalf("read_file should stay available in no-discovery mode: %v", err)
 	}
 }
 
@@ -269,7 +317,7 @@ func TestReadTimelineToolReadsRequestedDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := &App{workspaceState: testWorkspaceState(t, workspace)}
-	value, pending, err := app.executeChatTool(ChatRequest{}, "read_timeline", `{"date":"2026-07-20"}`)
+	value, pending, err := app.executeChatTool(ChatRequest{FileToolMode: "all"}, "read_timeline", `{"date":"2026-07-20"}`)
 	if err != nil || pending != nil {
 		t.Fatalf("read_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}

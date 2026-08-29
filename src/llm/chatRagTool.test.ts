@@ -1,10 +1,8 @@
-import {
-  assertEquals,
-  assertStringIncludes,
-} from "jsr:@std/assert";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 import {
   formatRagSearchToolResult,
   mergeRagSources,
+  ragSearchSystemPrompt,
 } from "./chatRagTool.ts";
 
 Deno.test("dynamic RAG results include chunk text and remaining budget", () => {
@@ -38,4 +36,18 @@ Deno.test("RAG source merging removes duplicate citations", () => {
       score: 0.7,
     }],
   );
+});
+
+Deno.test("the RAG prompt tells the model to re-query, and to query at all when nothing was retrieved", () => {
+  const withContext = ragSearchSystemPrompt(true);
+  assertStringIncludes(withContext, "used the user's message verbatim");
+  assertStringIncludes(withContext, "instead of answering from it");
+  assertStringIncludes(withContext, "At most 3 RAG searches");
+
+  const withoutContext = ragSearchSystemPrompt(false);
+  assertStringIncludes(
+    withoutContext,
+    "No automatic RAG context was retrieved",
+  );
+  assertStringIncludes(withoutContext, "before answering from memory");
 });
