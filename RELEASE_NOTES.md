@@ -11,6 +11,9 @@
   scheme-less web links now open externally instead of doing nothing.
 - Workspace: off no longer lets a model reach Workspace file tools it was never
   offered by registering a frontend tool.
+- The Windows Store package registers file associations for `.md`, `.txt`,
+  `.html`, `.pdf`, `.epub`, `.canvas`, `.dashboard`, `.yaml`, `.json`, and
+  `.encrypted`, so those files can be opened straight from Explorer.
 - The file tree scrolls while dragging, so a file can be dropped on a folder
   that is out of view, and dropping on empty tree space moves it to the
   Workspace root.
