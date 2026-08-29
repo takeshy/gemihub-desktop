@@ -5973,18 +5973,60 @@ body.resizing-side-pane * {
 .file-tree-panel.file-move-can-drop * {
   cursor: move !important;
 }
-.file-tree-row.external.selected {
-  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
-  box-shadow: inset 2px 0 0 var(--accent);
+.file-tree-row.selected {
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  box-shadow: inset 3px 0 0 var(--accent);
 }
-.file-tree-row.external.selected .file-tree-entry {
+.file-tree-row.selected:hover {
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel));
+}
+.file-tree-row.selected .file-tree-entry {
   color: var(--accent);
+  font-weight: 600;
 }
+.file-tree-block.workspace-block.root-drop-target {
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+/* The drop target must not read as the selected row: it is an outline, not a fill. */
 .file-tree-row.external-drop-target {
   position: relative;
-  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
-  box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 1px color-mix(in srgb,
-    var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* While a drag is in flight only the drop target may light up; a plain hover
+   would otherwise look exactly like the selected file. */
+.file-tree-panel.file-move-active
+  .file-tree-row:not(.selected):not(.external-drop-target):hover {
+  background: transparent;
+}
+.file-tree-panel.file-move-active .file-tree-row:hover .file-tree-row-actions {
+  display: none;
+}
+.file-tree-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  max-width: 260px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  padding: 3px 9px;
+  color: var(--text);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.22);
+  opacity: 0;
+  pointer-events: none;
+}
+.file-tree-drag-ghost span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .file-tree-row.external-drop-target .file-tree-entry {
   color: var(--accent);

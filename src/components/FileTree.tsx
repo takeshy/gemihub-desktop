@@ -42,6 +42,11 @@ import {
   workspaceMoveTarget,
 } from "../lib/fileTreePaths";
 import {
+  AUTO_SCROLL_DELAY_MS,
+  type AutoScrollBounds,
+  treeAutoScrollDelta,
+} from "../lib/treeAutoScroll";
+import {
   createDirectoryRef,
   duplicateFileRef,
   type FileRef,
@@ -160,6 +165,7 @@ function TreeRow({
   onDragExternal,
   onDropExternal,
   externalSelection,
+  selectedPath,
   onExternalFileClick,
   onPointerDragStart,
   shouldSuppressClick,
@@ -179,6 +185,7 @@ function TreeRow({
   onDragExternal?: (node: FileTreeNode, file: FileRef | null) => void;
   onDropExternal?: (directory: string, fallbackPayload?: string) => void;
   externalSelection?: Set<string>;
+  selectedPath?: string | null;
   onExternalFileClick?: (
     node: FileTreeNode,
     file: FileRef,
@@ -234,7 +241,9 @@ function TreeRow({
     <>
       <div
         className={`file-tree-row ${scope === "files" ? "external" : ""} ${
-          scope === "files" && externalSelection?.has(node.path)
+          scope === "files"
+            ? externalSelection?.has(node.path) ? "selected" : ""
+            : !node.isDir && selectedPath === node.path
             ? "selected"
             : ""
         } ${
@@ -392,6 +401,7 @@ function TreeRow({
           onDragExternal={onDragExternal}
           onDropExternal={onDropExternal}
           externalSelection={externalSelection}
+          selectedPath={selectedPath}
           onExternalFileClick={onExternalFileClick}
           onPointerDragStart={onPointerDragStart}
           shouldSuppressClick={shouldSuppressClick}
@@ -480,10 +490,24 @@ export function FileTree({
       active: boolean;
     } | null
   >(null);
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+  const dragGhostRef = useRef<HTMLDivElement>(null);
+  const autoScrollBoundsRef = useRef<AutoScrollBounds | null>(null);
+  const autoScrollRef = useRef<
+    {
+      pointer: { x: number; y: number };
+      delta: number;
+      frame: number;
+      restingSince: number;
+    } | null
+  >(null);
   const suppressExternalClickUntilRef = useRef(0);
   const suppressNextRefreshRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<
     { node: FileTreeNode; file: FileRef; x: number; y: number } | null
+  >(null);
+  const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<
+    string | null
   >(null);
   const [encryptedModalFile, setEncryptedModalFile] = useState<FileRef | null>(
     null,
@@ -872,6 +896,74 @@ export function FileTree({
       active: false,
     };
   };
+  const updateDropTarget = (pointerX: number, pointerY: number) => {
+    const target = document.elementFromPoint(pointerX, pointerY)
+      ?.closest<HTMLElement>("[data-workspace-drop]");
+    const destination = target?.dataset.workspaceDrop ?? "";
+    const workspaceDrag = draggedWorkspaceRef.current;
+    setExternalDropTarget(
+      target &&
+        (!workspaceDrag ||
+          canMoveWorkspacePath(
+            workspaceDrag.file.path,
+            workspaceDrag.node.isDir,
+            destination,
+          ))
+        ? destination
+        : null,
+    );
+  };
+  const stopAutoScroll = () => {
+    const state = autoScrollRef.current;
+    autoScrollRef.current = null;
+    if (state) cancelAnimationFrame(state.frame);
+  };
+  const endAutoScroll = () => {
+    stopAutoScroll();
+    autoScrollBoundsRef.current = null;
+  };
+  // Only runs while the drag rests against an edge, so an ordinary drag across
+  // the tree costs nothing: no animation frame, and one layout read per drag.
+  const trackAutoScroll = (pointerX: number, pointerY: number) => {
+    const container = treeScrollRef.current;
+    if (!container) return;
+    const bounds = autoScrollBoundsRef.current ??
+      (autoScrollBoundsRef.current = container.getBoundingClientRect());
+    const delta = treeAutoScrollDelta(bounds, pointerX, pointerY);
+    if (!delta) {
+      stopAutoScroll();
+      return;
+    }
+    const running = autoScrollRef.current;
+    if (running) {
+      running.pointer = { x: pointerX, y: pointerY };
+      running.delta = delta;
+      return;
+    }
+    const state = {
+      pointer: { x: pointerX, y: pointerY },
+      delta,
+      frame: 0,
+      restingSince: performance.now(),
+    };
+    autoScrollRef.current = state;
+    const step = () => {
+      if (autoScrollRef.current !== state) return;
+      state.frame = requestAnimationFrame(step);
+      if (performance.now() - state.restingSince < AUTO_SCROLL_DELAY_MS) return;
+      const element = treeScrollRef.current;
+      if (!element) return;
+      const before = element.scrollTop;
+      element.scrollTop = before + state.delta;
+      // The pointer has not moved, so the row under it only changes when the
+      // list actually scrolled.
+      if (element.scrollTop !== before) {
+        updateDropTarget(state.pointer.x, state.pointer.y);
+      }
+    };
+    state.frame = requestAnimationFrame(step);
+  };
+  useEffect(() => endAutoScroll, []);
   useEffect(() => {
     const move = (event: PointerEvent) => {
       const drag = pointerDragRef.current;
@@ -889,26 +981,22 @@ export function FileTree({
       }
       if (!drag.active) return;
       event.preventDefault();
-      const target = document.elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>("[data-workspace-drop]");
-      const destination = target?.dataset.workspaceDrop ?? "";
-      const workspaceDrag = draggedWorkspaceRef.current;
-      setExternalDropTarget(
-        target &&
-          (!workspaceDrag ||
-            canMoveWorkspacePath(
-              workspaceDrag.file.path,
-              workspaceDrag.node.isDir,
-              destination,
-            ))
-          ? destination
-          : null,
-      );
+      updateDropTarget(event.clientX, event.clientY);
+      trackAutoScroll(event.clientX, event.clientY);
+      // Moved on the node itself: a state update per pointermove would re-render
+      // the whole tree while dragging.
+      const ghost = dragGhostRef.current;
+      if (ghost) {
+        ghost.style.transform =
+          `translate(${event.clientX + 14}px, ${event.clientY + 12}px)`;
+        ghost.style.opacity = "1";
+      }
     };
     const finish = (event: PointerEvent) => {
       const drag = pointerDragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
       pointerDragRef.current = null;
+      endAutoScroll();
       if (!drag.active) return;
       suppressExternalClickUntilRef.current = Date.now() + 300;
       const target = document.elementFromPoint(event.clientX, event.clientY)
@@ -947,6 +1035,7 @@ export function FileTree({
   }, [contextMenu]);
 
   const openTreeFile = (file: FileRef) => {
+    if (file.scope === "workspace") setSelectedWorkspacePath(file.path);
     if (file.path.toLowerCase().endsWith(".encrypted")) {
       setEncryptedModalFile(file);
       return;
@@ -1292,6 +1381,7 @@ export function FileTree({
             />
           </label>
           <div
+            ref={treeScrollRef}
             className={`file-tree-scroll ${
               draggedExternal.length || draggedWorkspace
                 ? "accept-external-drop"
@@ -1318,8 +1408,17 @@ export function FileTree({
               }
             }}
           >
+            {/* Dropping anywhere in the workspace area that is not a folder
+                means the Workspace root, so a file can leave its folder without
+                scrolling to the drop zone at the end of the tree. */}
             <section
-              className="file-tree-block workspace-block"
+              className={`file-tree-block workspace-block ${
+                (draggedWorkspace || draggedExternal.length) &&
+                  externalDropTarget === ""
+                  ? "root-drop-target"
+                  : ""
+              }`}
+              data-workspace-drop=""
               onDragOver={(event) => {
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "move";
@@ -1366,6 +1465,7 @@ export function FileTree({
                   onMutated={() => void reload()}
                   onDropExternal={requestExternalDrop}
                   externalDropTarget={externalDropTarget}
+                  selectedPath={selectedWorkspacePath}
                   onPointerDragStart={startPointerDrag}
                   shouldSuppressClick={() =>
                     Date.now() < suppressExternalClickUntilRef.current}
@@ -1801,6 +1901,18 @@ export function FileTree({
               </button>
             </footer>
           </section>
+        </div>
+      )}
+      {(draggedWorkspace || draggedExternal.length > 0) && (
+        <div className="file-tree-drag-ghost" ref={dragGhostRef}>
+          {(draggedWorkspace ?? draggedExternal[0]).node.isDir
+            ? <Folder size={12} />
+            : <File size={12} />}
+          <span>
+            {draggedExternal.length > 1
+              ? `${draggedExternal.length} files`
+              : (draggedWorkspace ?? draggedExternal[0]).node.name}
+          </span>
         </div>
       )}
     </aside>
