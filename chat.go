@@ -299,11 +299,11 @@ func fileToolDefinitionsForMode(mode string) []map[string]any {
 }
 
 func chatToolDefinitions(request ChatRequest) []map[string]any {
-	if requestFileToolMode(request) == "none" {
-		return nil
+	var definitions []map[string]any
+	if requestFileToolMode(request) != "none" {
+		definitions = append(definitions, timelineToolDefinitions...)
+		definitions = append(definitions, fileToolDefinitionsForMode(requestFileToolMode(request))...)
 	}
-	definitions := append([]map[string]any(nil), timelineToolDefinitions...)
-	definitions = append(definitions, fileToolDefinitionsForMode(requestFileToolMode(request))...)
 	for _, tool := range request.CustomTools {
 		if strings.TrimSpace(tool.Name) == "" {
 			continue

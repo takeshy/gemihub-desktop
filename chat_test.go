@@ -245,6 +245,20 @@ func TestFilesOffDisablesAllChatTools(t *testing.T) {
 	}
 }
 
+func TestFilesOffKeepsRegisteredFrontendTools(t *testing.T) {
+	definitions := chatToolDefinitions(ChatRequest{
+		FileToolMode: "none",
+		CustomTools: []ChatToolDefinition{{Name: "rag_search"}},
+	})
+	if len(definitions) != 1 {
+		t.Fatalf("expected one custom tool, got %#v", definitions)
+	}
+	function, _ := definitions[0]["function"].(map[string]any)
+	if function["name"] != "rag_search" {
+		t.Fatalf("unexpected custom tool definition: %#v", function)
+	}
+}
+
 func TestReadTimelineToolReadsRequestedDay(t *testing.T) {
 	workspace := t.TempDir()
 	path := filepath.Join(workspace, "Dashboards", "Timeline", "Timeline", "2026-07-20.md")

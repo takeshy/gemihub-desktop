@@ -119,6 +119,15 @@ import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
 import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory";
+import {
+  formatRagSearchToolResult,
+  MAX_DYNAMIC_RAG_RESULTS,
+  MAX_RAG_SEARCHES_PER_TURN,
+  mergeRagSources,
+  RAG_SEARCH_TOOL_NAME,
+  ragSearchTool,
+} from "./chatRagTool";
+import { chatLocalFileRef } from "./chatLocalLink";
 
 const CHAT_HISTORY_STATE_FILE = "chat-history";
 const initializedHistoryScopes = new Set<string>();
@@ -169,6 +178,7 @@ const toolNames: Record<string, string> = {
   web_search: "Web search",
   image_view: "View image",
   run_skill_workflow: "Skill workflow",
+  rag_search: "RAG search",
 };
 
 function assistantLabel(message: ChatMessage): string {
@@ -1607,6 +1617,7 @@ export function ChatPanel({
     setError("");
     let ragContext = "";
     let ragSources: GroundingSource[] = [];
+    let ragSearchCount = 0;
     const legacyWebSearch = settings.selectedRagSetting === "__websearch__";
     const ragName = legacyWebSearch ? null : settings.selectedRagSetting;
     const webSearchEnabled = supportsNativeWebSearch(settings) &&
@@ -1622,6 +1633,7 @@ export function ChatPanel({
         );
         ragContext = semanticRAGContext(results);
         ragSources = groundingSources(results);
+        ragSearchCount++;
       } catch (caught) {
         setError(
           `RAG search failed: ${
@@ -1798,9 +1810,64 @@ export function ChatPanel({
         mcpBindings.map((binding) => [binding.name, binding]),
       );
       const collectedMcpApps: NonNullable<ChatMessage["mcpApps"]> = [];
-      const unsubscribeMcp = mcpBindings.length
+      const dynamicRagEnabled = Boolean(
+        ragName && ragSetting && workspaceBase && settings.provider !== "cli",
+      );
+      const unsubscribeMcp = mcpBindings.length || dynamicRagEnabled
         ? onChatToolRequest((request) => {
           if (request.streamId !== streamId) return;
+          if (request.name === RAG_SEARCH_TOOL_NAME && dynamicRagEnabled) {
+            const query = typeof request.arguments.query === "string"
+              ? request.arguments.query.trim()
+              : "";
+            if (!query) {
+              void resolveChatTool(
+                request.requestId,
+                undefined,
+                "A non-empty query is required.",
+              );
+              return;
+            }
+            if (ragSearchCount >= MAX_RAG_SEARCHES_PER_TURN) {
+              void resolveChatTool(
+                request.requestId,
+                undefined,
+                `RAG search limit reached (${MAX_RAG_SEARCHES_PER_TURN} searches per turn, including automatic retrieval).`,
+              );
+              return;
+            }
+            void searchRAG(
+              ragName!,
+              query,
+              {
+                ...resolveRAGSetting(settings, ragSetting!),
+                topK: Math.min(
+                  ragSetting!.topK,
+                  MAX_DYNAMIC_RAG_RESULTS,
+                ),
+              },
+            ).then(async (results) => {
+              ragSearchCount++;
+              ragSources = mergeRagSources(ragSources, results);
+              await resolveChatTool(
+                request.requestId,
+                formatRagSearchToolResult(
+                  query,
+                  results,
+                  MAX_RAG_SEARCHES_PER_TURN - ragSearchCount,
+                ),
+              );
+            }).catch((caught) =>
+              resolveChatTool(
+                request.requestId,
+                undefined,
+                `RAG search failed: ${
+                  caught instanceof Error ? caught.message : String(caught)
+                }`,
+              )
+            );
+            return;
+          }
           const binding = mcpBindingMap.get(request.name);
           if (!binding) return;
           const client = getMcpClient(binding.server.name);
@@ -1865,6 +1932,7 @@ export function ChatPanel({
         ...skillWorkflowTool(skillsAtSend),
         ...(dashboardSkillActive ? [getWorkflowSpecTool] : []),
         ...okfDocumentTool(activeOkfBundleIds),
+        ...(dynamicRagEnabled ? [ragSearchTool] : []),
         ...mcpBindings.map(({ name, description, parameters }) => ({
           name,
           description,
@@ -1896,6 +1964,12 @@ export function ChatPanel({
           okfPrompt,
           mcpResourceContext
             ? `MCP resource context:\n${mcpResourceContext}`
+            : "",
+          settings.fileToolMode === "noSearch"
+            ? "No-discovery mode is active for the Workspace. Workspace search and file listing are unavailable. Do not guess paths, probe likely filenames, or use other tools as a substitute for discovering files. Read a file only when its exact path was explicitly supplied by the user, an attachment, or retrieved context. If the available sources are insufficient, say what is missing and ask the user to attach or reference the file, or switch to Workspace: all."
+            : "",
+          dynamicRagEnabled
+            ? `The selected RAG index is available through the ${RAG_SEARCH_TOOL_NAME} tool. The automatic search used the user's message verbatim, so treat its context as a starting point. When it is off-topic, thin, or too broad, call ${RAG_SEARCH_TOOL_NAME} with a self-contained, rephrased query. At most ${MAX_RAG_SEARCHES_PER_TURN} searches are allowed per turn including automatic retrieval; each additional search returns at most ${MAX_DYNAMIC_RAG_RESULTS} chunks.`
             : "",
         ].filter(Boolean).join("\n\n"),
         enableFileTools: settings.enableFileTools,
@@ -2237,7 +2311,18 @@ export function ChatPanel({
               )
               : null}
             {message.role === "assistant"
-              ? <MarkdownPreview content={message.content} isDark={isDark} />
+              ? (
+                <MarkdownPreview
+                  content={message.content}
+                  isDark={isDark}
+                  onLinkClick={(href, event) => {
+                    const ref = chatLocalFileRef(href, workspaceBase);
+                    if (!ref) return;
+                    event.preventDefault();
+                    onOpenFile(ref);
+                  }}
+                />
+              )
               : <p>{message.content}</p>}
             {message.role === "assistant" && message.generatedImages?.length
               ? (
@@ -2751,10 +2836,10 @@ export function ChatPanel({
                     }}
                   >
                     {mode === "all"
-                      ? "Vault: all"
+                      ? "Workspace: all"
                       : mode === "noSearch"
-                      ? "Vault: no search"
-                      : "Vault: off"}
+                      ? "Workspace: no discovery"
+                      : "Workspace: off"}
                   </button>
                 ))}
                 {settings.mcpServers.length > 0 && (
