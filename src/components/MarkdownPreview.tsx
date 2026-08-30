@@ -212,6 +212,8 @@ export function MarkdownPreview({
   onLinkContextMenu,
   resolveImageSrc,
   onImageClick,
+  onTaskChange,
+  taskChangeOffset = 0,
 }: {
   content: string;
   isDark: boolean;
@@ -219,7 +221,10 @@ export function MarkdownPreview({
   onLinkContextMenu?: (href: string, event: MouseEvent<HTMLElement>) => void;
   resolveImageSrc?: (src: string) => Promise<string>;
   onImageClick?: (src: string) => void;
+  onTaskChange?: (index: number, completed: boolean) => void;
+  taskChangeOffset?: number;
 }) {
+  let taskIndex = 0;
   return (
     <div className="markdown-preview">
       <ReactMarkdown
@@ -228,6 +233,27 @@ export function MarkdownPreview({
         urlTransform={(url) =>
           isLocalDocumentHref(url) ? url : defaultUrlTransform(url)}
         components={{
+          input: ({ type, checked, disabled, ...props }) => {
+            const index = type === "checkbox" ? taskIndex++ : -1;
+            return (
+              <input
+                {...props}
+                type={type}
+                checked={checked}
+                disabled={type === "checkbox"
+                  ? !onTaskChange || index < taskChangeOffset
+                  : disabled}
+                onChange={(event) => {
+                  if (index >= taskChangeOffset) {
+                    onTaskChange?.(
+                      index - taskChangeOffset,
+                      event.target.checked,
+                    );
+                  }
+                }}
+              />
+            );
+          },
           h1: ({ children }) => (
             <h1 id={slugify(textFromChildren(children))}>{children}</h1>
           ),

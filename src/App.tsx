@@ -2945,6 +2945,7 @@ export default function App() {
                     ],
                   }}
                   isDark={isDark}
+                  settings={chatSettings}
                   onChange={() => {}}
                   onOpenFile={(file) => {
                     setKanbanOpen(false);

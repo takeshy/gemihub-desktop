@@ -12,6 +12,8 @@ import {
 import { createPortal } from "react-dom";
 import {
   ArrowUpDown,
+  CalendarDays,
+  CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +30,7 @@ import {
   Link,
   Loader2,
   Lock,
+  Paperclip,
   PenLine,
   Plus,
   Puzzle,
@@ -78,7 +81,10 @@ import {
   writeWorkspaceBinaryFile,
   writeWorkspaceFile,
 } from "../lib/wailsBackend";
-import type { ChatSettings } from "../llm/settings";
+import {
+  type ChatSettings,
+  configuredChatProviders,
+} from "../llm/settings";
 import { type FileRef, fileRef } from "../lib/fileRef";
 import {
   decryptFileContent,
@@ -112,6 +118,17 @@ import { type BaseQueryData, queryBaseFiles } from "./baseEngine";
 import { BaseViewRenderer } from "./BaseViewRenderer";
 import type { DashboardWidget } from "./types";
 import { KanbanCardModal } from "./KanbanCardModal";
+import {
+  type KanbanTaskInput,
+  KanbanTaskModal,
+} from "./KanbanTaskModal";
+import {
+  type KanbanAttachment,
+  isCompletionColumn,
+  parseKanbanTaskBody,
+  serializeKanbanTaskBody,
+} from "./kanbanTask";
+import { KANBAN_AI_SOURCE, parseKanbanAiTasks } from "./kanbanAi";
 import { WidgetDialog } from "./WidgetDialog";
 import { appendTimelineEntry, timelineFolder } from "./timelineEvents";
 
@@ -138,6 +155,26 @@ function localDateKey(value: unknown): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${
     pad(date.getDate())
   }`;
+}
+function localIsoDate(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+function safeFileName(value: string): string {
+  return value.replace(/[\\/:*?"<>|#^[\]]/g, "-").trim();
+}
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+function canPreviewKanbanAttachment(path: string): boolean {
+  return /\.(?:avif|bmp|epub|gif|html?|jpe?g|markdown|md|pdf|png|svg|txt|webp)$/i
+    .test(path);
 }
 function isBaseDateProperty(
   property: string,
@@ -1252,9 +1289,10 @@ function columns(
   return result;
 }
 export function KanbanDashboardWidget(
-  { config, isDark, onChange, onOpenFile, onTitleChange }: {
+  { config, isDark, settings, onChange, onOpenFile, onTitleChange }: {
     config: Record<string, unknown>;
     isDark: boolean;
+    settings?: ChatSettings;
     onChange: (config: Record<string, unknown>) => void;
     onOpenFile: (file: FileRef) => void;
     onTitleChange?: (title: string) => void;
@@ -1267,8 +1305,11 @@ export function KanbanDashboardWidget(
     [moveError, setMoveError] = useState(""),
     [previewPath, setPreviewPath] = useState("");
   const [showNewCard, setShowNewCard] = useState(false),
-    [newTitle, setNewTitle] = useState(""),
-    [newStatus, setNewStatus] = useState("");
+    [editingPath, setEditingPath] = useState("");
+  const [showAI, setShowAI] = useState(false),
+    [aiInstruction, setAIInstruction] = useState(""),
+    [aiResult, setAIResult] = useState(""),
+    [aiBusy, setAIBusy] = useState(false);
   const [draggingPath, setDraggingPath] = useState(""),
     [dropTarget, setDropTarget] = useState<
       { path: string; position: "before" | "after" } | null
@@ -1338,6 +1379,9 @@ export function KanbanDashboardWidget(
   }, [load]);
   const statusKey = configText(definition, "statusProperty", "status"),
     titleKey = configText(definition, "titleProperty", "title"),
+    dueKey = configText(definition, "dueProperty", "due"),
+    startedKey = configText(definition, "startedProperty", "started"),
+    completedKey = configText(definition, "completedProperty", "completed"),
     boardColumns = columns(definition),
     tags = [
       ...new Set(
@@ -1357,6 +1401,21 @@ export function KanbanDashboardWidget(
     const oldStatus = String(row.frontmatter[statusKey] ?? ""),
       parsed = parseFrontmatter(row.content),
       frontmatter = { ...parsed.frontmatter, [statusKey]: status };
+    const nextIndex = boardColumns.findIndex((column) => column.value === status);
+    if (oldStatus !== status) {
+      if (nextIndex > 0 && !frontmatter[startedKey]) {
+        frontmatter[startedKey] = localIsoDate();
+      }
+      if (
+        nextIndex >= 0 &&
+        isCompletionColumn(status, boardColumns[nextIndex].label)
+      ) {
+        if (!frontmatter[startedKey]) frontmatter[startedKey] = localIsoDate();
+        frontmatter[completedKey] = localIsoDate();
+      } else {
+        delete frontmatter[completedKey];
+      }
+    }
     const previousRows = rows;
     setMoveError("");
     setRows((current) =>
@@ -1437,19 +1496,6 @@ export function KanbanDashboardWidget(
       setDropTarget(null);
     }
   };
-  useEffect(() => {
-    if (!boardColumns.some((column) => column.value === newStatus)) {
-      setNewStatus(boardColumns[0]?.value || "");
-    }
-  }, [boardColumns, newStatus]);
-  useEffect(() => {
-    if (!showNewCard) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowNewCard(false);
-    };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [showNewCard]);
   if (loading) {
     return (
       <div className="dashboard-widget-loading centered">
@@ -1481,13 +1527,45 @@ export function KanbanDashboardWidget(
       </div>
     );
   }
-  const create = async () => {
-    const title = newTitle.trim();
+  const storeAttachments = async (
+    notePath: string,
+    files: File[],
+  ): Promise<KanbanAttachment[]> => {
+    if (files.length === 0) return [];
+    const slash = notePath.lastIndexOf("/");
+    const noteFolder = slash >= 0 ? notePath.slice(0, slash) : "";
+    const noteName = notePath.slice(slash + 1).replace(/\.md(?:own)?$/i, "");
+    const targetFolder = [noteFolder, "Attachments", safeFileName(noteName)]
+      .filter(Boolean).join("/");
+    const existing = new Set(
+      (await listWorkspaceFiles()).map((entry) => entry.path),
+    );
+    const stored: KanbanAttachment[] = [];
+    for (const file of files) {
+      const name = safeFileName(file.name) || "attachment";
+      const dot = name.lastIndexOf(".");
+      const stem = dot > 0 ? name.slice(0, dot) : name;
+      const extension = dot > 0 ? name.slice(dot) : "";
+      let path = `${targetFolder}/${name}`;
+      for (let suffix = 2; existing.has(path); suffix += 1) {
+        path = `${targetFolder}/${stem} ${suffix}${extension}`;
+      }
+      await writeWorkspaceBinaryFile(
+        path,
+        arrayBufferToBase64(await file.arrayBuffer()),
+      );
+      existing.add(path);
+      stored.push({ path, label: file.name });
+    }
+    return stored;
+  };
+
+  const create = async (input: KanbanTaskInput) => {
+    const title = input.title.trim();
     if (!title) return;
-    const status = newStatus;
+    const status = input.status;
     const folder = configText(definition, "folder").replace(/^\/+|\/+$/g, ""),
-      file = title.replace(/[\\/:*?"<>|#^[\]]/g, "").trim() ||
-        `card-${Date.now()}`;
+      file = safeFileName(title) || `task-${Date.now()}`;
     const existing = new Set(
       (await listWorkspaceFiles()).map((entry) => entry.path),
     );
@@ -1495,14 +1573,27 @@ export function KanbanDashboardWidget(
     while (existing.has(path)) {
       path = `${folder ? `${folder}/` : ""}${file} ${suffix++}.md`;
     }
+    const attachments = await storeAttachments(path, input.files);
+    const frontmatter: Record<string, unknown> = { [statusKey]: status };
+    if (!titleKey.startsWith("file.")) frontmatter[titleKey] = title;
+    if (input.due) frontmatter[dueKey] = input.due;
+    const column = boardColumns.find((item) => item.value === status);
+    if (column && isCompletionColumn(status, column.label)) {
+      frontmatter[startedKey] = localIsoDate();
+      frontmatter[completedKey] = localIsoDate();
+    }
     await writeWorkspaceFile(
       path,
       `---\n${
-        yaml.dump({ [titleKey]: title, [statusKey]: status }, {
+        yaml.dump(frontmatter, {
           lineWidth: -1,
           noRefs: true,
         }).trimEnd()
-      }\n---\n\n`,
+      }\n---\n${serializeKanbanTaskBody({
+        description: input.description,
+        checklist: input.checklist,
+        attachments: [...input.attachments, ...attachments],
+      })}`,
     );
     onChange({
       ...config,
@@ -1523,8 +1614,144 @@ export function KanbanDashboardWidget(
     );
     await load();
     setShowNewCard(false);
-    setNewTitle("");
     setPreviewPath(path);
+  };
+
+  const edit = async (input: KanbanTaskInput) => {
+    const row = rows.find((item) => item.path === editingPath);
+    if (!row) return;
+    const source = await readWorkspaceFile(row.path);
+    if (!source) throw new Error(`Cannot read ${row.path}`);
+    const parsed = parseFrontmatter(source.content);
+    const frontmatter: Record<string, unknown> = {
+      ...parsed.frontmatter,
+      [statusKey]: input.status,
+    };
+    if (!titleKey.startsWith("file.")) frontmatter[titleKey] = input.title;
+    if (input.due) frontmatter[dueKey] = input.due;
+    else delete frontmatter[dueKey];
+    const nextIndex = boardColumns.findIndex((column) =>
+      column.value === input.status
+    );
+    if (nextIndex > 0 && !frontmatter[startedKey]) {
+      frontmatter[startedKey] = localIsoDate();
+    }
+    if (
+      nextIndex >= 0 &&
+      isCompletionColumn(input.status, boardColumns[nextIndex].label)
+    ) {
+      if (!frontmatter[startedKey]) frontmatter[startedKey] = localIsoDate();
+      if (!frontmatter[completedKey]) frontmatter[completedKey] = localIsoDate();
+    } else {
+      delete frontmatter[completedKey];
+    }
+    const attachments = await storeAttachments(row.path, input.files);
+    await writeWorkspaceFile(
+      row.path,
+      `---\n${
+        yaml.dump(frontmatter, { lineWidth: -1, noRefs: true }).trimEnd()
+      }\n---\n${serializeKanbanTaskBody({
+        description: input.description,
+        checklist: input.checklist,
+        attachments: [...input.attachments, ...attachments],
+      })}`,
+    );
+    let nextPath = row.path;
+    if (titleKey.startsWith("file.") && input.title.trim() !== row.name) {
+      const slash = row.path.lastIndexOf("/");
+      const directory = slash >= 0 ? row.path.slice(0, slash + 1) : "";
+      const base = safeFileName(input.title) || row.name;
+      const existing = new Set(
+        (await listWorkspaceFiles()).map((entry) => entry.path),
+      );
+      nextPath = `${directory}${base}.md`;
+      for (let suffix = 2; existing.has(nextPath) && nextPath !== row.path; suffix += 1) {
+        nextPath = `${directory}${base} ${suffix}.md`;
+      }
+      if (nextPath !== row.path) await renameWorkspaceFile(row.path, nextPath);
+    }
+    if (nextPath !== row.path && Array.isArray(config.cardOrder)) {
+      onChange({
+        ...config,
+        cardOrder: config.cardOrder.map((item) => item === row.path ? nextPath : item),
+      });
+    }
+    window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+    window.dispatchEvent(new CustomEvent("llm-hub:dashboard-data-changed", {
+      detail: { path: nextPath },
+    }));
+    setEditingPath("");
+    await load();
+  };
+
+  const openAttachment = async (attachment: KanbanAttachment) => {
+    if (canPreviewKanbanAttachment(attachment.path)) {
+      setPreviewPath(attachment.path);
+      return;
+    }
+    const source = await readWorkspaceFile(attachment.path);
+    if (!source) throw new Error(`Cannot read ${attachment.path}`);
+    const anchor = document.createElement("a");
+    anchor.href = source.content.startsWith("data:")
+      ? source.content
+      : URL.createObjectURL(new Blob([source.content]));
+    anchor.download = attachment.label || baseName(attachment.path);
+    anchor.click();
+    if (!source.content.startsWith("data:")) URL.revokeObjectURL(anchor.href);
+  };
+
+  const generateTasks = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!settings || !aiInstruction.trim() || aiBusy) return;
+    setAIBusy(true);
+    setMoveError("");
+    try {
+      const result = await chat({
+        provider: settings.provider,
+        endpoint: settings.endpoint,
+        apiKey: settings.apiKey,
+        localFramework: settings.localFramework,
+        localUsername: settings.localUsername,
+        localPassword: settings.localPassword,
+        model: settings.model,
+        vertexProjectId: settings.vertexProjectId,
+        vertexLocation: settings.vertexLocation,
+        systemPrompt: KANBAN_AI_SOURCE.replace("{{today}}", localIsoDate()),
+        messages: [{ role: "user", content: aiInstruction }],
+        enableFileTools: false,
+        fileToolMode: "none",
+        cliType: settings.cliType,
+        cliPath: settings.cliPaths[settings.cliType],
+        cliSessionId: "",
+      });
+      parseKanbanAiTasks(result.content);
+      setAIResult(result.content.trim());
+    } catch (caught) {
+      setMoveError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setAIBusy(false);
+    }
+  };
+
+  const applyAITasks = async () => {
+    setAIBusy(true);
+    try {
+      for (const task of parseKanbanAiTasks(aiResult)) {
+        await create({
+          ...task,
+          status: boardColumns[0]?.value ?? "",
+          attachments: [],
+          files: [],
+        });
+      }
+      setShowAI(false);
+      setAIInstruction("");
+      setAIResult("");
+    } catch (caught) {
+      setMoveError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setAIBusy(false);
+    }
   };
   return (
     <div className="dashboard-kanban-widget">
@@ -1548,8 +1775,13 @@ export function KanbanDashboardWidget(
           <option value="">All tags</option>
           {tags.map((tag) => <option key={tag}>{tag}</option>)}
         </select>
+        {settings && configuredChatProviders(settings).length > 0 && (
+          <button type="button" onClick={() => setShowAI(true)}>
+            <Sparkles size={13} />Create with AI
+          </button>
+        )}
         <button type="button" onClick={() => setShowNewCard(true)}>
-          <Plus size={13} />New Card
+          <Plus size={13} />New task
         </button>
       </header>
       <div
@@ -1613,12 +1845,23 @@ export function KanbanDashboardWidget(
             </header>
             {visibleRows.filter((row) =>
               String(row.frontmatter[statusKey] ?? "") === column.value
-            ).map((row) => (
-              <button
-                type="button"
+            ).map((row) => {
+              const task = parseKanbanTaskBody(
+                parseFrontmatter(row.content).body,
+              );
+              const due = String(row.frontmatter[dueKey] ?? "").slice(0, 10);
+              const completed = String(row.frontmatter[completedKey] ?? "")
+                .slice(0, 10);
+              const checklistDone = task.checklist.filter((item) =>
+                item.completed
+              ).length;
+              return (
+              <article
+                role="button"
+                tabIndex={0}
                 draggable
                 key={row.path}
-                className={`${draggingPath === row.path ? "dragging" : ""} ${
+                className={`kanban-card ${draggingPath === row.path ? "dragging" : ""} ${
                   dropTarget?.path === row.path
                     ? `drop-${dropTarget.position}`
                     : ""
@@ -1686,8 +1929,60 @@ export function KanbanDashboardWidget(
                   setDropTarget(null);
                 }}
                 onClick={() => setPreviewPath(row.path)}
+                onDoubleClick={() => setEditingPath(row.path)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setPreviewPath(row.path);
+                  }
+                }}
               >
-                <strong>{String(row.frontmatter[titleKey] || row.name)}</strong>
+                <div className="kanban-card-heading">
+                  <div className="kanban-card-title-markdown">
+                    <MarkdownPreview
+                      content={String(row.frontmatter[titleKey] || row.name)}
+                      isDark={isDark}
+                    />
+                  </div>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="kanban-card-edit"
+                    title="Edit task"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingPath(row.path);
+                    }}
+                  >
+                    <PenLine size={13} />
+                  </span>
+                </div>
+                {(due || completed || task.checklist.length > 0 ||
+                  task.attachments.length > 0) && (
+                  <div className="kanban-task-meta">
+                    {due && (
+                      <span className={!completed && due < localIsoDate()
+                        ? "is-overdue"
+                        : ""}>
+                        <CalendarDays size={12} />{due}
+                      </span>
+                    )}
+                    {task.checklist.length > 0 && (
+                      <span>
+                        <CheckSquare size={12} />
+                        {checklistDone}/{task.checklist.length}
+                      </span>
+                    )}
+                    {task.attachments.length > 0 && (
+                      <span><Paperclip size={12} />{task.attachments.length}</span>
+                    )}
+                    {completed && (
+                      <span className="is-completed">
+                        <CheckSquare size={12} />{completed}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {(definition.displayFields || []).slice(0, 3).map((field) => {
                   const key = typeof field === "string"
                     ? field
@@ -1720,8 +2015,33 @@ export function KanbanDashboardWidget(
                     </small>
                   );
                 })}
-              </button>
-            ))}
+                {task.attachments.length > 0 && (
+                  <div className="kanban-card-attachments">
+                    {task.attachments.map((attachment) => (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        key={attachment.path}
+                        title={canPreviewKanbanAttachment(attachment.path)
+                          ? "Preview attachment"
+                          : "Download attachment"}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openAttachment(attachment).catch((caught) =>
+                            setMoveError(caught instanceof Error
+                              ? caught.message
+                              : String(caught))
+                          );
+                        }}
+                      >
+                        <Paperclip size={12} />{attachment.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </article>
+              );
+            })}
             <div
               className="kanban-column-drop-zone"
               onDragOver={(event) => {
@@ -1750,57 +2070,74 @@ export function KanbanDashboardWidget(
         ))}
       </div>
       {showNewCard && (
-        <div
-          className="kanban-new-card-backdrop"
-          onClick={() => setShowNewCard(false)}
-        >
-          <form
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void create();
+        <KanbanTaskModal
+          mode="new"
+          columns={boardColumns}
+          onSubmit={create}
+          onClose={() => setShowNewCard(false)}
+        />
+      )}
+      {editingPath && (() => {
+        const row = rows.find((item) => item.path === editingPath);
+        if (!row) return null;
+        const task = parseKanbanTaskBody(parseFrontmatter(row.content).body);
+        return (
+          <KanbanTaskModal
+            mode="edit"
+            columns={boardColumns}
+            initial={{
+              title: String(row.frontmatter[titleKey] || row.name),
+              status: String(row.frontmatter[statusKey] ?? ""),
+              due: String(row.frontmatter[dueKey] ?? "").slice(0, 10),
+              description: task.description,
+              checklist: task.checklist,
+              attachments: task.attachments,
             }}
-          >
-            <header>
-              <strong>New Card</strong>
-              <button type="button" onClick={() => setShowNewCard(false)}>
-                <X size={14} />
-              </button>
-            </header>
+            onSubmit={edit}
+            onClose={() => setEditingPath("")}
+          />
+        );
+      })()}
+      {showAI && (
+        <WidgetDialog title="Create tasks with AI" onClose={() => setShowAI(false)}>
+          <form className="kanban-ai-form" onSubmit={generateTasks}>
             <label>
-              Title<input
+              Describe the tasks in natural language
+              <textarea
                 autoFocus
-                value={newTitle}
-                onChange={(event) => setNewTitle(event.target.value)}
-                placeholder="Card title"
+                rows={5}
+                value={aiInstruction}
+                onChange={(event) => setAIInstruction(event.target.value)}
+                placeholder="e.g. Prepare the release by next Friday, including tests and release notes"
               />
             </label>
-            <label>
-              Column<select
-                value={newStatus}
-                onChange={(event) => setNewStatus(event.target.value)}
-              >
-                {boardColumns.map((column) => (
-                  <option key={column.value} value={column.value}>
-                    {column.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {aiResult && (
+              <label>
+                Generated tasks (JSON)
+                <textarea
+                  rows={9}
+                  value={aiResult}
+                  onChange={(event) => setAIResult(event.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+            )}
             <footer>
-              <button type="button" onClick={() => setShowNewCard(false)}>
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="primary"
-                disabled={!newTitle.trim()}
-              >
-                Create
-              </button>
+              <button type="button" onClick={() => setShowAI(false)}>Cancel</button>
+              {!aiResult
+                ? (
+                  <button type="submit" className="primary" disabled={aiBusy || !aiInstruction.trim()}>
+                    {aiBusy ? "Generating…" : "Generate"}
+                  </button>
+                )
+                : (
+                  <button type="button" className="primary" disabled={aiBusy} onClick={() => void applyAITasks()}>
+                    {aiBusy ? "Creating…" : "Create tasks"}
+                  </button>
+                )}
             </footer>
           </form>
-        </div>
+        </WidgetDialog>
       )}
       {previewPath && (
         <KanbanCardModal
@@ -1812,6 +2149,12 @@ export function KanbanDashboardWidget(
             onOpenFile(fileRef("workspace", path));
           }}
           onSaved={() => void load()}
+          onEdit={rows.some((row) => row.path === previewPath)
+            ? () => {
+              setPreviewPath("");
+              setEditingPath(previewPath);
+            }
+            : undefined}
           onClose={() => setPreviewPath("")}
         />
       )}

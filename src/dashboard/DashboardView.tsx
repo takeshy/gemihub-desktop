@@ -3493,6 +3493,7 @@ export function DashboardView({
                         fallbackFileName={fileName}
                         fallbackContent={documentMarkdown}
                         isDark={isDark}
+                        chatSettings={chatSettings}
                         onConfigChange={(config) =>
                           updateFileWidget(
                             widget.id,
@@ -3561,6 +3562,7 @@ export function DashboardView({
                       <KanbanDashboardWidget
                         config={widget.config}
                         isDark={isDark}
+                        settings={chatSettings}
                         onChange={(config) =>
                           updateWidget({ ...widget, config })}
                         onTitleChange={(title) => {

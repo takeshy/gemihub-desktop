@@ -84,6 +84,7 @@ import { KanbanFileView } from "./KanbanFileView";
 import { CanvasFileView } from "../canvas/CanvasFileView";
 import { docKindFor } from "./documentKind";
 import type { ActiveSelection } from "../llm/selection";
+import type { ChatSettings } from "../llm/settings";
 import { appendTimelineEntry, memoTimelineBody } from "./timelineEvents";
 import { WorkflowFileView } from "../workflow/WorkflowFileView";
 import { memoChatDraft, memoEntryChatDraft } from "./memoChat";
@@ -340,6 +341,7 @@ export function FileWidgetBody({
   fallbackFileName,
   fallbackContent,
   isDark,
+  chatSettings,
   onConfigChange,
   memoDirPath,
   memoSyncTimeline,
@@ -359,6 +361,7 @@ export function FileWidgetBody({
   fallbackFileName: string;
   fallbackContent: string;
   isDark: boolean;
+  chatSettings: ChatSettings;
   onConfigChange: (config: Record<string, unknown>) => void;
   memoDirPath: string;
   memoSyncTimeline: string;
@@ -1797,6 +1800,7 @@ export function FileWidgetBody({
           path={filePath || fileName}
           editRequest={kanbanEditRequest}
           isDark={isDark}
+          settings={chatSettings}
           onChange={(content) =>
             onConfigChange({ ...widget.config, fileName, content })}
           onOpenFile={onOpenFile}

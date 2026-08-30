@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { KanbanDashboardWidget } from "./DashboardWidgets";
 import { type FileRef } from "../lib/fileRef";
 import { type KanbanDefinition, parseKanbanDefinition } from "./dashboardData";
+import type { ChatSettings } from "../llm/settings";
 
 type KanbanFileMode = "display" | "edit" | "raw";
 
@@ -13,11 +14,12 @@ function serialize(definition: KanbanDefinition): string {
 }
 
 export function KanbanFileView(
-  { content, path, editRequest, isDark, onChange, onOpenFile }: {
+  { content, path, editRequest, isDark, settings, onChange, onOpenFile }: {
     content: string;
     path: string;
     editRequest?: number;
     isDark: boolean;
+    settings: ChatSettings;
     onChange: (content: string) => void;
     onOpenFile: (file: FileRef) => void;
   },
@@ -87,6 +89,7 @@ export function KanbanFileView(
                 kanban: path,
               }}
               isDark={isDark}
+              settings={settings}
               onChange={updateFromBoard}
               onOpenFile={onOpenFile}
             />

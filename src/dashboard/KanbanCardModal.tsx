@@ -20,6 +20,10 @@ import {
   resolveWorkspaceMarkdownImage,
   uploadWorkspaceMarkdownImage,
 } from "../lib/markdownWorkspaceAssets";
+import {
+  parseKanbanTaskBody,
+  serializeKanbanTaskBody,
+} from "./kanbanTask";
 
 type CardMode = "preview" | "wysiwyg" | "raw";
 
@@ -82,6 +86,7 @@ export function KanbanCardModal(
     isDark,
     backdropClassName = "",
     onNavigate,
+    onEdit,
     onSaved,
     onClose,
   }: {
@@ -89,6 +94,7 @@ export function KanbanCardModal(
     isDark: boolean;
     backdropClassName?: string;
     onNavigate: () => void;
+    onEdit?: () => void;
     onSaved: () => void;
     onClose: () => void;
   },
@@ -109,6 +115,11 @@ export function KanbanCardModal(
     | null
   >(null);
   const parsed = useMemo(() => parseFrontmatter(content), [content]);
+  const taskBody = useMemo(() => parseKanbanTaskBody(parsed.body), [parsed.body]);
+  const taskChangeOffset = useMemo(
+    () => Array.from(taskBody.description.matchAll(/^\s*- \[[ xX]\]\s+/gm)).length,
+    [taskBody.description],
+  );
   const kind = docKindFor(path);
   const binaryPreview = kind === "pdf" || kind === "image" || kind === "epub";
   const dirty = content !== savedContent;
@@ -278,6 +289,30 @@ export function KanbanCardModal(
       setSaving(false);
     }
   };
+  const updateTaskChecklist = async (index: number, completed: boolean) => {
+    if (file.scope !== "workspace" || saving) return;
+    const task = parseKanbanTaskBody(parsed.body);
+    if (!task.checklist[index]) return;
+    task.checklist[index] = { ...task.checklist[index], completed };
+    const next = replaceBody(content, serializeKanbanTaskBody(task));
+    setContent(next);
+    setSaving(true);
+    try {
+      await writeFileRef(file, next);
+      setSavedContent(next);
+      setError("");
+      window.dispatchEvent(
+        new CustomEvent("llm-hub:dashboard-data-changed", {
+          detail: { path },
+        }),
+      );
+      onSaved();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return createPortal(
     <div
@@ -328,6 +363,11 @@ export function KanbanCardModal(
               </button>
             </div>
           )}
+          {onEdit && (
+            <button type="button" onClick={onEdit} title="Edit task">
+              <PenLine size={16} />
+            </button>
+          )}
           <button type="button" onClick={onNavigate} title="Open in widget">
             <ExternalLink size={16} />
           </button>
@@ -371,6 +411,9 @@ export function KanbanCardModal(
               <MarkdownPreview
                 content={parsed.body}
                 isDark={isDark}
+                onTaskChange={(index, completed) =>
+                  void updateTaskChecklist(index, completed)}
+                taskChangeOffset={taskChangeOffset}
                 resolveImageSrc={file.scope === "workspace"
                   ? (url) => resolveWorkspaceMarkdownImage(path, url)
                   : undefined}

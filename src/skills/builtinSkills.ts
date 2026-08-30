@@ -1054,13 +1054,12 @@ Unknown widget types are preserved on save but render as a placeholder.
 ### \`kanban\` — drag-and-drop board of notes by status
 
 Renders notes matching a tag/folder filter as cards grouped into columns by a
-frontmatter status property. Drag cards between columns to update the status
-(writes via \`processFrontMatter\`). Click a card to preview its note in a modal
-(with an icon to open it). The header
-shows an optional board title plus a **New** button that opens a modal (title +
-column) and creates a note already matching the board's filters (placed in
-\`folder\`, tagged with \`tag\`, set to the chosen column's status). Works in view
-mode — the board is interactive without entering edit mode.
+frontmatter status property. Drag cards between columns to update the status.
+Tasks support Markdown descriptions, due dates, checklists, attachments, and
+automatic started/completed dates. Click a card to preview it or edit the rich
+task fields. With an AI provider configured, **Create with AI** turns natural
+language into reviewable task JSON. Works in view mode — the board is
+interactive without entering edit mode.
 
 \`\`\`yaml
 - id: board-1
@@ -1072,6 +1071,9 @@ mode — the board is interactive without entering edit mode.
     folder: ""                     # optional folder path prefix
     statusProperty: status         # frontmatter property holding the status
     titleProperty: ""              # frontmatter property for card title (empty = file name)
+    dueProperty: due               # due date (YYYY-MM-DD)
+    startedProperty: started       # automatically recorded after work starts
+    completedProperty: completed   # automatically recorded in a completion column
     columns:                       # ordered list of status values
       - value: todo
         label: To Do
