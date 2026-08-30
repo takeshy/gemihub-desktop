@@ -285,8 +285,8 @@ type openAIToolCall struct {
 }
 
 var fileToolDefinitions = []map[string]any{
-	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read a file inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
-	{"type": "function", "function": map[string]any{"name": "read_note", "description": "Agent Skills compatibility alias for reading a text file inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
+	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read a supported file inside the active Workspace. Text files return their content; a PDF is attached to the result as a document you can read directly, or returned as its extracted text. Other binary files (images, Office documents, archives) are rejected; ask the user to attach them to the message instead.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
+	{"type": "function", "function": map[string]any{"name": "read_note", "description": "Agent Skills compatibility alias for read_file. Text files return their content; a PDF is attached to the result as a document or returned as its extracted text. Other binary files are rejected; ask the user to attach them to the message instead.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
 	{"type": "function", "function": map[string]any{"name": "search_files", "description": "Search file names and text content inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer"}}, "required": []string{"query"}}}},
 	{"type": "function", "function": map[string]any{"name": "list_files", "description": "List files inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{}}}},
 	{"type": "function", "function": map[string]any{"name": "propose_file_edit", "description": "Propose a Workspace file write. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "string", "enum": []string{"replace", "append", "prepend"}}}, "required": []string{"path", "content"}}}},
@@ -797,10 +797,11 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 			return &ChatResult{Content: contentString(assistant.Content), ToolsUsed: toolsUsed, Thinking: strings.Join(thinkingUsed, "\n\n"), Usage: usage}, nil
 		}
 		messages = append(messages, assistant)
+		roundAttachments := []ChatAttachment{}
 		for _, call := range assistant.ToolCalls {
 			toolsUsed = append(toolsUsed, call.Function.Name)
 			a.emitChatStreamTool(request, call.Function.Name, call.Function.Arguments)
-			result, pending, err := a.executeChatTool(request, call.Function.Name, call.Function.Arguments)
+			result, pending, err := a.executeChatTool(request, call.Function.Name, call.Function.Arguments, pdfAttach)
 			if err != nil {
 				result = map[string]any{"success": false, "error": err.Error()}
 			}
@@ -809,6 +810,15 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 			}
 			encoded, _ := json.Marshal(result)
 			messages = append(messages, openAIMessage{Role: "tool", Content: string(encoded), ToolCallID: call.ID})
+			roundAttachments = append(roundAttachments, toolResultAttachments(result)...)
+		}
+		// Keep every tool message ahead of the documents it produced.
+		if attachments := dedupeToolAttachments(roundAttachments); len(attachments) > 0 {
+			parts := []map[string]any{}
+			for _, attachment := range attachments {
+				parts = append(parts, openAIFileContentPart(attachment))
+			}
+			messages = append(messages, openAIMessage{Role: "user", Content: parts})
 		}
 	}
 	return nil, fmt.Errorf("tool iteration limit exceeded")
@@ -954,12 +964,13 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 			}
 			return &ChatResult{Content: content, Thinking: thinking.String(), ToolsUsed: toolsUsed, Usage: usage, WebSearchSources: webSearchSources(sources)}, nil
 		}
+		roundAttachments := []ChatAttachment{}
 		for _, call := range calls {
 			arguments := map[string]any{}
 			if err := json.Unmarshal([]byte(call.Arguments), &arguments); err != nil {
 				arguments = map[string]any{"_raw": call.Arguments}
 			}
-			result, pending, err := a.executeChatTool(request, call.Name, call.Arguments)
+			result, pending, err := a.executeChatTool(request, call.Name, call.Arguments, pdfAttach)
 			toolsUsed = append(toolsUsed, call.Name)
 			a.emitChatStreamTool(request, call.Name, call.Arguments)
 			if pending != nil {
@@ -970,7 +981,14 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 			}
 			encoded, _ := json.Marshal(result)
 			input = append(input, map[string]any{"type": "function_call_output", "call_id": call.CallID, "output": string(encoded)})
+			roundAttachments = append(roundAttachments, toolResultAttachments(result)...)
 			_ = arguments
+		}
+		// Keep every function_call_output ahead of the documents it produced.
+		for _, attachment := range dedupeToolAttachments(roundAttachments) {
+			input = append(input, map[string]any{"type": "message", "role": "user", "content": []map[string]any{
+				{"type": "input_file", "filename": attachment.Name, "file_data": "data:" + attachment.MimeType + ";base64," + attachment.Data},
+			}})
 		}
 	}
 	return nil, fmt.Errorf("Responses tool iteration limit exceeded")
@@ -984,6 +1002,8 @@ func openAIMessageContent(message ChatMessage) any {
 	for _, attachment := range message.Attachments {
 		if strings.HasPrefix(attachment.MimeType, "image/") && attachment.Data != "" {
 			parts = append(parts, map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:" + attachment.MimeType + ";base64," + attachment.Data}})
+		} else if attachment.MimeType == "application/pdf" && attachment.Data != "" {
+			parts = append(parts, openAIFileContentPart(attachment))
 		} else {
 			parts = append(parts, map[string]any{"type": "text", "text": fmt.Sprintf("[Binary attachment: %s (%s)]", attachment.Name, attachment.MimeType)})
 		}
@@ -1003,7 +1023,7 @@ func contentString(content any) string {
 	}
 }
 
-func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, error) {
+func (a *App) executeFileTool(name, arguments string, delivery pdfDelivery) (any, *PendingFileAction, error) {
 	args := map[string]any{}
 	if arguments != "" {
 		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
@@ -1017,9 +1037,37 @@ func (a *App) executeFileTool(name, arguments string) (any, *PendingFileAction, 
 		if err != nil {
 			return nil, nil, err
 		}
-		result, err := a.ReadWorkspaceFile(path)
-		if err != nil {
-			return nil, nil, err
+		// Binary files have no text to return: readLocalFile would hand back a
+		// base64 data URL (PDF, images, ...) or an empty string (Office, archives),
+		// so the model would burn its context on bytes it cannot read.
+		var result *LocalFileResult
+		if isBinaryFileName(filepath.Base(path)) {
+			// A PDF is still readable: as a document part where the provider has one,
+			// and as its extracted text layer everywhere else.
+			if stringsToLower(filepath.Ext(path)) != ".pdf" {
+				return nil, nil, fmt.Errorf("%q is a binary file and has no readable text. Ask the user to attach it to the message, or search a RAG index that covers it", path)
+			}
+			target, pathErr := a.workspacePath(path, true)
+			if pathErr != nil {
+				return nil, nil, pathErr
+			}
+			if delivery == pdfAttach {
+				// Falls through to the text layer when the file is too large to send.
+				if pdfResult, pdfErr := readPdfToolResult(target, path); pdfErr == nil {
+					return pdfResult, nil, nil
+				}
+			}
+			text, textErr := extractPdfToolText(target, path)
+			if textErr != nil {
+				return nil, nil, textErr
+			}
+			result = &LocalFileResult{Path: path, FileName: filepath.Base(path), Content: text}
+		} else {
+			var readErr error
+			result, readErr = a.ReadWorkspaceFile(path)
+			if readErr != nil {
+				return nil, nil, readErr
+			}
 		}
 		if result == nil {
 			return nil, nil, fmt.Errorf("Workspace file not found: %s", path)
@@ -1112,7 +1160,7 @@ func aiWorkspacePath(path string) (string, error) {
 	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(path))), nil
 }
 
-func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any, *PendingFileAction, error) {
+func (a *App) executeChatTool(request ChatRequest, name, arguments string, delivery pdfDelivery) (any, *PendingFileAction, error) {
 	if !customToolRegistered(request, name) &&
 		!builtinToolAllowed(requestFileToolMode(request), name) {
 		return nil, nil, fmt.Errorf("tool %s is not available in the current Workspace access mode", name)
@@ -1149,7 +1197,7 @@ func (a *App) executeChatTool(request ChatRequest, name, arguments string) (any,
 		return result, nil, err
 	}
 	if !customToolRegistered(request, name) {
-		return a.executeFileTool(name, arguments)
+		return a.executeFileTool(name, arguments, delivery)
 	}
 	args := map[string]any{}
 	if strings.TrimSpace(arguments) != "" {
@@ -1499,6 +1547,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 			continue
 		}
 		functionResponses := []map[string]any{}
+		roundAttachments := []ChatAttachment{}
 		remaining := functionCallLimit - functionCallCount
 		if remaining <= 10 && lastLimitPrompt != functionCallLimit {
 			lastLimitPrompt = functionCallLimit
@@ -1526,7 +1575,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 				forceAnswer = true
 			} else {
 				toolCallSignatures[signature] = true
-				result, pending, err = a.executeChatTool(request, call.Name, string(arguments))
+				result, pending, err = a.executeChatTool(request, call.Name, string(arguments), pdfAttach)
 			}
 			toolsUsed = append(toolsUsed, call.Name)
 			a.emitChatStreamTool(request, call.Name, string(arguments))
@@ -1538,6 +1587,11 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 				return &ChatResult{Content: text, PendingAction: pending, ToolsUsed: toolsUsed, Thinking: strings.Join(thinkingUsed, "\n\n"), Usage: usage, GeneratedImages: generatedImages}, nil
 			}
 			functionResponses = append(functionResponses, map[string]any{"functionResponse": map[string]any{"name": call.Name, "response": map[string]any{"result": result}}})
+			roundAttachments = append(roundAttachments, toolResultAttachments(result)...)
+		}
+		// Keep every functionResponse ahead of the documents it produced.
+		for _, attachment := range dedupeToolAttachments(roundAttachments) {
+			functionResponses = append(functionResponses, map[string]any{"inlineData": map[string]any{"mimeType": attachment.MimeType, "data": attachment.Data}})
 		}
 		functionCallCount += len(callsToProcess)
 		if len(functionResponses) == 0 {
@@ -1815,7 +1869,7 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 			}
 			assistantContent = append(assistantContent, map[string]any{"type": "tool_use", "id": call.ID, "name": call.Name, "input": input})
 			arguments, _ := json.Marshal(input)
-			result, pending, err := a.executeChatTool(request, call.Name, string(arguments))
+			result, pending, err := a.executeChatTool(request, call.Name, string(arguments), pdfAttach)
 			toolsUsed = append(toolsUsed, call.Name)
 			a.emitChatStreamTool(request, call.Name, string(arguments))
 			isError := err != nil
@@ -1826,7 +1880,18 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 				return &ChatResult{Content: text.String(), PendingAction: pending, Thinking: strings.Join(thinkingUsed, "\n\n"), ToolsUsed: toolsUsed, Usage: usage}, nil
 			}
 			encoded, _ := json.Marshal(result)
-			toolResults = append(toolResults, map[string]any{"type": "tool_result", "tool_use_id": call.ID, "content": string(encoded), "is_error": isError})
+			toolResult := map[string]any{"type": "tool_result", "tool_use_id": call.ID, "content": string(encoded), "is_error": isError}
+			// A tool_result's content may hold text, image, document or search_result
+			// blocks, so the PDF rides inside the result it came from rather than as a
+			// sibling block (the user turn must lead with tool_result blocks).
+			if attachments := dedupeToolAttachments(toolResultAttachments(result)); len(attachments) > 0 {
+				blocks := []map[string]any{{"type": "text", "text": string(encoded)}}
+				for _, attachment := range attachments {
+					blocks = append(blocks, map[string]any{"type": "document", "source": map[string]any{"type": "base64", "media_type": attachment.MimeType, "data": attachment.Data}})
+				}
+				toolResult["content"] = blocks
+			}
+			toolResults = append(toolResults, toolResult)
 		}
 		messages = append(messages, map[string]any{"role": "assistant", "content": assistantContent})
 		messages = append(messages, map[string]any{"role": "user", "content": toolResults})

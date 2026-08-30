@@ -127,15 +127,15 @@ func TestAgentSkillFileToolAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.workspaceState = testWorkspaceState(t, base)
-	value, pending, err := app.executeFileTool("read_note", `{"path":"skills/review/SKILL.md"}`)
+	value, pending, err := app.executeFileTool("read_note", `{"path":"skills/review/SKILL.md"}`, pdfExtractText)
 	if err != nil || pending != nil || value.(*LocalFileResult).Content != "instructions" {
 		t.Fatalf("read_note failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}
-	_, pending, err = app.executeFileTool("create_note", `{"name":"index.md","folder":"Knowledge/demo","content":"# Demo"}`)
+	_, pending, err = app.executeFileTool("create_note", `{"name":"index.md","folder":"Knowledge/demo","content":"# Demo"}`, pdfExtractText)
 	if err != nil || pending == nil || pending.Path != "workspace://Knowledge/demo/index.md" || pending.Content != "# Demo" {
 		t.Fatalf("create_note failed: pending=%#v error=%v", pending, err)
 	}
-	if _, _, err = app.executeFileTool("create_note", `{"name":"escape.md","folder":"../outside","content":"no"}`); err == nil {
+	if _, _, err = app.executeFileTool("create_note", `{"name":"escape.md","folder":"../outside","content":"no"}`, pdfExtractText); err == nil {
 		t.Fatal("create_note accepted a folder outside Workspace")
 	}
 }
@@ -155,22 +155,22 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 	}
 	app.workspaceState = testWorkspaceState(t, workspace)
 
-	value, _, err := app.executeFileTool("read_file", `{"path":"inside.md"}`)
+	value, _, err := app.executeFileTool("read_file", `{"path":"inside.md"}`, pdfExtractText)
 	if err != nil || value.(*LocalFileResult).Content != "workspace needle" {
 		t.Fatalf("Workspace read failed: %#v, %v", value, err)
 	}
-	if _, _, err := app.executeFileTool("read_file", `{"path":"missing.md"}`); err == nil {
+	if _, _, err := app.executeFileTool("read_file", `{"path":"missing.md"}`, pdfExtractText); err == nil {
 		t.Fatal("AI read_file did not report a missing Workspace file")
 	}
-	if _, _, err := app.executeFileTool("read_file", `{"path":"files://outside.md"}`); err == nil {
+	if _, _, err := app.executeFileTool("read_file", `{"path":"files://outside.md"}`, pdfExtractText); err == nil {
 		t.Fatal("AI read_file accessed external Files")
 	}
 	for _, path := range []string{"/etc/passwd", `C:\\Users\\outside.md`, `\\\\server\\share\\outside.md`} {
-		if _, _, err := app.executeFileTool("read_file", fmt.Sprintf(`{"path":%q}`, path)); err == nil {
+		if _, _, err := app.executeFileTool("read_file", fmt.Sprintf(`{"path":%q}`, path), pdfExtractText); err == nil {
 			t.Fatalf("AI read_file accepted absolute path %q", path)
 		}
 	}
-	value, _, err = app.executeFileTool("search_files", `{"query":"needle"}`)
+	value, _, err = app.executeFileTool("search_files", `{"query":"needle"}`, pdfExtractText)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 	if len(results) != 1 || results[0].Path != "inside.md" {
 		t.Fatalf("AI search escaped Workspace: %#v", results)
 	}
-	value, _, err = app.executeFileTool("list_files", `{}`)
+	value, _, err = app.executeFileTool("list_files", `{}`, pdfExtractText)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,20 +186,176 @@ func TestAIFileToolsAreLimitedToWorkspace(t *testing.T) {
 	if len(items) != 1 || items[0].Path != "inside.md" {
 		t.Fatalf("AI list escaped Workspace: %#v", items)
 	}
-	_, pending, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md","content":"draft"}`)
+	_, pending, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md","content":"draft"}`, pdfExtractText)
 	if err != nil || pending == nil || pending.Path != "workspace://draft.md" || pending.Content != "draft" {
 		t.Fatalf("AI edit was not Workspace-scoped: %#v, %v", pending, err)
 	}
-	if _, _, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md"}`); err == nil {
+	if _, _, err := app.executeFileTool("propose_file_edit", `{"path":"draft.md"}`, pdfExtractText); err == nil {
 		t.Fatal("AI edit accepted a proposal without content")
 	}
-	_, emptyPending, err := app.executeFileTool("propose_file_edit", `{"path":"empty.md","content":""}`)
+	_, emptyPending, err := app.executeFileTool("propose_file_edit", `{"path":"empty.md","content":""}`, pdfExtractText)
 	if err != nil || emptyPending == nil || emptyPending.Content != "" {
 		t.Fatalf("AI edit rejected an intentional empty file: %#v, %v", emptyPending, err)
 	}
 	encoded, err := json.Marshal(emptyPending)
 	if err != nil || !strings.Contains(string(encoded), `"content":""`) {
 		t.Fatalf("empty proposed content was omitted from JSON: %s, %v", encoded, err)
+	}
+}
+
+// Binary files are reachable through search_files/list_files, so read_file must
+// refuse them instead of handing the model a base64 data URL or an empty string.
+func TestAIReadFileRejectsBinaryFiles(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "notes.md"), []byte("readable"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.workspaceState = testWorkspaceState(t, workspace)
+
+	// PDFs have their own path (attached or extracted); every other binary format is
+	// unreadable in both delivery modes.
+	for _, name := range []string{"photo.png", "sheet.xlsx", "bundle.zip", "song.mp3"} {
+		if err := os.WriteFile(filepath.Join(workspace, name), []byte("binary"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, tool := range []string{"read_file", "read_note"} {
+			for _, delivery := range []pdfDelivery{pdfExtractText, pdfAttach} {
+				if _, _, err := app.executeFileTool(tool, fmt.Sprintf(`{"path":%q}`, name), delivery); err == nil {
+					t.Fatalf("%s returned binary content for %q", tool, name)
+				}
+			}
+		}
+	}
+	value, _, err := app.executeFileTool("read_file", `{"path":"notes.md"}`, pdfExtractText)
+	if err != nil || value.(*LocalFileResult).Content != "readable" {
+		t.Fatalf("text read regressed: %#v, %v", value, err)
+	}
+}
+
+// A provider whose request builder has a document part gets the PDF itself, with the
+// base64 kept out of the tool result JSON.
+func TestAIReadFileAttachesPdfWhenSupported(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "report.pdf"), []byte("%PDF-1.7 body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "photo.png"), []byte("\x89PNG"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.workspaceState = testWorkspaceState(t, workspace)
+
+	value, _, err := app.executeFileTool("read_file", `{"path":"report.pdf"}`, pdfAttach)
+	if err != nil {
+		t.Fatalf("PDF read failed: %v", err)
+	}
+	result, ok := value.(*PdfToolResult)
+	if !ok {
+		t.Fatalf("expected a PdfToolResult, got %#v", value)
+	}
+	attachments := toolResultAttachments(result)
+	if len(attachments) != 1 || attachments[0].MimeType != "application/pdf" || attachments[0].Data == "" {
+		t.Fatalf("PDF was not attached: %#v", attachments)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), attachments[0].Data) {
+		t.Fatalf("base64 payload leaked into the tool result JSON: %s", encoded)
+	}
+
+	// Only PDFs are readable; other binaries stay rejected in both modes.
+	if _, _, err := app.executeFileTool("read_file", `{"path":"photo.png"}`, pdfAttach); err == nil {
+		t.Fatal("read_file returned an image as a document")
+	}
+	// Without a document part the PDF falls back to its text layer. This stub has
+	// none, so the error must say so rather than claiming the file is unreadable.
+	_, _, err = app.executeFileTool("read_file", `{"path":"report.pdf"}`, pdfExtractText)
+	if err == nil {
+		t.Fatal("a PDF with no text layer was reported as readable")
+	}
+	if !strings.Contains(err.Error(), "report.pdf") {
+		t.Fatalf("extraction error does not name the file: %v", err)
+	}
+}
+
+// buildTextPDF writes a minimal single-page PDF whose content stream holds WinAnsi
+// text, so extractPdfToolText has a real text layer to pull from.
+func buildTextPDF(t *testing.T, body string) []byte {
+	t.Helper()
+	content := fmt.Sprintf("BT /FA 12 Tf 10 80 Td (%s) Tj ET", body)
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>",
+		"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /FA 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+	}
+	var b strings.Builder
+	b.WriteString("%PDF-1.4\n%test\n")
+	offsets := make([]int, len(objects)+1)
+	for i, object := range objects {
+		offsets[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, object)
+	}
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(offsets))
+	for _, offset := range offsets[1:] {
+		fmt.Fprintf(&b, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets), xref)
+	return []byte(b.String())
+}
+
+// Providers with no document part still read a PDF through its text layer.
+func TestAIReadFileExtractsPdfTextWithoutDocumentPart(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "manual.pdf"), buildTextPDF(t, "quarterly revenue summary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.workspaceState = testWorkspaceState(t, workspace)
+
+	value, _, err := app.executeFileTool("read_file", `{"path":"manual.pdf"}`, pdfExtractText)
+	if err != nil {
+		t.Fatalf("PDF text extraction failed: %v", err)
+	}
+	result, ok := value.(*LocalFileResult)
+	if !ok {
+		t.Fatalf("expected a LocalFileResult, got %#v", value)
+	}
+	if !strings.Contains(result.Content, "quarterly revenue summary") {
+		t.Fatalf("extracted text is missing the page body: %q", result.Content)
+	}
+	if !strings.Contains(result.Content, "[Page 1]") {
+		t.Fatalf("extracted text is missing its page label: %q", result.Content)
+	}
+	if len(toolResultAttachments(result)) != 0 {
+		t.Fatal("the extract-text path must not attach a document")
+	}
+}
+
+func TestOpenAIFileContentPart(t *testing.T) {
+	part := openAIFileContentPart(ChatAttachment{Name: "report.pdf", MimeType: "application/pdf", Data: "JVBERi0="})
+	file, ok := part["file"].(map[string]any)
+	if part["type"] != "file" || !ok {
+		t.Fatalf("unexpected content part: %#v", part)
+	}
+	if file["filename"] != "report.pdf" || file["file_data"] != "data:application/pdf;base64,JVBERi0=" {
+		t.Fatalf("unexpected file payload: %#v", file)
+	}
+}
+
+func TestDedupeToolAttachments(t *testing.T) {
+	deduped := dedupeToolAttachments([]ChatAttachment{
+		{Name: "a.pdf", MimeType: "application/pdf", Data: "x"},
+		{Name: "a.pdf", MimeType: "application/pdf", Data: "x"},
+		{Name: "b.pdf", MimeType: "application/pdf", Data: "y"},
+	})
+	if len(deduped) != 2 || deduped[0].Name != "a.pdf" || deduped[1].Name != "b.pdf" {
+		t.Fatalf("unexpected dedupe result: %#v", deduped)
 	}
 }
 
@@ -218,7 +374,7 @@ func TestGeminiFunctionDeclarationsNoSearch(t *testing.T) {
 func TestAppendTimelineToolWritesSystemTimeline(t *testing.T) {
 	workspace := t.TempDir()
 	app := &App{workspaceState: testWorkspaceState(t, workspace)}
-	value, pending, err := app.executeChatTool(ChatRequest{FileToolMode: "all"}, "append_timeline", `{"content":"回答の要点\n\n- 保存する"}`)
+	value, pending, err := app.executeChatTool(ChatRequest{FileToolMode: "all"}, "append_timeline", `{"content":"回答の要点\n\n- 保存する"}`, pdfExtractText)
 	if err != nil || pending != nil {
 		t.Fatalf("append_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}
@@ -294,15 +450,15 @@ func TestFilesOffRejectsToolsThatWereNeverOffered(t *testing.T) {
 		CustomTools:  []ChatToolDefinition{{Name: "rag_search"}},
 	}
 	for _, name := range []string{"read_file", "search_files", "append_timeline"} {
-		if _, _, err := app.executeChatTool(request, name, `{"path":"note.md","content":"x","query":"x"}`); err == nil {
+		if _, _, err := app.executeChatTool(request, name, `{"path":"note.md","content":"x","query":"x"}`, pdfExtractText); err == nil {
 			t.Fatalf("%s ran while Workspace access is off", name)
 		}
 	}
 	noSearch := ChatRequest{FileToolMode: "noSearch"}
-	if _, _, err := app.executeChatTool(noSearch, "search_files", `{"query":"hello"}`); err == nil {
+	if _, _, err := app.executeChatTool(noSearch, "search_files", `{"query":"hello"}`, pdfExtractText); err == nil {
 		t.Fatal("search_files ran in no-discovery mode")
 	}
-	if _, _, err := app.executeChatTool(noSearch, "read_file", `{"path":"note.md"}`); err != nil {
+	if _, _, err := app.executeChatTool(noSearch, "read_file", `{"path":"note.md"}`, pdfExtractText); err != nil {
 		t.Fatalf("read_file should stay available in no-discovery mode: %v", err)
 	}
 }
@@ -317,7 +473,7 @@ func TestReadTimelineToolReadsRequestedDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := &App{workspaceState: testWorkspaceState(t, workspace)}
-	value, pending, err := app.executeChatTool(ChatRequest{FileToolMode: "all"}, "read_timeline", `{"date":"2026-07-20"}`)
+	value, pending, err := app.executeChatTool(ChatRequest{FileToolMode: "all"}, "read_timeline", `{"date":"2026-07-20"}`, pdfExtractText)
 	if err != nil || pending != nil {
 		t.Fatalf("read_timeline failed: value=%#v pending=%#v error=%v", value, pending, err)
 	}

@@ -295,7 +295,8 @@ func (a *App) respondToCodexDynamicTool(encoder *json.Encoder, request ChatReque
 	}
 	arguments, _ := json.Marshal(params.Arguments)
 	a.emitChatStreamTool(request, params.Tool, string(arguments))
-	result, pending, err := a.executeChatTool(request, params.Tool, string(arguments))
+	// The MCP bridge answers over JSON-RPC, which carries no document part.
+	result, pending, err := a.executeChatTool(request, params.Tool, string(arguments), pdfExtractText)
 	success := err == nil
 	var value any = result
 	if pending != nil {
