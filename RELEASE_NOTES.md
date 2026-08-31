@@ -1,4 +1,4 @@
-# GemiHub Desktop v1.4.7
+# GemiHub Desktop v1.4.8
 
 ## What's new
 
@@ -20,9 +20,10 @@
   elapsed time when they finish, and the error until it is dismissed.
 - Chat clears the composer the moment a message is sent, instead of leaving
   the text in place while referenced files and RAG results are gathered.
-- Chat can now search the selected RAG index itself: when the automatic
-  retrieval is thin or off-topic, the model re-queries with a focused question,
-  up to three searches per turn.
+- Chat now searches the selected RAG index on demand instead of injecting
+  automatic retrieval into every turn, with up to three focused searches.
+- Official OpenAI chat uses the Responses API and exposes configurable
+  reasoning effort from none through max.
 - Chat tool chips name the call in their tooltip — the search query, the file
   path, the shell command — including tools run through Codex.
 - Local file links in chat answers open in the app instead of the browser, and

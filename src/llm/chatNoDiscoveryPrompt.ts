@@ -34,9 +34,9 @@ export function buildNoDiscoverySystemPrompt({
       `RAG retrieved relevant Workspace context for this turn. Use it as the primary Workspace source, and read a file only for an exact path explicitly supplied by the user or shown in a retrieved source citation.${searchAgain}`;
   } else if (ragRequested) {
     sourceGuidance =
-      `RAG was requested, but it returned no relevant Workspace context. Do not fill the gap with assumptions or guessed file reads.${
+      `A RAG index is selected, but it has not returned any Workspace context yet. Do not fill the gap with assumptions or guessed file reads.${
         ragSearchAvailable
-          ? ` Call ${RAG_SEARCH_TOOL_NAME} with a rephrased, self-contained query before concluding that the Workspace has nothing.`
+          ? ` Use ${RAG_SEARCH_TOOL_NAME} with a self-contained query when the request depends on indexed Workspace knowledge, and search before concluding that the Workspace has nothing.`
           : ""
       } Read a file only for an exact path explicitly supplied by the user.`;
   } else {

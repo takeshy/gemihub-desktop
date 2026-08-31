@@ -49,6 +49,25 @@ Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
   assertEquals(defaultChatSettings.model, "gpt-5.5");
 });
 
+Deno.test("OpenAI reasoning effort defaults to medium and validates stored values", () => {
+  const storage = (value: string) => ({
+    getItem: (key: string) =>
+      key === "gemihub-desktop:chat-settings" ? value : null,
+  });
+  assertEquals(loadChatSettings(storage("{}")).openAIReasoningEffort, "medium");
+  assertEquals(
+    loadChatSettings(storage(JSON.stringify({ openAIReasoningEffort: "max" })))
+      .openAIReasoningEffort,
+    "max",
+  );
+  assertEquals(
+    loadChatSettings(
+      storage(JSON.stringify({ openAIReasoningEffort: "invalid" })),
+    ).openAIReasoningEffort,
+    "medium",
+  );
+});
+
 Deno.test("multiple API and local profiles become distinct selectable models", () => {
   const cloud = {
     ...newModelProfile("openai"),

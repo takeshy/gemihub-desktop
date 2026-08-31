@@ -38,16 +38,12 @@ Deno.test("RAG source merging removes duplicate citations", () => {
   );
 });
 
-Deno.test("the RAG prompt tells the model to re-query, and to query at all when nothing was retrieved", () => {
-  const withContext = ragSearchSystemPrompt(true);
-  assertStringIncludes(withContext, "used the user's message verbatim");
-  assertStringIncludes(withContext, "instead of answering from it");
-  assertStringIncludes(withContext, "At most 3 RAG searches");
-
-  const withoutContext = ragSearchSystemPrompt(false);
+Deno.test("the RAG prompt exposes on-demand search without claiming automatic retrieval", () => {
+  const prompt = ragSearchSystemPrompt();
   assertStringIncludes(
-    withoutContext,
-    "No automatic RAG context was retrieved",
+    prompt,
+    "Use it with a self-contained, focused semantic query",
   );
-  assertStringIncludes(withoutContext, "before answering from memory");
+  assertStringIncludes(prompt, "At most 3 RAG searches");
+  assertEquals(prompt.includes("automatic"), false);
 });

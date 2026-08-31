@@ -17,11 +17,11 @@ Deno.test("no-discovery mode points at rag_search instead of giving up", () => {
   });
   assertStringIncludes(
     emptyRetrieval,
-    "returned no relevant Workspace context",
+    "has not returned any Workspace context yet",
   );
   assertStringIncludes(
     emptyRetrieval,
-    "Call rag_search with a rephrased, self-contained query",
+    "Use rag_search with a self-contained query",
   );
 });
 

@@ -261,6 +261,7 @@ export interface ChatRequest {
   cliPath: string;
   cliSessionId: string;
   codexReasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   streamId?: string;
   enableThinking?: boolean;
   enableWebSearch?: boolean;

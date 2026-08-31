@@ -43,6 +43,7 @@ type ChatRequest struct {
 	CLIPath              string               `json:"cliPath"`
 	CLISessionID         string               `json:"cliSessionId"`
 	CodexReasoningEffort string               `json:"codexReasoningEffort,omitempty"`
+	ReasoningEffort      string               `json:"reasoningEffort,omitempty"`
 	SystemPrompt         string               `json:"systemPrompt"`
 	Messages             []ChatMessage        `json:"messages"`
 	EnableFileTools      bool                 `json:"enableFileTools"`
@@ -687,7 +688,10 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 		}
 		return nil, fmt.Errorf("native web search requires the official OpenAI or xAI endpoint")
 	}
-	if endpointHost == "api.openai.com" && request.EnableThinking && len(tools) > 0 {
+	// OpenAI recommends Responses for reasoning, tool-calling, and multi-turn
+	// workflows. Keep Chat Completions only for third-party OpenAI-compatible
+	// endpoints, which may not implement /v1/responses.
+	if endpointHost == "api.openai.com" {
 		return a.chatOpenAIResponses(request, endpoint)
 	}
 	if !strings.HasSuffix(endpoint, "/chat/completions") {
@@ -890,8 +894,16 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 		if request.SystemPrompt != "" {
 			payload["instructions"] = request.SystemPrompt
 		}
-		if request.EnableThinking {
-			payload["reasoning"] = map[string]any{"effort": "high", "summary": "detailed"}
+		effort := openAIReasoningEffort(request.ReasoningEffort)
+		if effort == "" && request.EnableThinking {
+			effort = "high"
+		}
+		if effort != "" {
+			reasoning := map[string]any{"effort": effort}
+			if effort != "none" {
+				reasoning["summary"] = "detailed"
+			}
+			payload["reasoning"] = reasoning
 		}
 		var response struct {
 			Output []json.RawMessage `json:"output"`
@@ -993,6 +1005,16 @@ func (a *App) chatOpenAIResponses(request ChatRequest, endpoint string) (*ChatRe
 		}
 	}
 	return nil, fmt.Errorf("Responses tool iteration limit exceeded")
+}
+
+func openAIReasoningEffort(effort string) string {
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	for _, supported := range []string{"none", "low", "medium", "high", "xhigh", "max"} {
+		if effort == supported {
+			return effort
+		}
+	}
+	return ""
 }
 
 func openAIMessageContent(message ChatMessage) any {

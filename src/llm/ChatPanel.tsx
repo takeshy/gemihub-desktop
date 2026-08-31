@@ -35,7 +35,6 @@ import {
   onChatStream,
   onChatToolRequest,
   type PendingFileAction,
-  type RAGSearchResult,
   readFile,
   readWorkspaceFile,
   readWorkspaceStateFile,
@@ -98,6 +97,7 @@ import {
   type ChatProvider,
   type ChatSettings,
   type CodexReasoningEffort,
+  type OpenAIReasoningEffort,
   chatThinkingCapabilities,
   cliNames,
   type CLIType,
@@ -113,7 +113,6 @@ import { type FileRef, fileRef, fileRefFromBackendPath } from "../lib/fileRef";
 import {
   type GroundingSource,
   groundingSourceLabel,
-  groundingSources,
 } from "./grounding";
 import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
@@ -337,6 +336,20 @@ function supportsNativeWebSearch(settings: ChatSettings): boolean {
   }
 }
 
+function usesOfficialOpenAIResponses(settings: ChatSettings): boolean {
+  if (settings.provider !== "openai") return false;
+  try {
+    return new URL(settings.endpoint).hostname.toLowerCase() ===
+      "api.openai.com";
+  } catch {
+    return false;
+  }
+}
+
+function supportsOnDemandRag(settings: ChatSettings): boolean {
+  return settings.provider !== "cli" || settings.cliType === "codex";
+}
+
 function newSession(messages: ChatMessage[] = []): ChatSession {
   const now = Date.now();
   return {
@@ -481,17 +494,6 @@ function attachedFileSummary(file: AttachedFile): ChatAttachedFile {
     mimeType,
     automatic: file.automatic,
   };
-}
-
-function semanticRAGContext(results: RAGSearchResult[]): string {
-  if (results.length === 0) return "";
-  return `\n\n--- Relevant context from Workspace (semantic search) ---\n${
-    results.map((result) =>
-      `\n[Source: ${result.filePath}] (relevance: ${
-        result.score.toFixed(3)
-      })\n${result.text}\n`
-    ).join("")
-  }\n--- End of context ---\n`;
 }
 
 function resolveSlashCommand(
@@ -896,6 +898,7 @@ export function ChatPanel({
     chatThinkingCapabilities(settings.provider, settings.model);
   const thinkingEnabled = thinkingRequired ||
     settings.thinkingEnabledModels.includes(thinkingModelKey);
+  const openAIReasoningAvailable = usesOfficialOpenAIResponses(settings);
   const selectedSkills = useMemo(
     () =>
       skills.filter((skill) => activeSkillPaths.includes(skill.skillFilePath)),
@@ -1630,7 +1633,6 @@ export function ChatPanel({
           `\n\n--- BEGIN REFERENCED FILE: ${path} ---\n${file.content}\n--- END REFERENCED FILE ---`;
       }
     }
-    let ragContext = "";
     let ragSources: GroundingSource[] = [];
     let ragSearchCount = 0;
     const legacyWebSearch = settings.selectedRagSetting === "__websearch__";
@@ -1639,24 +1641,6 @@ export function ChatPanel({
       (settings.webSearchEnabled || legacyWebSearch);
     const ragSetting = ragName ? settings.ragSettings[ragName] : undefined;
     const hasExplicitRAGContext = attachedFiles.some((file) => file.rag);
-    if (ragName && ragSetting && workspaceBase && !hasExplicitRAGContext) {
-      try {
-        const results = await searchRAG(
-          ragName,
-          promptText,
-          resolveRAGSetting(settings, ragSetting),
-        );
-        ragContext = semanticRAGContext(results);
-        ragSources = groundingSources(results);
-        ragSearchCount++;
-      } catch (caught) {
-        setError(
-          `RAG search failed: ${
-            caught instanceof Error ? caught.message : String(caught)
-          }`,
-        );
-      }
-    }
     const displayMessage = {
       role: "user",
       content: text,
@@ -1668,7 +1652,7 @@ export function ChatPanel({
     const binaryAttachments = attachedChatAttachments(attachedFiles);
     const requestMessages = [...messages, {
       ...displayMessage,
-      content: contextMessage(promptText + ragContext, attachedFiles),
+      content: contextMessage(promptText, attachedFiles),
       attachments: binaryAttachments.length ? binaryAttachments : undefined,
     }];
     const sessionIDAtSend = activeSession.id;
@@ -1696,10 +1680,13 @@ export function ChatPanel({
       content: "",
       provider: providerAtSend,
       model: modelAtSend,
-      ragUsed: ragContext.length > 0,
-      ragQuery: ragContext.length > 0 ? text : undefined,
-      ragSources: ragSources.length ? ragSources : undefined,
-      thinkingEnabled: thinkingAvailable ? thinkingEnabled : undefined,
+      ragUsed: hasExplicitRAGContext,
+      ragQuery: hasExplicitRAGContext ? text : undefined,
+      thinkingEnabled: openAIReasoningAvailable
+        ? settings.openAIReasoningEffort !== "none"
+        : thinkingAvailable
+        ? thinkingEnabled
+        : undefined,
     } satisfies ChatMessage;
     updateSession(
       sessionIDAtSend,
@@ -1824,7 +1811,8 @@ export function ChatPanel({
       );
       const collectedMcpApps: NonNullable<ChatMessage["mcpApps"]> = [];
       const dynamicRagEnabled = Boolean(
-        ragName && ragSetting && workspaceBase && settings.provider !== "cli",
+        ragName && ragSetting && workspaceBase &&
+          supportsOnDemandRag(settings),
       );
       const unsubscribeMcp = mcpBindings.length || dynamicRagEnabled
         ? onChatToolRequest((request) => {
@@ -1845,7 +1833,7 @@ export function ChatPanel({
               void resolveChatTool(
                 request.requestId,
                 undefined,
-                `RAG search limit reached (${MAX_RAG_SEARCHES_PER_TURN} searches per turn, including automatic retrieval).`,
+                `RAG search limit reached (${MAX_RAG_SEARCHES_PER_TURN} searches per turn).`,
               );
               return;
             }
@@ -1981,11 +1969,11 @@ export function ChatPanel({
           settings.fileToolMode === "noSearch"
             ? buildNoDiscoverySystemPrompt({
               ragRequested: Boolean(ragName && ragSetting),
-              hasRagContext: ragContext.length > 0,
+              hasRagContext: hasExplicitRAGContext,
               ragSearchAvailable: dynamicRagEnabled,
             })
             : "",
-          dynamicRagEnabled ? ragSearchSystemPrompt(ragContext.length > 0) : "",
+          dynamicRagEnabled ? ragSearchSystemPrompt() : "",
         ].filter(Boolean).join("\n\n"),
         enableFileTools: settings.enableFileTools,
         fileToolMode: settings.fileToolMode,
@@ -1994,6 +1982,9 @@ export function ChatPanel({
         cliPath: settings.cliPaths[settings.cliType],
         cliSessionId: nativeSessionID,
         codexReasoningEffort: settings.codexReasoningEffort,
+        reasoningEffort: openAIReasoningAvailable
+          ? settings.openAIReasoningEffort
+          : undefined,
         streamId,
         enableThinking: thinkingEnabled,
         customTools,
@@ -2071,15 +2062,21 @@ export function ChatPanel({
             skillsUsed: skillsAtSend.length
               ? skillsAtSend.map((skill) => skill.name)
               : undefined,
-            ragUsed: ragContext.length > 0,
-            ragQuery: ragContext.length > 0 ? text : undefined,
+            ragUsed: hasExplicitRAGContext || ragSources.length > 0,
+            ragQuery: hasExplicitRAGContext || ragSources.length > 0
+              ? text
+              : undefined,
             ragSources: ragSources.length ? ragSources : undefined,
             webSearchUsed: Boolean(result.webSearchSources?.length),
             webSearchSources: result.webSearchSources?.length
               ? result.webSearchSources
               : message.webSearchSources,
             thinking: result.thinking || message.thinking,
-            thinkingEnabled: thinkingAvailable ? thinkingEnabled : undefined,
+            thinkingEnabled: openAIReasoningAvailable
+              ? settings.openAIReasoningEffort !== "none"
+              : thinkingAvailable
+              ? thinkingEnabled
+              : undefined,
             usage: result.usage,
             generatedImages: result.generatedImages,
             mcpApps: collectedMcpApps.length
@@ -3039,6 +3036,33 @@ export function ChatPanel({
               ))}
             </select>
           )}
+          {openAIReasoningAvailable && (
+            <select
+              value={settings.openAIReasoningEffort}
+              disabled={loading}
+              onChange={(event) =>
+                onSettingsChange({
+                  ...settings,
+                  openAIReasoningEffort: event.target
+                    .value as OpenAIReasoningEffort,
+                })}
+              title="OpenAI reasoning effort"
+            >
+              {([
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+              ] as OpenAIReasoningEffort[])
+                .map((effort) => (
+                  <option key={effort} value={effort}>
+                    Reasoning: {effort}
+                  </option>
+                ))}
+            </select>
+          )}
           {settings.provider === "cli" && settings.cliType === "codex" && (
             <select
               value={settings.codexReasoningEffort}
@@ -3055,12 +3079,14 @@ export function ChatPanel({
           )}
           <select
             value={settings.selectedRagSetting ?? ""}
-            disabled={loading}
+            disabled={loading || !supportsOnDemandRag(settings)}
             onChange={(event) => onSettingsChange({
               ...settings,
               selectedRagSetting: event.target.value || null,
             })}
-            title="RAG"
+            title={supportsOnDemandRag(settings)
+              ? "RAG"
+              : "RAG search is unavailable for Antigravity CLI"}
           >
             <option value="">Search: none</option>
             {Object.keys(settings.ragSettings).map((name) => (

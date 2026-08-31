@@ -652,6 +652,53 @@ func TestNativeWebSearchEndpointResolution(t *testing.T) {
 	}
 }
 
+func TestOfficialOpenAIUsesResponsesAndCompatibleEndpointUsesChatCompletions(t *testing.T) {
+	previousClient := chatHTTPClient
+	defer func() { chatHTTPClient = previousClient }()
+	requestedPaths := []string{}
+	chatHTTPClient = &http.Client{Transport: chatRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requestedPaths = append(requestedPaths, request.URL.Path)
+		if request.URL.Host == "api.openai.com" {
+			var payload map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode Responses payload: %v", err)
+			}
+			reasoning, _ := payload["reasoning"].(map[string]any)
+			if reasoning["effort"] != "low" || reasoning["summary"] != "detailed" {
+				t.Fatalf("unexpected Responses reasoning: %#v", reasoning)
+			}
+			body := `{"output":[{"type":"message","content":[{"type":"output_text","text":"responses reply"}]}]}`
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+		}
+		body := "data: {\"choices\":[{\"delta\":{\"content\":\"chat reply\"}}]}\n\ndata: [DONE]\n\n"
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+
+	app := NewApp()
+	official, err := app.chatOpenAI(ChatRequest{Endpoint: "https://api.openai.com/v1/chat/completions", Model: "gpt-5.6-luna", ReasoningEffort: "low", Messages: []ChatMessage{{Role: "user", Content: "hi"}}})
+	if err != nil || official.Content != "responses reply" {
+		t.Fatalf("unexpected official OpenAI result: result=%#v err=%v", official, err)
+	}
+	compatible, err := app.chatOpenAI(ChatRequest{Endpoint: "https://gateway.example/v1", Model: "gpt-5.6-luna", Messages: []ChatMessage{{Role: "user", Content: "hi"}}})
+	if err != nil || compatible.Content != "chat reply" {
+		t.Fatalf("unexpected compatible-provider result: result=%#v err=%v", compatible, err)
+	}
+	if len(requestedPaths) != 2 || requestedPaths[0] != "/v1/responses" || requestedPaths[1] != "/v1/chat/completions" {
+		t.Fatalf("unexpected provider paths: %#v", requestedPaths)
+	}
+}
+
+func TestOpenAIReasoningEffortValidation(t *testing.T) {
+	for _, effort := range []string{"none", "low", "medium", "high", "xhigh", "max"} {
+		if got := openAIReasoningEffort(effort); got != effort {
+			t.Fatalf("openAIReasoningEffort(%q) = %q", effort, got)
+		}
+	}
+	if got := openAIReasoningEffort("unlimited"); got != "" {
+		t.Fatalf("unsupported effort was accepted: %q", got)
+	}
+}
+
 func TestLimitedReasoningChatCompletionsDisablesReasoningWithTools(t *testing.T) {
 	for _, model := range []string{"gpt-5.6-terra", "gpt-5.6-luna"} {
 		if !chatCompletionsRequiresDisabledReasoning(model) {
