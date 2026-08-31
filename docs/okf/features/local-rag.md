@@ -19,6 +19,7 @@ Local RAGは、ローカルファイル群を意味検索できるようにす�
 * Adjacent chunks: textの検索結果へ前後3chunkずつ追加して文脈を広げる。
 * AI suggestions / refine: 設定済みmodelでfilter語を展開したり、選択する抜粋を整えたりする。
 * Delete index: 作成済み索引を削除する。
+* Startup sync: `rag-sync`ノードを置いたWorkflowにAutomationの`App started`イベントを割り当てると、Workspaceの準備後に差分同期する。
 
 embedding生成には設定したproviderのcredentialが必要で、GeminiやVertex AIなど外部embedding APIを使う場合、対象テキストがそのサービスへ送信されます。RAGは原文そのものを変更しません。少数ファイルを確実に渡す用途は `@file`、curatedな定義や手順には[OKF](/features/okf-knowledge.md)が適しています。
 

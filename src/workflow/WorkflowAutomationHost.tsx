@@ -27,6 +27,7 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
   const queueRef = useRef(Promise.resolve());
   const modifyTimersRef = useRef(new Map<string, number>());
   const lastOpenedRef = useRef("");
+  const startupDispatchedRef = useRef(new Set<string>());
   const [progress, setProgress] = useState<{ workflow: Workflow; logs: WorkflowLog[]; thinking: Record<string, string>; running: boolean; controller: AbortController } | null>(null);
 
   useEffect(() => {
@@ -47,8 +48,10 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
     const workflow = parseWorkflowFile(workflowFile.content, trigger.workflowId);
     const initial = new Map<string, string | number>();
     initial.set("_eventType", event.type);
-    initial.set("_eventFilePath", event.path);
-    initial.set("_eventFile", JSON.stringify({ path: event.path, basename: event.path.split("/").pop() || event.path, name: (event.path.split("/").pop() || event.path).replace(/\.[^.]+$/, ""), extension: event.path.split(".").pop() || "" }));
+    if (event.type !== "startup") {
+      initial.set("_eventFilePath", event.path);
+      initial.set("_eventFile", JSON.stringify({ path: event.path, basename: event.path.split("/").pop() || event.path, name: (event.path.split("/").pop() || event.path).replace(/\.[^.]+$/, ""), extension: event.path.split(".").pop() || "" }));
+    }
     if (event.oldPath) initial.set("_eventOldPath", event.oldPath);
     if (["create", "modify", "file-open"].includes(event.type)) {
       const file = event.type === "file-open" && activeFile?.path === event.path ? activeFile : await readFile(event.path).catch(() => null);
@@ -61,12 +64,18 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
     if (run.status === "error") console.error(`Workflow ${trigger.workflowId} failed on ${event.type}: ${run.error}`);
   };
 
-  const dispatchEvent = (event: FileEvent) => {
-    const matches = automation.triggers.filter((trigger) => trigger.events.includes(event.type) && matchWorkflowFilePattern(trigger.filePattern, event.path));
+  const dispatchEvent = (event: FileEvent, source = automation) => {
+    const matches = source.triggers.filter((trigger) => trigger.events.includes(event.type) && (event.type === "startup" || matchWorkflowFilePattern(trigger.filePattern, event.path)));
     for (const trigger of matches) {
       queueRef.current = queueRef.current.then(() => executeTrigger(trigger, event)).catch((error) => console.error("Workflow event failed", error));
     }
   };
+
+  useEffect(() => {
+    if (!directoryBase || startupDispatchedRef.current.has(directoryBase)) return;
+    startupDispatchedRef.current.add(directoryBase);
+    dispatchEvent({ type: "startup", path: "" }, loadWorkflowAutomationSettings(directoryBase));
+  }, [directoryBase]);
 
   useEffect(() => {
     if (!directoryBase || automation.triggers.length === 0) { snapshotRef.current = null; return; }

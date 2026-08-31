@@ -237,7 +237,7 @@ const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
   workflow:
     "- workflow: path; optional input/output mappings, prefix and saveTo. Without output, all child variables are copied.",
   "rag-sync":
-    "- rag-sync: retained for compatibility; server RAG sync is unsupported and the result directs users to local RAG.",
+    "- rag-sync: runs a full incremental local RAG sync; optional ragSetting (defaults to selected setting), deprecated path, saveTo.",
   "file-explorer":
     "- file-explorer: mode select/create, path or default, title, extensions, saveTo (FileExplorerData), savePathTo.",
   "file-save":

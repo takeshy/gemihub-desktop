@@ -12,6 +12,7 @@ import {
   readWorkspaceFile,
   resolveChatTool,
   searchRAG,
+  syncRAG,
   workflowHTTPRequest,
   writeWorkspaceBinaryFile,
   writeWorkspaceFile,
@@ -1621,11 +1622,42 @@ async function executeNode(
       return { output: result.variables };
     }
     case "rag-sync": {
+      const requestedPath = property(node, "path", variables) || undefined;
+      const ragSetting = property(node, "ragSetting", variables) ||
+        services.chatSettings.selectedRagSetting || "";
+      if (!ragSetting) {
+        throw new Error(
+          "No local RAG setting selected. Set ragSetting or select a RAG setting first.",
+        );
+      }
+      const configured = services.chatSettings.ragSettings[ragSetting];
+      if (!configured) throw new Error(`RAG setting not found: ${ragSetting}`);
+      if (configured.externalIndexPath.trim() || configured.sourceRagSettings.length) {
+        throw new Error(
+          `RAG setting "${ragSetting}" is read-only. Select an internal RAG setting to sync.`,
+        );
+      }
+      const setting = resolveRAGSetting(services.chatSettings, configured);
+      let syncResult = await syncRAG(ragSetting, setting);
+      let embedded = syncResult.embedded;
+      let removed = syncResult.removed;
+      const errors = [...syncResult.errors];
+      while (syncResult.deferredFiles > 0) {
+        if (services.signal?.aborted) throw new DOMException("Workflow cancelled", "AbortError");
+        syncResult = await syncRAG(ragSetting, setting);
+        embedded += syncResult.embedded;
+        removed += syncResult.removed;
+        errors.push(...syncResult.errors);
+      }
       const result = {
-        path: property(node, "path", variables) || null,
-        error: "Server RAG sync is no longer supported. Use local RAG instead.",
+        ...syncResult,
+        embedded,
+        removed,
+        errors,
+        ragSetting,
+        requestedPath,
         syncedAt: Date.now(),
-        mode: "unsupported",
+        mode: "full-incremental",
       };
       save(variables, node.properties.saveTo, result);
       return { output: result };

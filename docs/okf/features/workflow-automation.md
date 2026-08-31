@@ -1,17 +1,18 @@
 ---
 type: Product Feature
 title: Workflow自動実行
-description: ファイルの作成・変更・削除・名前変更・オープンを契機に、条件に合うWorkflowを自動実行する機能。
+description: アプリ起動やファイルの作成・変更・削除・名前変更・オープンを契機に、条件に合うWorkflowを自動実行する機能。
 tags: [workflow, automation, events, files]
 timestamp: 2026-07-15T00:00:00+09:00
 ---
 
-Workflow Automationは、Workspaceで起きたファイルイベントをtriggerとしてWorkflowを実行します。対象イベントはfile created、modified、deleted、renamed、openedです。automation ruleには実行するWorkflowと対象パス条件などを設定します。
+Workflow Automationは、アプリ起動またはWorkspaceで起きたファイルイベントをtriggerとしてWorkflowを実行します。対象イベントはapp started、file created、modified、deleted、renamed、openedです。automation ruleには実行するWorkflowと対象パス条件などを設定します。app startedはWorkspaceの準備後に1回実行され、file patternは適用されません。
 
 # 利用上の注意
 
 * 保存のたびに発火するruleは、Workflow自身が同じ対象を更新すると再実行ループになる可能性があります。対象pathを狭くしてください。
 * file-open triggerは、アプリで対象ファイルを開いたときに発火します。
+* app started triggerで`rag-sync`ノードを含むWorkflowを指定すると、起動時にLocal RAGを差分同期できます。Embedding APIを利用する設定では起動時にも対象データがproviderへ送信されます。
 * 自動実行でもWorkflowのsandboxや各nodeの制約は変わりません。
 * 実行結果はWorkflow history/logで確認します。
 

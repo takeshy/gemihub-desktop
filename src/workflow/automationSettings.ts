@@ -1,4 +1,4 @@
-export type WorkflowEventType = "create" | "modify" | "delete" | "rename" | "file-open";
+export type WorkflowEventType = "startup" | "create" | "modify" | "delete" | "rename" | "file-open";
 
 export interface WorkflowEventTrigger {
   workflowId: string;
