@@ -1,7 +1,25 @@
-# GemiHub Desktop v1.4.6
+# GemiHub Desktop v1.4.7
 
 ## What's new
 
+- Kanban cards became full tasks: title, status, due date, Markdown notes, a
+  checklist and attachments in one editor, with `started` and `completed`
+  recorded as a task moves between columns. **Create with AI** turns a sentence
+  into several proposed tasks you can review before they are created.
+- Chat file tools now deliver Workspace PDFs as documents to the models that
+  accept them and as extracted per-page text everywhere else, instead of
+  base64 the model could not read. Other binary formats are refused with a
+  message that says what to do instead.
+- Workflow automation can be configured again: the workflow view has an
+  Automation button for its event triggers, file pattern and hotkey, and it
+  lights up once one is registered.
+- Automation gained an **App started** trigger, and the `rag-sync` node now
+  runs a real incremental local RAG sync, so a workflow can refresh the index
+  at startup.
+- Workflows run by an event report themselves in a small toast — running,
+  elapsed time when they finish, and the error until it is dismissed.
+- Chat clears the composer the moment a message is sent, instead of leaving
+  the text in place while referenced files and RAG results are gathered.
 - Chat can now search the selected RAG index itself: when the automatic
   retrieval is thin or off-topic, the model re-queries with a focused question,
   up to three searches per turn.
