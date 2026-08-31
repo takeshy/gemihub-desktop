@@ -607,7 +607,9 @@ func httpJSON(ctx context.Context, method, url string, headers map[string]string
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-	client := &http.Client{Timeout: 3 * time.Minute}
+	// Share the chat transport so a stubbed chatHTTPClient also covers the
+	// non-streaming calls, while keeping the shorter request timeout.
+	client := &http.Client{Timeout: 3 * time.Minute, Transport: chatHTTPClient.Transport}
 	response, err := client.Do(req)
 	if err != nil {
 		return err
