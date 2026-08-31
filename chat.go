@@ -825,7 +825,8 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 }
 
 func chatCompletionsRequiresDisabledReasoning(model string) bool {
-	return strings.Contains(strings.ToLower(model), "terra")
+	lowerModel := strings.ToLower(model)
+	return strings.Contains(lowerModel, "terra") || strings.Contains(lowerModel, "luna")
 }
 
 func providerEndpointHost(endpoint string) string {

@@ -652,12 +652,14 @@ func TestNativeWebSearchEndpointResolution(t *testing.T) {
 	}
 }
 
-func TestTerraChatCompletionsDisablesReasoningWithTools(t *testing.T) {
-	if !chatCompletionsRequiresDisabledReasoning("gpt-5.6-terra") {
-		t.Fatal("Terra models must disable reasoning when using Chat Completions tools")
+func TestLimitedReasoningChatCompletionsDisablesReasoningWithTools(t *testing.T) {
+	for _, model := range []string{"gpt-5.6-terra", "gpt-5.6-luna"} {
+		if !chatCompletionsRequiresDisabledReasoning(model) {
+			t.Fatalf("%s must disable reasoning when using Chat Completions tools", model)
+		}
 	}
 	if chatCompletionsRequiresDisabledReasoning("gpt-5.6") {
-		t.Fatal("non-Terra models must not receive the compatibility override")
+		t.Fatal("other models must not receive the compatibility override")
 	}
 }
 
