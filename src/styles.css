@@ -2557,6 +2557,10 @@ body.resizing-side-pane * {
   background: var(--surface-raised);
   color: var(--text);
 }
+.workflow-detail-header button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
 .workflow-detail-header > div {
   display: grid;
   min-width: 0;
@@ -3528,6 +3532,67 @@ body.resizing-side-pane * {
   border-radius: 4px;
   background: var(--surface);
   white-space: pre-wrap;
+}
+
+.workflow-automation-toasts {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+.workflow-automation-toast {
+  display: flex;
+  max-width: 320px;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.25);
+  padding: 8px 9px;
+  color: var(--text-muted);
+}
+.workflow-automation-toast > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.workflow-automation-toast strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workflow-automation-toast small {
+  font-size: 10px;
+}
+.workflow-automation-toast-error {
+  overflow: hidden;
+  color: #e16a6a;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.workflow-automation-toast button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+.workflow-automation-toast.running > svg {
+  color: var(--accent);
+}
+.workflow-automation-toast.completed > svg {
+  color: #4a9d6b;
+}
+.workflow-automation-toast.error {
+  border-color: color-mix(in srgb, #d94f4f 45%, var(--border));
+}
+.workflow-automation-toast.error > svg {
+  color: #e16a6a;
 }
 
 .workflow-modal-backdrop {

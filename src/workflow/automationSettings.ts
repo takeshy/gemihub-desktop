@@ -1,5 +1,14 @@
 export type WorkflowEventType = "startup" | "create" | "modify" | "delete" | "rename" | "file-open";
 
+export const workflowEventLabels: Record<WorkflowEventType, string> = {
+  startup: "App started",
+  create: "File created",
+  modify: "File modified",
+  delete: "File deleted",
+  rename: "File renamed",
+  "file-open": "File opened",
+};
+
 export interface WorkflowEventTrigger {
   workflowId: string;
   events: WorkflowEventType[];

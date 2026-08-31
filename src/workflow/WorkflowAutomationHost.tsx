@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { CheckCircle, Loader2, X, XCircle } from "lucide-react";
 import { listWorkspaceFiles, readWorkspaceFile as readFile, type DirectoryFileEntry } from "../lib/wailsBackend";
 import type { ChatSettings } from "../llm/settings";
 import { executeWorkflow } from "./executor";
 import { appendWorkflowHistory } from "./history";
 import { parseWorkflowFile } from "./parser";
-import { keyboardEventShortcut, loadWorkflowAutomationSettings, matchWorkflowFilePattern, workflowAutomationChangedEvent, type WorkflowAutomationSettings, type WorkflowEventTrigger, type WorkflowEventType } from "./automationSettings";
+import { keyboardEventShortcut, loadWorkflowAutomationSettings, matchWorkflowFilePattern, workflowAutomationChangedEvent, workflowEventLabels, type WorkflowAutomationSettings, type WorkflowEventTrigger, type WorkflowEventType } from "./automationSettings";
 import { WorkflowProgressModal } from "./WorkflowProgressModal";
 import type { Workflow, WorkflowLog } from "./types";
 import type { FileRef } from "../lib/fileRef";
@@ -13,6 +14,29 @@ interface FileEvent {
   type: WorkflowEventType;
   path: string;
   oldPath?: string;
+}
+
+// Event runs have no progress modal, so a small toast is the only sign the app
+// is doing something on its own. Failures stay until dismissed.
+interface AutomationNotice {
+  id: number;
+  name: string;
+  event: WorkflowEventType;
+  status: "running" | "completed" | "error";
+  message?: string;
+  elapsed?: string;
+}
+
+const noticeDismissMs = 5_000;
+const maxNotices = 3;
+
+function workflowLabel(workflowId: string): string {
+  return (workflowId.split("/").pop() || workflowId).replace(/\.(?:workflow\.ya?ml|ya?ml|md)$/i, "");
+}
+
+function elapsedLabel(startedAt: number): string {
+  const seconds = Math.round((Date.now() - startedAt) / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -28,6 +52,9 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
   const modifyTimersRef = useRef(new Map<string, number>());
   const lastOpenedRef = useRef("");
   const startupDispatchedRef = useRef(new Set<string>());
+  const [notices, setNotices] = useState<AutomationNotice[]>([]);
+  const noticeIdRef = useRef(0);
+  const noticeTimersRef = useRef(new Map<number, number>());
   const [progress, setProgress] = useState<{ workflow: Workflow; logs: WorkflowLog[]; thinking: Record<string, string>; running: boolean; controller: AbortController } | null>(null);
 
   useEffect(() => {
@@ -41,8 +68,37 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
 
   useEffect(() => { setAutomation(loadWorkflowAutomationSettings(directoryBase)); snapshotRef.current = null; blockedUntilRef.current.clear(); }, [directoryBase]);
 
+  const dismissNotice = (id: number) => {
+    const timer = noticeTimersRef.current.get(id);
+    if (timer) window.clearTimeout(timer);
+    noticeTimersRef.current.delete(id);
+    setNotices((current) => current.filter((notice) => notice.id !== id));
+  };
+
+  const finishNotice = (id: number, status: "completed" | "error", startedAt: number, message?: string) => {
+    setNotices((current) => current.map((notice) => notice.id === id ? { ...notice, status, message, elapsed: elapsedLabel(startedAt) } : notice));
+    if (status === "error") return;
+    noticeTimersRef.current.set(id, window.setTimeout(() => dismissNotice(id), noticeDismissMs));
+  };
+
+  useEffect(() => () => { for (const timer of noticeTimersRef.current.values()) window.clearTimeout(timer); noticeTimersRef.current.clear(); }, []);
+
   const executeTrigger = async (trigger: WorkflowEventTrigger, event: FileEvent) => {
     if (Date.now() < (blockedUntilRef.current.get(event.path) ?? 0)) return;
+    const noticeId = ++noticeIdRef.current;
+    const startedAt = Date.now();
+    setNotices((current) => [...current.slice(-(maxNotices - 1)), { id: noticeId, name: workflowLabel(trigger.workflowId), event: event.type, status: "running" }]);
+    let failure = "";
+    try {
+      failure = await runTrigger(trigger, event);
+    } catch (error) {
+      finishNotice(noticeId, "error", startedAt, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+    finishNotice(noticeId, failure ? "error" : "completed", startedAt, failure || undefined);
+  };
+
+  const runTrigger = async (trigger: WorkflowEventTrigger, event: FileEvent): Promise<string> => {
     const workflowFile = await readFile(trigger.workflowId);
     if (!workflowFile) throw new Error(`Workflow not found: ${trigger.workflowId}`);
     const workflow = parseWorkflowFile(workflowFile.content, trigger.workflowId);
@@ -61,7 +117,9 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
     blockedUntilRef.current.set(trigger.workflowId, Date.now() + 12_000);
     const run = await executeWorkflow(workflow, trigger.workflowId, { chatSettings: settings, activeFile, openFile: onOpenFile, interactionMode: "event" }, initial);
     await appendWorkflowHistory(run, directoryBase);
-    if (run.status === "error") console.error(`Workflow ${trigger.workflowId} failed on ${event.type}: ${run.error}`);
+    if (run.status !== "error") return "";
+    console.error(`Workflow ${trigger.workflowId} failed on ${event.type}: ${run.error}`);
+    return run.error || "Workflow failed";
   };
 
   const dispatchEvent = (event: FileEvent, source = automation) => {
@@ -153,5 +211,25 @@ export function WorkflowAutomationHost({ directoryBase, settings, activeFile, on
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeFile, automation.hotkeys, directoryBase, settings]);
 
-  return progress ? <WorkflowProgressModal workflow={progress.workflow} logs={progress.logs} thinking={progress.thinking} running={progress.running} onStop={() => progress.controller.abort()} onClose={() => setProgress(null)} /> : null;
+  return <>
+    {progress && <WorkflowProgressModal workflow={progress.workflow} logs={progress.logs} thinking={progress.thinking} running={progress.running} onStop={() => progress.controller.abort()} onClose={() => setProgress(null)} />}
+    {notices.length > 0 && (
+      <div className="workflow-automation-toasts">
+        {notices.map((notice) => (
+          <div key={notice.id} className={`workflow-automation-toast ${notice.status}`}>
+            {notice.status === "running" ? <Loader2 size={13} className="spin" /> : notice.status === "completed" ? <CheckCircle size={13} /> : <XCircle size={13} />}
+            <div>
+              <strong>{notice.name}</strong>
+              <small>
+                {workflowEventLabels[notice.event]}
+                {notice.status === "running" ? " · running…" : notice.elapsed ? ` · ${notice.elapsed}` : ""}
+              </small>
+              {notice.message && <small className="workflow-automation-toast-error">{notice.message}</small>}
+            </div>
+            <button type="button" onClick={() => dismissNotice(notice.id)} aria-label="Dismiss"><X size={13} /></button>
+          </div>
+        ))}
+      </div>
+    )}
+  </>;
 }

@@ -24,6 +24,7 @@ import {
   Workflow as WorkflowIcon,
   X,
   XCircle,
+  Zap,
 } from "lucide-react";
 import {
   listWorkspaceFiles,
@@ -242,6 +243,11 @@ export function WorkflowPanel({
     loadWorkflowAutomationSettings(directoryBase)
   );
   const [automationOpen, setAutomationOpen] = useState(false);
+  const automationConfigured = !!path &&
+    (!!automation.hotkeys[path] ||
+      automation.triggers.some((trigger) =>
+        trigger.workflowId === path && trigger.events.length > 0
+      ));
   const [editingNodeIndex, setEditingNodeIndex] = useState<number | null>(null);
   const [progressOpen, setProgressOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(true);
@@ -864,6 +870,17 @@ export function WorkflowPanel({
                   title="Refresh"
                 >
                   <RefreshCw size={14} />
+                </button>
+                <button
+                  type="button"
+                  className={automationConfigured ? "active" : undefined}
+                  onClick={() => setAutomationOpen(true)}
+                  title={automationConfigured
+                    ? "Automation (configured)"
+                    : "Automation"}
+                  aria-label="Automation"
+                >
+                  <Zap size={15} />
                 </button>
                 {workflow && (
                   <button
