@@ -35,3 +35,7 @@ yarn-error.log*
 *.swp
 .DS_Store
 Thumbs.db
+
+# Local tooling scratch
+.codex-downloads/
+.codex-store-assets/
