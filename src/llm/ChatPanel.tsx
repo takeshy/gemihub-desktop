@@ -1549,6 +1549,7 @@ export function ChatPanel({
     if (invokedPluginCommand) {
       setLoading(true);
       setError("");
+      setInput("");
       try {
         const output = await invokedPluginCommand.execute(
           skillInvocation?.[2]?.trim() || "",
@@ -1564,7 +1565,6 @@ export function ChatPanel({
           title: session.messages.length ? session.title : titleFrom(text),
           updatedAt: now,
         }));
-        setInput("");
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
       } finally {
@@ -1612,6 +1612,11 @@ export function ChatPanel({
         settings.slashCommands,
         activeFile?.content || "",
       );
+    setLoading(true);
+    setError("");
+    setInput("");
+    setAttachedFiles([]);
+    setPending(null);
     const mentioned = [...text.matchAll(/(?:^|\s)@(?:"([^"]+)"|([^\s]+))/g)]
       .map((match) => match[1] || match[2]);
     for (const name of mentioned) {
@@ -1619,14 +1624,12 @@ export function ChatPanel({
         item === name || item.endsWith(`/${name}`)
       );
       if (!path) continue;
-      const file = await readWorkspaceFile(path);
+      const file = await readWorkspaceFile(path).catch(() => null);
       if (file) {
         promptText +=
           `\n\n--- BEGIN REFERENCED FILE: ${path} ---\n${file.content}\n--- END REFERENCED FILE ---`;
       }
     }
-    setLoading(true);
-    setError("");
     let ragContext = "";
     let ragSources: GroundingSource[] = [];
     let ragSearchCount = 0;
@@ -1707,9 +1710,6 @@ export function ChatPanel({
         updatedAt: Date.now(),
       }),
     );
-    setInput("");
-    setAttachedFiles([]);
-    setPending(null);
     abortRef.current = false;
     const runController = new AbortController();
     activeRunControllerRef.current = runController;
