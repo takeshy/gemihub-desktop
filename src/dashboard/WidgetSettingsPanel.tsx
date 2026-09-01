@@ -896,6 +896,7 @@ export function WidgetSettingsPanel({
         localFramework: chatSettings.localFramework,
         localUsername: chatSettings.localUsername,
         localPassword: chatSettings.localPassword,
+        streamIdleTimeoutSeconds: chatSettings.streamIdleTimeoutSeconds,
         model: chatSettings.model,
         vertexProjectId: chatSettings.vertexProjectId,
         vertexLocation: chatSettings.vertexLocation,

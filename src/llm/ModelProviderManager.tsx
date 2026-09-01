@@ -269,6 +269,23 @@ export function ModelProviderManager(
                   </div>
                 )}
                 <label>
+                  <span>Stream idle timeout (seconds)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={profile.streamIdleTimeoutSeconds || 120}
+                    onChange={(event) =>
+                      patch(profile.id, {
+                        streamIdleTimeoutSeconds:
+                          Math.max(1, Number.parseInt(event.target.value, 10) || 120),
+                      })}
+                  />
+                  <small>
+                    Stop when no streamed data arrives for this long. Large prompts may need more than 120 seconds.
+                  </small>
+                </label>
+                <label>
                   <span>API key {profile.local && "(optional)"}</span>
                   <input
                     type="password"

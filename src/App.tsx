@@ -989,6 +989,7 @@ async function discordBotRequest(
       localFramework: resolved.localFramework,
       localUsername: resolved.localUsername,
       localPassword: resolved.localPassword,
+      streamIdleTimeoutSeconds: resolved.streamIdleTimeoutSeconds,
       model: settings.discord.model || resolved.model,
       vertexProjectId: resolved.vertexProjectId,
       vertexLocation: resolved.vertexLocation,

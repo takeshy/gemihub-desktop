@@ -250,6 +250,7 @@ export interface ChatRequest {
   localFramework?: "ollama" | "lm-studio" | "anythingllm" | "vllm" | "opencode";
   localUsername?: string;
   localPassword?: string;
+  streamIdleTimeoutSeconds?: number;
   model: string;
   vertexProjectId: string;
   vertexLocation: string;

@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,30 +31,31 @@ type ChatAttachment struct {
 }
 
 type ChatRequest struct {
-	Provider             string               `json:"provider"`
-	Endpoint             string               `json:"endpoint"`
-	APIKey               string               `json:"apiKey"`
-	LocalFramework       string               `json:"localFramework,omitempty"`
-	LocalUsername        string               `json:"localUsername,omitempty"`
-	LocalPassword        string               `json:"localPassword,omitempty"`
-	Model                string               `json:"model"`
-	VertexProjectID      string               `json:"vertexProjectId"`
-	VertexLocation       string               `json:"vertexLocation"`
-	CLIType              string               `json:"cliType"`
-	CLIPath              string               `json:"cliPath"`
-	CLISessionID         string               `json:"cliSessionId"`
-	CodexReasoningEffort string               `json:"codexReasoningEffort,omitempty"`
-	ReasoningEffort      string               `json:"reasoningEffort,omitempty"`
-	SystemPrompt         string               `json:"systemPrompt"`
-	Messages             []ChatMessage        `json:"messages"`
-	EnableFileTools      bool                 `json:"enableFileTools"`
-	FileToolMode         string               `json:"fileToolMode"`
-	StreamID             string               `json:"streamId,omitempty"`
-	EnableThinking       bool                 `json:"enableThinking,omitempty"`
-	EnableWebSearch      bool                 `json:"enableWebSearch,omitempty"`
-	CustomTools          []ChatToolDefinition `json:"customTools,omitempty"`
-	WorkflowSpec         WorkflowSpecContext  `json:"workflowSpecContext,omitempty"`
-	ctx                  context.Context
+	Provider                 string               `json:"provider"`
+	Endpoint                 string               `json:"endpoint"`
+	APIKey                   string               `json:"apiKey"`
+	LocalFramework           string               `json:"localFramework,omitempty"`
+	LocalUsername            string               `json:"localUsername,omitempty"`
+	LocalPassword            string               `json:"localPassword,omitempty"`
+	StreamIdleTimeoutSeconds int                  `json:"streamIdleTimeoutSeconds,omitempty"`
+	Model                    string               `json:"model"`
+	VertexProjectID          string               `json:"vertexProjectId"`
+	VertexLocation           string               `json:"vertexLocation"`
+	CLIType                  string               `json:"cliType"`
+	CLIPath                  string               `json:"cliPath"`
+	CLISessionID             string               `json:"cliSessionId"`
+	CodexReasoningEffort     string               `json:"codexReasoningEffort,omitempty"`
+	ReasoningEffort          string               `json:"reasoningEffort,omitempty"`
+	SystemPrompt             string               `json:"systemPrompt"`
+	Messages                 []ChatMessage        `json:"messages"`
+	EnableFileTools          bool                 `json:"enableFileTools"`
+	FileToolMode             string               `json:"fileToolMode"`
+	StreamID                 string               `json:"streamId,omitempty"`
+	EnableThinking           bool                 `json:"enableThinking,omitempty"`
+	EnableWebSearch          bool                 `json:"enableWebSearch,omitempty"`
+	CustomTools              []ChatToolDefinition `json:"customTools,omitempty"`
+	WorkflowSpec             WorkflowSpecContext  `json:"workflowSpecContext,omitempty"`
+	ctx                      context.Context
 }
 
 type ChatToolDefinition struct {
@@ -92,7 +94,7 @@ type ChatStreamEvent struct {
 	Usage    *ChatUsage `json:"usage,omitempty"`
 }
 
-var chatHTTPClient = &http.Client{Timeout: 10 * time.Minute}
+var chatHTTPClient = &http.Client{}
 
 func (a *App) emitChatStream(request ChatRequest, eventType, delta, tool string) {
 	if request.StreamID == "" || a.ctx == nil {
@@ -625,12 +627,24 @@ func httpJSON(ctx context.Context, method, url string, headers map[string]string
 	return json.Unmarshal(responseBody, output)
 }
 
-func httpSSE(ctx context.Context, url string, headers map[string]string, input any, onData func([]byte) error) error {
+func httpSSE(ctx context.Context, idleTimeoutSeconds int, url string, headers map[string]string, input any, onData func([]byte) error) error {
+	if idleTimeoutSeconds <= 0 {
+		idleTimeoutSeconds = 120
+	}
+	idleTimeout := time.Duration(idleTimeoutSeconds) * time.Second
+	idleCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var idleTimedOut atomic.Bool
+	timer := time.AfterFunc(idleTimeout, func() {
+		idleTimedOut.Store(true)
+		cancel()
+	})
+	defer timer.Stop()
 	body, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(idleCtx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -640,6 +654,9 @@ func httpSSE(ctx context.Context, url string, headers map[string]string, input a
 	}
 	response, err := chatHTTPClient.Do(req)
 	if err != nil {
+		if idleTimedOut.Load() {
+			return fmt.Errorf("stream timed out: no data received for %d seconds", idleTimeoutSeconds)
+		}
 		return err
 	}
 	defer response.Body.Close()
@@ -651,6 +668,7 @@ func httpSSE(ctx context.Context, url string, headers map[string]string, input a
 	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
 	sawData := false
 	for scanner.Scan() {
+		timer.Reset(idleTimeout)
 		line := strings.TrimSpace(scanner.Text())
 		if !strings.HasPrefix(line, "data:") {
 			continue
@@ -665,6 +683,9 @@ func httpSSE(ctx context.Context, url string, headers map[string]string, input a
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		if idleTimedOut.Load() {
+			return fmt.Errorf("stream timed out: no data received for %d seconds", idleTimeoutSeconds)
+		}
 		return err
 	}
 	if !sawData {
@@ -726,7 +747,7 @@ func (a *App) chatOpenAI(request ChatRequest) (*ChatResult, error) {
 		assistant := openAIMessage{Role: "assistant"}
 		var content strings.Builder
 		var reasoning strings.Builder
-		if err := httpSSE(request.context(a.ctx), endpoint, headers, payload, func(data []byte) error {
+		if err := httpSSE(request.context(a.ctx), request.StreamIdleTimeoutSeconds, endpoint, headers, payload, func(data []byte) error {
 			var chunk struct {
 				Usage struct {
 					PromptTokens     int `json:"prompt_tokens"`
@@ -1500,7 +1521,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 		}
 		parts := []map[string]any{}
 		var roundUsage *ChatUsage
-		if err := httpSSE(request.context(a.ctx), streamEndpoint, headers, payload, func(data []byte) error {
+		if err := httpSSE(request.context(a.ctx), request.StreamIdleTimeoutSeconds, streamEndpoint, headers, payload, func(data []byte) error {
 			var chunk struct {
 				Usage struct {
 					PromptTokenCount        int `json:"promptTokenCount"`
@@ -1737,7 +1758,7 @@ func (a *App) chatAnthropic(request ChatRequest) (*ChatResult, error) {
 		calls := map[int]*toolUse{}
 		thoughtBlocks := map[int]*thoughtBlock{}
 		var text, thinking strings.Builder
-		if err := httpSSE(request.context(a.ctx), endpoint, headers, payload, func(data []byte) error {
+		if err := httpSSE(request.context(a.ctx), request.StreamIdleTimeoutSeconds, endpoint, headers, payload, func(data []byte) error {
 			var event struct {
 				Type         string `json:"type"`
 				Index        int    `json:"index"`

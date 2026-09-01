@@ -1983,6 +1983,7 @@ export function ChatPanel({
         localFramework: settings.localFramework,
         localUsername: settings.localUsername,
         localPassword: settings.localPassword,
+        streamIdleTimeoutSeconds: settings.streamIdleTimeoutSeconds,
         model: settings.provider === "cli"
           ? settings.cliModels[settings.cliType]
           : settings.model,

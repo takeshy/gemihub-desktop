@@ -487,6 +487,7 @@ export function AIWorkflowBuilderModal({
       localFramework: resolved.localFramework,
       localUsername: resolved.localUsername,
       localPassword: resolved.localPassword,
+      streamIdleTimeoutSeconds: resolved.streamIdleTimeoutSeconds,
       model: resolved.provider === "cli" ? "" : resolved.model,
       vertexProjectId: resolved.vertexProjectId,
       vertexLocation: resolved.vertexLocation,

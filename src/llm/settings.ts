@@ -56,6 +56,7 @@ export interface APIProviderProfile {
   endpoint: string;
   apiKey: string;
   model: string;
+  streamIdleTimeoutSeconds?: number;
   vertexProjectId: string;
   vertexLocation: string;
   vertexOAuthClientId: string;
@@ -115,6 +116,7 @@ export interface ChatSettings {
   localFramework: LocalLLMFramework;
   localUsername: string;
   localPassword: string;
+  streamIdleTimeoutSeconds: number;
   verifiedCliTypes: CLIType[];
   systemPrompt: string;
   enableFileTools: boolean;
@@ -206,6 +208,7 @@ export const defaultChatSettings: ChatSettings = {
   localFramework: "ollama",
   localUsername: "",
   localPassword: "",
+  streamIdleTimeoutSeconds: 120,
   verifiedCliTypes: [],
   systemPrompt:
     "You are a helpful assistant working inside the user's active Workspace. Inspect Workspace files before making assumptions. Use propose_file_edit for changes.",
@@ -319,6 +322,7 @@ function profileFromSettings(settings: ChatSettings): APIProviderProfile {
     endpoint: settings.endpoint,
     apiKey: settings.apiKey,
     model: settings.model,
+    streamIdleTimeoutSeconds: settings.streamIdleTimeoutSeconds,
     vertexProjectId: settings.vertexProjectId,
     vertexLocation: settings.vertexLocation,
     vertexOAuthClientId: settings.vertexOAuthClientId,
@@ -354,6 +358,7 @@ export function syncActiveModelProfile(settings: ChatSettings): ChatSettings {
           localFramework: settings.localFramework,
           username: settings.localUsername,
           password: settings.localPassword,
+          streamIdleTimeoutSeconds: settings.streamIdleTimeoutSeconds,
           enabledModels: model && !profile.enabledModels.includes(model)
             ? [...profile.enabledModels, model]
             : profile.enabledModels,
@@ -381,6 +386,7 @@ export function selectModelProfile(
     localFramework: profile.localFramework,
     localUsername: profile.username,
     localPassword: profile.password,
+    streamIdleTimeoutSeconds: profile.streamIdleTimeoutSeconds || 120,
     model: model || profile.model || profile.enabledModels[0] || "",
     vertexProjectId: "",
     vertexLocation: "global",
@@ -448,6 +454,7 @@ export function newModelProfile(
     localFramework: "ollama",
     username: "",
     password: "",
+    streamIdleTimeoutSeconds: 120,
     vertexProjectId: "",
     vertexLocation: "global",
     vertexOAuthClientId: "",
@@ -495,6 +502,7 @@ export function switchChatProvider(
     endpoint: saved?.endpoint ?? defaults.endpoint,
     apiKey: saved?.apiKey ?? "",
     model: saved?.model ?? defaults.model,
+    streamIdleTimeoutSeconds: saved?.streamIdleTimeoutSeconds || 120,
     vertexProjectId: saved?.vertexProjectId ?? "",
     vertexLocation: saved?.vertexLocation ?? "global",
     vertexOAuthClientId: saved?.vertexOAuthClientId ?? "",

@@ -1435,6 +1435,7 @@ async function executeNode(
           localFramework: settings.localFramework,
           localUsername: settings.localUsername,
           localPassword: settings.localPassword,
+          streamIdleTimeoutSeconds: settings.streamIdleTimeoutSeconds,
           model: settings.provider === "cli"
             ? ""
             : requestedModel || settings.model,
