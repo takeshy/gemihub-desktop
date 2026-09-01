@@ -108,7 +108,6 @@ import {
   resolveRAGSetting,
   selectConfiguredModel,
   selectedModelOptionKey,
-  type SlashCommand,
 } from "./settings";
 import { type FileRef, fileRef, fileRefFromBackendPath } from "../lib/fileRef";
 import {
@@ -118,6 +117,7 @@ import {
 import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
+import { resolveSlashCommand } from "./slashCommands";
 import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory";
 import {
   formatRagSearchToolResult,
@@ -495,24 +495,6 @@ function attachedFileSummary(file: AttachedFile): ChatAttachedFile {
     mimeType,
     automatic: file.automatic,
   };
-}
-
-function resolveSlashCommand(
-  text: string,
-  commands: SlashCommand[],
-  activeContent = "",
-): string {
-  const match = text.match(/^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i);
-  if (!match) return text;
-  const command = commands.find((item) =>
-    item.name.toLowerCase() === match[1].toLowerCase()
-  );
-  if (!command) return text;
-  const argument = match[2]?.trim() ?? "";
-  const hasVariable = command.promptTemplate.includes("{input}");
-  const resolved = command.promptTemplate.replaceAll("{content}", activeContent)
-    .replaceAll("{input}", argument);
-  return !hasVariable && argument ? `${resolved}\n\n${argument}` : resolved;
 }
 
 async function processSkillMarkers(
@@ -1644,6 +1626,9 @@ export function ChatPanel({
         settings.slashCommands,
         activeFile?.content || "",
       );
+    // Keep slash syntax in prompt recall, but show what was actually sent in
+    // the conversation history. Capture this before adding hidden file context.
+    const displayText = invokedCommand ? promptText : text;
     setLoading(true);
     setError("");
     setInput("");
@@ -1672,7 +1657,7 @@ export function ChatPanel({
     const hasExplicitRAGContext = attachedFiles.some((file) => file.rag);
     const displayMessage = {
       role: "user",
-      content: text,
+      content: displayText,
       attachedFiles: attachedFiles.length
         ? attachedFiles.map(attachedFileSummary)
         : undefined,
