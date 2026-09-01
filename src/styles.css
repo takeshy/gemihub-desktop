@@ -1232,6 +1232,14 @@ body.resizing-side-pane * {
   margin-bottom: 0;
 }
 
+.chat-html-preview {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+}
+
 .chat-response-thinking {
   margin-bottom: 8px;
   border: 1px solid var(--border);

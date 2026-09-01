@@ -118,6 +118,8 @@ import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
 import { resolveSlashCommand } from "./slashCommands";
+import { extractChatHtmlDocument } from "./chatHtmlPreview";
+import { sanitizePreviewDocument } from "../lib/sanitizeHtml";
 import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory";
 import {
   formatRagSearchToolResult,
@@ -2350,7 +2352,18 @@ export function ChatPanel({
               )
               : null}
             {message.role === "assistant"
-              ? (
+              ? extractChatHtmlDocument(message.content)
+                ? (
+                  <iframe
+                    className="chat-html-preview"
+                    title="HTML response preview"
+                    sandbox=""
+                    srcDoc={sanitizePreviewDocument(
+                      extractChatHtmlDocument(message.content)!,
+                    )}
+                  />
+                )
+                : (
                 <MarkdownPreview
                   content={message.content}
                   isDark={isDark}
@@ -2369,7 +2382,7 @@ export function ChatPanel({
                     window.open(external, "_blank", "noopener,noreferrer");
                   }}
                 />
-              )
+                )
               : <p>{message.content}</p>}
             {message.role === "assistant" && message.generatedImages?.length
               ? (
