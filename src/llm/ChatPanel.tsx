@@ -43,6 +43,7 @@ import {
   searchRAG,
   stopCLI,
   writeWorkspaceStateFile,
+  writeWorkspaceFile,
 } from "../lib/wailsBackend";
 import { resolveAgentPluginMcpServers } from "../agentPlugins/manager";
 import {
@@ -612,6 +613,8 @@ export function ChatPanel({
     null,
   );
   const [sessionsLocked, setSessionsLocked] = useState(false);
+  const [saveNoteState, setSaveNoteState] = useState<"idle" | "saving" | "saved">("idle");
+  const savedNotePathsRef = useRef(new Map<string, string>());
   const [activeID, setActiveID] = useState("");
   const [input, setInput] = useState("");
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
@@ -780,6 +783,29 @@ export function ChatPanel({
   const activeSession = sessions.find((session) => session.id === activeID) ??
     sessions[0];
   const messages = activeSession?.messages ?? [];
+  const saveAsNote = useCallback(async () => {
+    if (!activeSession || messages.length === 0 || saveNoteState !== "idle") return;
+    setSaveNoteState("saving");
+    try {
+      const now = new Date();
+      const pad = (value: number) => String(value).padStart(2, "0");
+      const dateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const safeTitle = activeSession.title.replace(/[\\/:*?"<>|#^[\]\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Chat";
+      const folder = settings.manualChatSaveFolder.trim().replace(/^\/+|\/+$/g, "");
+      const newPath = `${folder ? `${folder}/` : ""}${dateTime}_${safeTitle}.md`;
+      const path = savedNotePathsRef.current.get(activeSession.id) ?? newPath;
+      const content = messages.map((message) =>
+        `## ${message.role === "user" ? "You" : (message.model || "Assistant")}\n\n${message.content.trim()}`
+      ).join("\n\n");
+      await writeWorkspaceFile(path, content);
+      savedNotePathsRef.current.set(activeSession.id, path);
+      setSaveNoteState("saved");
+      window.setTimeout(() => setSaveNoteState("idle"), 3000);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSaveNoteState("idle");
+    }
+  }, [activeSession, messages, saveNoteState, settings.manualChatSaveFolder]);
   const activeSkillPaths = activeSession?.activeSkillPaths ?? [];
   const dismissedContextSkillPaths =
     activeSession?.dismissedContextSkillPaths ?? [];
@@ -1087,9 +1113,12 @@ export function ChatPanel({
   useEffect(() => {
     const scope = workspaceBase || "__session__";
     if (loadedHistoryScope !== scope || sessionsLocked) return;
+    const retainedSessions = settings.maxSavedChatHistories > 0
+      ? [...sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, settings.maxSavedChatHistories)
+      : sessions;
     const serialized = JSON.stringify({
       activeSessionId: activeID,
-      sessions: sessions.map((session) => ({
+      sessions: retainedSessions.map((session) => ({
         ...session,
         messages: session.messages.slice(-100),
       })),
@@ -1118,7 +1147,7 @@ export function ChatPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeID, loadedHistoryScope, workspaceBase, sessions, sessionsLocked]);
+  }, [activeID, loadedHistoryScope, workspaceBase, sessions, sessionsLocked, settings.maxSavedChatHistories]);
 
   useEffect(() => {
     const changed = () => setSessions((current) => [...current]);
@@ -2190,6 +2219,14 @@ export function ChatPanel({
           title="New chat"
         >
           <Plus size={15} />
+        </button>
+        <button
+          type="button"
+          disabled={loading || messages.length === 0 || saveNoteState === "saving"}
+          onClick={() => void saveAsNote()}
+          title={saveNoteState === "saved" ? "Saved as note" : "Save as note"}
+        >
+          {saveNoteState === "saving" ? <Square size={14} /> : saveNoteState === "saved" ? <Check size={14} /> : <FileText size={14} />}
         </button>
         <button
           type="button"

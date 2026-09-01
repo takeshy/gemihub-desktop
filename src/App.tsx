@@ -1327,6 +1327,7 @@ export default function App() {
     );
     return stored === 300 ? DEFAULT_CHAT_VIEW_WIDTH : stored;
   });
+  const normalChatViewWidthRef = useRef(chatViewWidth);
   const visibleCheckpoints = uniqueCheckpoints(
     [
       ...checkpoints.filter((checkpoint) =>
@@ -2682,6 +2683,14 @@ export default function App() {
             collapsed={!chatViewOpen}
             settingsOpen={settingsOpen && settingsSection === "plugins"}
             onCollapse={() => setChatViewOpen((open) => !open)}
+            chatViewWide={chatViewWidth >= 800}
+            onToggleWidth={() => {
+              if (chatViewWidth >= 800) setChatViewWidth(normalChatViewWidthRef.current);
+              else {
+                normalChatViewWidthRef.current = chatViewWidth;
+                setChatViewWidth(800);
+              }
+            }}
             onOpenPluginView={() => {
               setSettingsOpen(false);
               setChatViewOpen(true);
@@ -3650,6 +3659,31 @@ export default function App() {
                                   ...current,
                                   systemPrompt: event.target.value,
                                 }))}
+                            />
+                          </label>
+                          <label className="settings-field">
+                            <span>Maximum saved chat histories</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={chatSettings.maxSavedChatHistories}
+                              onChange={(event) => setChatSettings((current) => ({
+                                ...current,
+                                maxSavedChatHistories: Math.max(0, Number.parseInt(event.target.value, 10) || 0),
+                              }))}
+                            />
+                            <small>Use 0 for unlimited.</small>
+                          </label>
+                          <label className="settings-field">
+                            <span>Manual chat save folder</span>
+                            <input
+                              value={chatSettings.manualChatSaveFolder}
+                              placeholder="Workspace root"
+                              onChange={(event) => setChatSettings((current) => ({
+                                ...current,
+                                manualChatSaveFolder: event.target.value,
+                              }))}
                             />
                           </label>
                           <small className="settings-hint">

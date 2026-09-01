@@ -4,6 +4,8 @@
 
 # GemiHub Desktop
 
+Chat supports one-click normal/wide sidebar layouts, compact manual Markdown exports, and automatic history retention. Manual notes use `YYYYMMDD-HHmmss_Chat title.md`; the default history limit is 100 and `0` is unlimited.
+
 > **As AI gets smarter, the value of your data keeps growing.**<br> **GemiHub
 > Desktop is the IDE for ideas—an open workspace that gathers thoughts, notes,
 > reference materials, activity records, and even secret tokens on your own

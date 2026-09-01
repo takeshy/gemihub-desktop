@@ -14,6 +14,8 @@ import {
   ChevronsRight,
   Download,
   Loader2,
+  Maximize2,
+  Minimize2,
   Plug,
   Puzzle,
   RefreshCw,
@@ -162,6 +164,8 @@ export function PluginHost({
   collapsed,
   settingsOpen,
   onCollapse,
+  onToggleWidth,
+  chatViewWide,
   onOpenPluginView,
   onOpenPluginWidget,
   onOpenPluginSettings,
@@ -184,6 +188,8 @@ export function PluginHost({
   collapsed: boolean;
   settingsOpen: boolean;
   onCollapse: () => void;
+  onToggleWidth: () => void;
+  chatViewWide: boolean;
   onOpenPluginView: () => void;
   onOpenPluginWidget: (
     request: { type: string; config: Record<string, unknown> },
@@ -878,6 +884,15 @@ export function PluginHost({
               >
                 <ChevronsRight size={17} />
               </button>
+              {aiEnabled && (
+                <button
+                  type="button"
+                  onClick={onToggleWidth}
+                  title={chatViewWide ? "Narrow ChatView" : "Widen ChatView"}
+                >
+                  {chatViewWide ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+                </button>
+              )}
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (

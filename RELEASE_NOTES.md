@@ -1,3 +1,15 @@
+# GemiHub Desktop v1.4.9
+
+## What's new
+
+- Added a one-click Chat panel width toggle with an icon that changes to show
+  whether the next action will widen or narrow the panel.
+- Added compact manual Chat export to a configurable Workspace folder. Notes
+  use `YYYYMMDD-HHmmss_Chat title.md`, omit metadata, and overwrite when the
+  same chat is exported again.
+- Added a configurable saved Chat history limit. It defaults to 100 for both
+  new and existing users; setting it to 0 keeps histories without a limit.
+
 # GemiHub Desktop v1.4.8
 
 ## What's new

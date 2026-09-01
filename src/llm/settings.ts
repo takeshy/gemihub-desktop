@@ -131,6 +131,8 @@ export interface ChatSettings {
   selectedRagSetting: string | null;
   ragSettings: Record<string, RAGSetting>;
   okfRoot: string;
+  maxSavedChatHistories: number;
+  manualChatSaveFolder: string;
   discord: DiscordIntegrationSettings;
 }
 
@@ -227,6 +229,8 @@ export const defaultChatSettings: ChatSettings = {
   selectedRagSetting: null,
   ragSettings: {},
   okfRoot: "Knowledge",
+  maxSavedChatHistories: 100,
+  manualChatSaveFolder: "",
   discord: {
     enabled: false,
     botToken: "",
