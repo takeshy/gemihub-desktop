@@ -1,6 +1,6 @@
 {
   "name": "gemihub-desktop",
-  "version": "1.4.9",
+  "version": "1.4.10",
   "private": true,
   "type": "module",
   "dependencies": {

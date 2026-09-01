@@ -1,3 +1,15 @@
+# GemiHub Desktop v1.4.10
+
+## What's new
+
+- Added a configurable stream idle timeout to each AI provider profile. The
+  timer resets whenever response or thinking data arrives, and remains 120
+  seconds by default.
+- Slash commands now show the resolved prompt in Chat history while keeping
+  the original slash syntax in prompt recall.
+- Complete HTML responses in Chat now open as sanitized, sandboxed previews
+  instead of appearing as source code.
+
 # GemiHub Desktop v1.4.9
 
 ## What's new
