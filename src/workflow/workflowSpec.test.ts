@@ -10,13 +10,13 @@ import { workflowNodeTypes } from "./types.ts";
 Deno.test("workflow spec tool returns requested node documentation and configured context", () => {
   assertEquals(getWorkflowSpecTool.name, "get_workflow_spec");
   const result = getWorkflowNodeSpec('["command", "http"]', {
-    models: ["gemini-3.7-flash"],
+    models: ["gemini-3.8-flash"],
     ragSettings: ["docs"],
     mcpServers: ["browser"],
   });
   assertStringIncludes(result, "- command:");
   assertStringIncludes(result, "- http:");
-  assertStringIncludes(result, "gemini-3.7-flash");
+  assertStringIncludes(result, "gemini-3.8-flash");
   assertEquals(result.includes("- note:"), false);
 });
 

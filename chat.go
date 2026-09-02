@@ -229,9 +229,9 @@ func geminiThinkingConfig(model string, enabled bool) map[string]any {
 	if strings.Contains(lower, "gemma-4") {
 		return nil
 	}
-	// Gemini 3.7 Flash and 3.5 Flash Lite use thinkingLevel rather than a
+	// Gemini 3.8 Flash and 3.5 Flash Lite use thinkingLevel rather than a
 	// thinkingBudget.
-	if strings.Contains(lower, "gemini-3.7-flash") {
+	if strings.Contains(lower, "gemini-3.8-flash") {
 		level := "LOW"
 		if enabled {
 			level = "HIGH"

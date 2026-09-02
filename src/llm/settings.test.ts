@@ -13,15 +13,15 @@ import {
   updateModelProfile,
 } from "./settings.ts";
 
-Deno.test("Gemini 3.7 Flash thinking can be switched on and off", () => {
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.7-flash"), {
+Deno.test("Gemini 3.8 Flash thinking can be switched on and off", () => {
+  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.8-flash"), {
     available: true,
     required: false,
   });
   assertEquals(
     chatThinkingCapabilities(
       "vertex",
-      "publishers/google/models/gemini-3.7-flash",
+      "publishers/google/models/gemini-3.8-flash",
     ),
     { available: true, required: false },
   );
@@ -38,13 +38,19 @@ Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
       key === "gemihub-desktop:chat-settings" ? stored : null,
   };
   assertEquals(loadChatSettings(storage).model, "gemini-3.5-flash-lite");
-  for (const model of ["gemini-3.5-flash", "gemini-3.6-flash"]) {
+  for (
+    const model of [
+      "gemini-3.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.7-flash",
+    ]
+  ) {
     stored = JSON.stringify({
       ...defaultChatSettings,
       provider: "gemini",
       model,
     });
-    assertEquals(loadChatSettings(storage).model, "gemini-3.7-flash");
+    assertEquals(loadChatSettings(storage).model, "gemini-3.8-flash");
   }
   assertEquals(defaultChatSettings.model, "gpt-5.5");
 });
@@ -185,7 +191,7 @@ Deno.test("Gemini Pro models that require thinking cannot be switched off", () =
     available: true,
     required: true,
   });
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.7-flash"), {
+  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.8-flash"), {
     available: true,
     required: false,
   });
@@ -194,7 +200,7 @@ Deno.test("Gemini Pro models that require thinking cannot be switched off", () =
 Deno.test("selecting a CLI clears the previous API model", () => {
   const settings = {
     ...defaultChatSettings,
-    model: "gemini-3.7-flash",
+    model: "gemini-3.8-flash",
     verifiedCliTypes: ["codex" as const],
   };
   const selected = selectConfiguredModel(settings, "cli:codex");

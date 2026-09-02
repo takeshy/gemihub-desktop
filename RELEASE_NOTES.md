@@ -1,3 +1,10 @@
+# GemiHub Desktop v1.4.11
+
+## What's new
+
+- Replaced Gemini 3.7 Flash with Gemini 3.8 Flash for Gemini API and Vertex AI.
+  Existing Gemini 3.7 Flash settings are migrated automatically.
+
 # GemiHub Desktop v1.4.10
 
 ## What's new

@@ -279,7 +279,7 @@ func codexDynamicTools(request ChatRequest) []map[string]any {
 func codexInitializeParams() map[string]any {
 	return map[string]any{
 		"clientInfo": map[string]any{
-			"name": "gemihub_desktop", "title": appName, "version": "1.4.10",
+			"name": "gemihub_desktop", "title": appName, "version": "1.4.11",
 		},
 		"capabilities": map[string]any{"experimentalApi": true},
 	}

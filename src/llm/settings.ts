@@ -151,7 +151,7 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
       "o3",
     ],
     gemini: [
-      "gemini-3.7-flash",
+      "gemini-3.8-flash",
       "gemini-3.1-pro-preview",
       "gemini-3.1-pro-preview-customtools",
       "gemini-3.5-flash-lite",
@@ -161,7 +161,7 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
       "gemini-2.5-flash",
     ],
     vertex: [
-      "gemini-3.7-flash",
+      "gemini-3.8-flash",
       "gemini-3.1-pro-preview",
       "gemini-3.1-pro-preview-customtools",
       "gemini-3.5-flash-lite",
@@ -280,10 +280,10 @@ export function providerDefaults(
   if (provider === "gemini") {
     return {
       endpoint: "https://generativelanguage.googleapis.com/v1beta",
-      model: "gemini-3.7-flash",
+      model: "gemini-3.8-flash",
     };
   }
-  if (provider === "vertex") return { endpoint: "", model: "gemini-3.7-flash" };
+  if (provider === "vertex") return { endpoint: "", model: "gemini-3.8-flash" };
   if (provider === "anthropic") {
     return {
       endpoint: "https://api.anthropic.com/v1/messages",
@@ -304,8 +304,9 @@ function migrateOldDefaultModel(
     (provider === "gemini" || provider === "vertex") &&
     (model === "gemini-2.5-flash" ||
       model === "gemini-3.5-flash" ||
-      model === "gemini-3.6-flash")
-  ) return "gemini-3.7-flash";
+      model === "gemini-3.6-flash" ||
+      model === "gemini-3.7-flash")
+  ) return "gemini-3.8-flash";
   if (
     (provider === "gemini" || provider === "vertex") &&
     (model === "gemini-3.1-flash-lite" ||

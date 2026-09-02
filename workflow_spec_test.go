@@ -17,9 +17,9 @@ func TestWorkflowSpecToolFiltersNodeTypes(t *testing.T) {
 }
 
 func TestWorkflowSpecToolIncludesConfiguredContext(t *testing.T) {
-	result := workflowSpecToolResult(map[string]any{"nodeTypes": []any{"command"}}, WorkflowSpecContext{Models: []string{"gemini-3.7-flash"}, RAGSettings: []string{"docs"}, MCPServers: []string{"browser"}})
+	result := workflowSpecToolResult(map[string]any{"nodeTypes": []any{"command"}}, WorkflowSpecContext{Models: []string{"gemini-3.8-flash"}, RAGSettings: []string{"docs"}, MCPServers: []string{"browser"}})
 	text, _ := result["result"].(string)
-	for _, expected := range []string{"Configured models: gemini-3.7-flash", "Configured RAG settings: docs", "Configured MCP servers: browser"} {
+	for _, expected := range []string{"Configured models: gemini-3.8-flash", "Configured RAG settings: docs", "Configured MCP servers: browser"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("missing %q in %s", expected, text)
 		}
