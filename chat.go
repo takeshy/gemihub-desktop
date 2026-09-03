@@ -224,9 +224,33 @@ func addChatUsage(total *ChatUsage, next ChatUsage) {
 	total.ToolUseTokens += next.ToolUseTokens
 }
 
-func geminiThinkingConfig(model string, enabled bool) map[string]any {
+func geminiThinkingConfig(model string, enabled bool, requestedEffort ...string) map[string]any {
 	lower := strings.ToLower(model)
 	if strings.Contains(lower, "gemma-4") {
+		return nil
+	}
+	effort := ""
+	if len(requestedEffort) > 0 {
+		effort = strings.ToLower(strings.TrimSpace(requestedEffort[0]))
+	}
+	if effort == "default" {
+		return nil
+	}
+	if effort != "" {
+		// Gemini does not expose a true off level for current 3.x models. Map the
+		// UI's none choice to the lowest level accepted by the selected family.
+		if effort == "none" {
+			if strings.Contains(lower, "flash-lite") {
+				effort = "minimal"
+			} else {
+				effort = "low"
+			}
+		}
+		for _, supported := range []string{"minimal", "low", "medium", "high"} {
+			if effort == supported {
+				return map[string]any{"includeThoughts": true, "thinkingLevel": strings.ToUpper(effort)}
+			}
+		}
 		return nil
 	}
 	// Gemini 3.8 Flash and 3.5 Flash Lite use thinkingLevel rather than a
@@ -249,9 +273,6 @@ func geminiThinkingConfig(model string, enabled bool) map[string]any {
 	required := strings.Contains(lower, "gemini-3-pro") || strings.Contains(lower, "gemini-3.1-pro")
 	if !enabled && !required {
 		return map[string]any{"thinkingBudget": 0}
-	}
-	if lower == "gemini-2.5-flash-lite" {
-		return map[string]any{"includeThoughts": true, "thinkingBudget": -1}
 	}
 	return map[string]any{"includeThoughts": true}
 }
@@ -1493,7 +1514,7 @@ func (a *App) chatGeminiCompatible(request ChatRequest, endpoint string, headers
 	stalledToolRecoveryUsed := false
 	for iteration := 0; iteration < 256; iteration++ {
 		payload := map[string]any{"contents": contents}
-		if config := geminiThinkingConfig(request.Model, request.EnableThinking); config != nil {
+		if config := geminiThinkingConfig(request.Model, request.EnableThinking, request.ReasoningEffort); config != nil {
 			payload["generationConfig"] = map[string]any{"thinkingConfig": config}
 		}
 		if request.SystemPrompt != "" {

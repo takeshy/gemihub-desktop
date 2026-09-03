@@ -1,6 +1,6 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
-  chatThinkingCapabilities,
+  chatModelChoices,
   configuredModelOptions,
   defaultChatSettings,
   defaultRAGSetting,
@@ -13,17 +13,16 @@ import {
   updateModelProfile,
 } from "./settings.ts";
 
-Deno.test("Gemini 3.8 Flash thinking can be switched on and off", () => {
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.8-flash"), {
-    available: true,
-    required: false,
-  });
+Deno.test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {
+  assertEquals(chatModelChoices.openai.includes("gpt-6-astra"), true);
+  assertEquals(chatModelChoices.openai.includes("gpt-5.6-sol"), true);
   assertEquals(
-    chatThinkingCapabilities(
-      "vertex",
-      "publishers/google/models/gemini-3.8-flash",
-    ),
-    { available: true, required: false },
+    chatModelChoices.gemini.some((model) => model.includes("2.5")),
+    false,
+  );
+  assertEquals(
+    chatModelChoices.vertex.some((model) => model.includes("2.5")),
+    false,
   );
 });
 
@@ -55,12 +54,15 @@ Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
   assertEquals(defaultChatSettings.model, "gpt-5.5");
 });
 
-Deno.test("OpenAI reasoning effort defaults to medium and validates stored values", () => {
+Deno.test("OpenAI reasoning effort defaults to provider behavior and validates stored values", () => {
   const storage = (value: string) => ({
     getItem: (key: string) =>
       key === "gemihub-desktop:chat-settings" ? value : null,
   });
-  assertEquals(loadChatSettings(storage("{}")).openAIReasoningEffort, "medium");
+  assertEquals(
+    loadChatSettings(storage("{}")).openAIReasoningEffort,
+    "default",
+  );
   assertEquals(
     loadChatSettings(storage(JSON.stringify({ openAIReasoningEffort: "max" })))
       .openAIReasoningEffort,
@@ -70,7 +72,29 @@ Deno.test("OpenAI reasoning effort defaults to medium and validates stored value
     loadChatSettings(
       storage(JSON.stringify({ openAIReasoningEffort: "invalid" })),
     ).openAIReasoningEffort,
-    "medium",
+    "default",
+  );
+});
+
+Deno.test("Gemini reasoning effort defaults to provider behavior and validates stored values", () => {
+  const storage = (value: string) => ({
+    getItem: (key: string) =>
+      key === "gemihub-desktop:chat-settings" ? value : null,
+  });
+  assertEquals(
+    loadChatSettings(storage("{}")).geminiReasoningEffort,
+    "default",
+  );
+  assertEquals(
+    loadChatSettings(storage(JSON.stringify({ geminiReasoningEffort: "high" })))
+      .geminiReasoningEffort,
+    "high",
+  );
+  assertEquals(
+    loadChatSettings(
+      storage(JSON.stringify({ geminiReasoningEffort: "invalid" })),
+    ).geminiReasoningEffort,
+    "default",
   );
 });
 
@@ -183,17 +207,6 @@ Deno.test("editing the active profile keeps type and credentials in sync", () =>
       apiKey: "pasted-key",
       model: "custom-model",
     },
-  });
-});
-
-Deno.test("Gemini Pro models that require thinking cannot be switched off", () => {
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.1-pro-preview"), {
-    available: true,
-    required: true,
-  });
-  assertEquals(chatThinkingCapabilities("gemini", "gemini-3.8-flash"), {
-    available: true,
-    required: false,
   });
 });
 

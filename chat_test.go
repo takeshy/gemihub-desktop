@@ -530,10 +530,6 @@ func TestOpenAIMultimodalMessageContent(t *testing.T) {
 }
 
 func TestGeminiThinkingConfig(t *testing.T) {
-	legacyOff := geminiThinkingConfig("gemini-2.5-flash", false)
-	if legacyOff["thinkingBudget"] != 0 {
-		t.Fatalf("unexpected Gemini 2.5 off config: %#v", legacyOff)
-	}
 	liteOn := geminiThinkingConfig("gemini-3.5-flash-lite", true)
 	if liteOn["thinkingLevel"] != "HIGH" || liteOn["includeThoughts"] != true {
 		t.Fatalf("unexpected Gemini 3.5 Flash Lite config: %#v", liteOn)
@@ -545,6 +541,15 @@ func TestGeminiThinkingConfig(t *testing.T) {
 	flashOn := geminiThinkingConfig("gemini-3.8-flash", true)
 	if flashOn["thinkingLevel"] != "HIGH" || flashOn["includeThoughts"] != true {
 		t.Fatalf("unexpected Gemini 3.8 Flash on config: %#v", flashOn)
+	}
+	if got := geminiThinkingConfig("gemini-3.8-flash", false, "medium"); got["thinkingLevel"] != "MEDIUM" {
+		t.Fatalf("unexpected Gemini explicit medium config: %#v", got)
+	}
+	if got := geminiThinkingConfig("gemini-3.8-flash", false, "none"); got["thinkingLevel"] != "LOW" {
+		t.Fatalf("Gemini none must map to its minimum supported level: %#v", got)
+	}
+	if got := geminiThinkingConfig("gemini-3.8-flash", false, "default"); got != nil {
+		t.Fatalf("Gemini default must omit thinking config: %#v", got)
 	}
 	if got := geminiThinkingConfig("gemini-3.1-pro-preview", false); got["includeThoughts"] != true {
 		t.Fatalf("Gemini 3.1 Pro thinking must remain enabled: %#v", got)

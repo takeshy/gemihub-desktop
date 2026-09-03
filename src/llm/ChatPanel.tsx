@@ -28,9 +28,9 @@ import {
   type ChatAttachedFile,
   type ChatMessage,
   type ChatStreamEvent,
+  listAgentPlugins,
   listCLIModels,
   listWorkspaceFiles,
-  listAgentPlugins,
   onChatFunctionLimitRequest,
   onChatStream,
   onChatToolRequest,
@@ -42,8 +42,8 @@ import {
   resolveChatTool,
   searchRAG,
   stopCLI,
-  writeWorkspaceStateFile,
   writeWorkspaceFile,
+  writeWorkspaceStateFile,
 } from "../lib/wailsBackend";
 import { resolveAgentPluginMcpServers } from "../agentPlugins/manager";
 import {
@@ -97,23 +97,20 @@ import { OkfSelector } from "../okf/OkfSelector";
 import {
   type ChatProvider,
   type ChatSettings,
-  type CodexReasoningEffort,
-  type OpenAIReasoningEffort,
-  chatThinkingCapabilities,
   cliNames,
   type CLIType,
+  type CodexReasoningEffort,
   configuredChatProviders,
   configuredModelOptions,
   type FileToolMode,
+  type GeminiReasoningEffort,
+  type OpenAIReasoningEffort,
   resolveRAGSetting,
   selectConfiguredModel,
   selectedModelOptionKey,
 } from "./settings";
 import { type FileRef, fileRef, fileRefFromBackendPath } from "../lib/fileRef";
-import {
-  type GroundingSource,
-  groundingSourceLabel,
-} from "./grounding";
+import { type GroundingSource, groundingSourceLabel } from "./grounding";
 import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
@@ -597,7 +594,9 @@ export function ChatPanel({
     null,
   );
   const [sessionsLocked, setSessionsLocked] = useState(false);
-  const [saveNoteState, setSaveNoteState] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveNoteState, setSaveNoteState] = useState<
+    "idle" | "saving" | "saved"
+  >("idle");
   const savedNotePathsRef = useRef(new Map<string, string>());
   const [activeID, setActiveID] = useState("");
   const [input, setInput] = useState("");
@@ -729,7 +728,10 @@ export function ChatPanel({
       if (target.selectionStart !== target.selectionEnd) return false;
       const caret = target.selectionStart;
       let next: string | null = null;
-      if (event.key === "ArrowUp" && promptHistory.length > 0 && isCaretOnFirstLine(input, caret)) {
+      if (
+        event.key === "ArrowUp" && promptHistory.length > 0 &&
+        isCaretOnFirstLine(input, caret)
+      ) {
         if (historyIndexRef.current === null) historyDraftRef.current = input;
         const index = historyIndexRef.current === null
           ? promptHistory.length - 1
@@ -768,18 +770,33 @@ export function ChatPanel({
     sessions[0];
   const messages = activeSession?.messages ?? [];
   const saveAsNote = useCallback(async () => {
-    if (!activeSession || messages.length === 0 || saveNoteState !== "idle") return;
+    if (!activeSession || messages.length === 0 || saveNoteState !== "idle") {
+      return;
+    }
     setSaveNoteState("saving");
     try {
       const now = new Date();
       const pad = (value: number) => String(value).padStart(2, "0");
-      const dateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-      const safeTitle = activeSession.title.replace(/[\\/:*?"<>|#^[\]\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Chat";
-      const folder = settings.manualChatSaveFolder.trim().replace(/^\/+|\/+$/g, "");
-      const newPath = `${folder ? `${folder}/` : ""}${dateTime}_${safeTitle}.md`;
+      const dateTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${
+        pad(now.getDate())
+      }-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const safeTitle =
+        activeSession.title.replace(/[\\/:*?"<>|#^[\]\r\n]+/g, " ").replace(
+          /\s+/g,
+          " ",
+        ).trim().slice(0, 80) || "Chat";
+      const folder = settings.manualChatSaveFolder.trim().replace(
+        /^\/+|\/+$/g,
+        "",
+      );
+      const newPath = `${
+        folder ? `${folder}/` : ""
+      }${dateTime}_${safeTitle}.md`;
       const path = savedNotePathsRef.current.get(activeSession.id) ?? newPath;
       const content = messages.map((message) =>
-        `## ${message.role === "user" ? "You" : (message.model || "Assistant")}\n\n${message.content.trim()}`
+        `## ${
+          message.role === "user" ? "You" : (message.model || "Assistant")
+        }\n\n${message.content.trim()}`
       ).join("\n\n");
       await writeWorkspaceFile(path, content);
       savedNotePathsRef.current.set(activeSession.id, path);
@@ -903,12 +920,14 @@ export function ChatPanel({
     }
   }, [workspaceBase, settings.okfRoot]);
   const configuredProviders = configuredChatProviders(settings);
-  const thinkingModelKey = `${settings.provider}:${settings.model}`;
-  const { available: thinkingAvailable, required: thinkingRequired } =
-    chatThinkingCapabilities(settings.provider, settings.model);
-  const thinkingEnabled = thinkingRequired ||
-    settings.thinkingEnabledModels.includes(thinkingModelKey);
   const openAIReasoningAvailable = usesOfficialOpenAIResponses(settings);
+  const geminiReasoningAvailable =
+    (settings.provider === "gemini" || settings.provider === "vertex") &&
+    /gemini-3/i.test(settings.model) && !/image|gemma-4/i.test(settings.model);
+  const geminiReasoningOptions: GeminiReasoningEffort[] =
+    /(?:3|3\.1)-pro|3\.8-flash/i.test(settings.model)
+      ? ["default", "none", "low", "medium", "high"]
+      : ["default", "none", "minimal", "low", "medium", "high"];
   const selectedSkills = useMemo(
     () =>
       skills.filter((skill) => activeSkillPaths.includes(skill.skillFilePath)),
@@ -1098,7 +1117,10 @@ export function ChatPanel({
     const scope = workspaceBase || "__session__";
     if (loadedHistoryScope !== scope || sessionsLocked) return;
     const retainedSessions = settings.maxSavedChatHistories > 0
-      ? [...sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, settings.maxSavedChatHistories)
+      ? [...sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(
+        0,
+        settings.maxSavedChatHistories,
+      )
       : sessions;
     const serialized = JSON.stringify({
       activeSessionId: activeID,
@@ -1131,7 +1153,14 @@ export function ChatPanel({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeID, loadedHistoryScope, workspaceBase, sessions, sessionsLocked, settings.maxSavedChatHistories]);
+  }, [
+    activeID,
+    loadedHistoryScope,
+    workspaceBase,
+    sessions,
+    sessionsLocked,
+    settings.maxSavedChatHistories,
+  ]);
 
   useEffect(() => {
     const changed = () => setSessions((current) => [...current]);
@@ -1699,9 +1728,11 @@ export function ChatPanel({
       ragUsed: hasExplicitRAGContext,
       ragQuery: hasExplicitRAGContext ? text : undefined,
       thinkingEnabled: openAIReasoningAvailable
-        ? settings.openAIReasoningEffort !== "none"
-        : thinkingAvailable
-        ? thinkingEnabled
+        ? settings.openAIReasoningEffort === "default"
+          ? undefined
+          : settings.openAIReasoningEffort !== "none"
+        : geminiReasoningAvailable
+        ? settings.geminiReasoningEffort !== "none"
         : undefined,
     } satisfies ChatMessage;
     updateSession(
@@ -2001,9 +2032,11 @@ export function ChatPanel({
         codexReasoningEffort: settings.codexReasoningEffort,
         reasoningEffort: openAIReasoningAvailable
           ? settings.openAIReasoningEffort
+          : geminiReasoningAvailable
+          ? settings.geminiReasoningEffort
           : undefined,
         streamId,
-        enableThinking: thinkingEnabled,
+        enableThinking: false,
         customTools,
         workflowSpecContext: {
           models: configuredModelOptions(settings).map((option) =>
@@ -2090,9 +2123,11 @@ export function ChatPanel({
               : message.webSearchSources,
             thinking: result.thinking || message.thinking,
             thinkingEnabled: openAIReasoningAvailable
-              ? settings.openAIReasoningEffort !== "none"
-              : thinkingAvailable
-              ? thinkingEnabled
+              ? settings.openAIReasoningEffort === "default"
+                ? undefined
+                : settings.openAIReasoningEffort !== "none"
+              : geminiReasoningAvailable
+              ? settings.geminiReasoningEffort !== "none"
               : undefined,
             usage: result.usage,
             generatedImages: result.generatedImages,
@@ -2210,11 +2245,16 @@ export function ChatPanel({
         </button>
         <button
           type="button"
-          disabled={loading || messages.length === 0 || saveNoteState === "saving"}
+          disabled={loading || messages.length === 0 ||
+            saveNoteState === "saving"}
           onClick={() => void saveAsNote()}
           title={saveNoteState === "saved" ? "Saved as note" : "Save as note"}
         >
-          {saveNoteState === "saving" ? <Square size={14} /> : saveNoteState === "saved" ? <Check size={14} /> : <FileText size={14} />}
+          {saveNoteState === "saving"
+            ? <Square size={14} />
+            : saveNoteState === "saved"
+            ? <Check size={14} />
+            : <FileText size={14} />}
         </button>
         <button
           type="button"
@@ -2307,7 +2347,8 @@ export function ChatPanel({
                           ? ` · relevance ${source.score.toFixed(3)}`
                           : ""
                       }`}
-                      onClick={() => onOpenFile(fileRef("workspace", source.path))}
+                      onClick={() =>
+                        onOpenFile(fileRef("workspace", source.path))}
                     >
                       <FileText size={11} />
                       {groundingSourceLabel(source)}
@@ -2364,24 +2405,24 @@ export function ChatPanel({
                   />
                 )
                 : (
-                <MarkdownPreview
-                  content={message.content}
-                  isDark={isDark}
-                  onLinkClick={(href, event) => {
-                    const ref = chatLocalFileRef(href, workspaceBase);
-                    if (ref) {
+                  <MarkdownPreview
+                    content={message.content}
+                    isDark={isDark}
+                    onLinkClick={(href, event) => {
+                      const ref = chatLocalFileRef(href, workspaceBase);
+                      if (ref) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onOpenFile(ref);
+                        return;
+                      }
+                      const external = chatExternalUrl(href);
+                      if (!external) return;
                       event.preventDefault();
                       event.stopPropagation();
-                      onOpenFile(ref);
-                      return;
-                    }
-                    const external = chatExternalUrl(href);
-                    if (!external) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    window.open(external, "_blank", "noopener,noreferrer");
-                  }}
-                />
+                      window.open(external, "_blank", "noopener,noreferrer");
+                    }}
+                  />
                 )
               : <p>{message.content}</p>}
             {message.role === "assistant" && message.generatedImages?.length
@@ -2442,7 +2483,10 @@ export function ChatPanel({
                         <button
                           type="button"
                           key={name}
-                          onClick={() => onOpenFile(fileRef("workspace", skill.skillFilePath))}
+                          onClick={() =>
+                            onOpenFile(
+                              fileRef("workspace", skill.skillFilePath),
+                            )}
                         >
                           {name}
                         </button>
@@ -2456,7 +2500,10 @@ export function ChatPanel({
               <button
                 type="button"
                 className="chat-open-failed-workflow"
-                onClick={() => onOpenWorkflow(fileRef("workspace", message.failedWorkflowPath!))}
+                onClick={() =>
+                  onOpenWorkflow(
+                    fileRef("workspace", message.failedWorkflowPath!),
+                  )}
               >
                 <WorkflowIcon size={12} />Open failed workflow
               </button>
@@ -2612,7 +2659,8 @@ export function ChatPanel({
                   <button
                     type="button"
                     className="chat-skill-open"
-                    onClick={() => onOpenFile(fileRef("workspace", skill.skillFilePath))}
+                    onClick={() =>
+                      onOpenFile(fileRef("workspace", skill.skillFilePath))}
                   >
                     {skill.name}
                   </button>
@@ -2670,10 +2718,9 @@ export function ChatPanel({
           disabled={loading}
           onRefresh={() => void refreshOkfBundles()}
           onToggle={(id) =>
-            setActiveOkfBundleIds((ids) =>
-              ids.includes(id)
-                ? ids.filter((value) => value !== id)
-                : [...ids, id]
+            setActiveOkfBundleIds((ids) => ids.includes(id)
+              ? ids.filter((value) => value !== id)
+              : [...ids, id]
             )}
         />
         {attachedFiles.length > 0 && (
@@ -2982,33 +3029,6 @@ export function ChatPanel({
               />
               Web
             </label>
-            {thinkingAvailable && (
-              <label
-                className="chat-thinking-select"
-                title={thinkingRequired
-                  ? "Thinking is required for this model"
-                  : "Choose whether the model uses thinking"}
-              >
-                <Brain size={12} />
-                <select
-                  value={thinkingEnabled ? "on" : "off"}
-                  disabled={loading || thinkingRequired}
-                  onChange={(event) => {
-                    const enabled = new Set(settings.thinkingEnabledModels);
-                    if (event.target.value === "on") {
-                      enabled.add(thinkingModelKey);
-                    } else enabled.delete(thinkingModelKey);
-                    onSettingsChange({
-                      ...settings,
-                      thinkingEnabledModels: [...enabled],
-                    });
-                  }}
-                >
-                  <option value="off">Thinking: off</option>
-                  <option value="on">Thinking: on</option>
-                </select>
-              </label>
-            )}
           </span>
           <button
             type="button"
@@ -3055,16 +3075,24 @@ export function ChatPanel({
             <select
               value={settings.cliModels.codex}
               disabled={loading}
-              onChange={(event) => onSettingsChange({
-                ...settings,
-                cliModels: { ...settings.cliModels, codex: event.target.value },
-              })}
+              onChange={(event) =>
+                onSettingsChange({
+                  ...settings,
+                  cliModels: {
+                    ...settings.cliModels,
+                    codex: event.target.value,
+                  },
+                })}
               title="Codex model"
             >
               <option value="">Codex default</option>
               {settings.cliModels.codex && !codexModels.some((model) =>
                 model.id === settings.cliModels.codex
-              ) && <option value={settings.cliModels.codex}>{settings.cliModels.codex}</option>}
+              ) && (
+                <option value={settings.cliModels.codex}>
+                  {settings.cliModels.codex}
+                </option>
+              )}
               {codexModels.map((model) => (
                 <option key={model.id} value={model.id}>
                   {model.displayName} ({model.id})
@@ -3085,6 +3113,7 @@ export function ChatPanel({
               title="OpenAI reasoning effort"
             >
               {([
+                "default",
                 "none",
                 "low",
                 "medium",
@@ -3099,18 +3128,47 @@ export function ChatPanel({
                 ))}
             </select>
           )}
+          {geminiReasoningAvailable && (
+            <select
+              value={settings.geminiReasoningEffort}
+              disabled={loading}
+              onChange={(event) =>
+                onSettingsChange({
+                  ...settings,
+                  geminiReasoningEffort: event.target
+                    .value as GeminiReasoningEffort,
+                })}
+              title="Gemini reasoning effort"
+            >
+              {geminiReasoningOptions.map((effort) => (
+                <option key={effort} value={effort}>
+                  Reasoning: {effort === "none" ? "none / minimum" : effort}
+                </option>
+              ))}
+            </select>
+          )}
           {settings.provider === "cli" && settings.cliType === "codex" && (
             <select
               value={settings.codexReasoningEffort}
               disabled={loading}
-              onChange={(event) => onSettingsChange({
-                ...settings,
-                codexReasoningEffort: event.target.value as CodexReasoningEffort,
-              })}
+              onChange={(event) =>
+                onSettingsChange({
+                  ...settings,
+                  codexReasoningEffort: event.target
+                    .value as CodexReasoningEffort,
+                })}
               title="Codex reasoning effort"
             >
-              {(["minimal", "low", "medium", "high", "xhigh"] as CodexReasoningEffort[])
-                .map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+              {([
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+              ] as CodexReasoningEffort[])
+                .map((effort) => (
+                  <option key={effort} value={effort}>{effort}</option>
+                ))}
             </select>
           )}
           <select

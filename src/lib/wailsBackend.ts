@@ -261,8 +261,22 @@ export interface ChatRequest {
   cliType: "codex" | "antigravity";
   cliPath: string;
   cliSessionId: string;
-  codexReasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
-  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+  codexReasoningEffort?:
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max";
+  reasoningEffort?:
+    | "default"
+    | "none"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max";
   streamId?: string;
   enableThinking?: boolean;
   enableWebSearch?: boolean;
@@ -544,7 +558,10 @@ interface WailsAppApi {
   CancelChat: (streamID: string) => Promise<boolean>;
   SelectCLIPath: () => Promise<string>;
   VerifyCLI: (kind: string, customPath: string) => Promise<CLIVerifyResult>;
-  ListCLIModels: (kind: string, customPath: string) => Promise<CLIModelOption[]>;
+  ListCLIModels: (
+    kind: string,
+    customPath: string,
+  ) => Promise<CLIModelOption[]>;
   StopCLI: () => Promise<boolean>;
   ApplyPendingFileAction: (action: PendingFileAction) => Promise<void>;
   ResolveChatTool: (
@@ -570,7 +587,11 @@ interface WailsAppApi {
   FetchPluginAsset: (pluginID: string, name: string) => Promise<string>;
   ListAgentPlugins: () => Promise<AgentPluginInstall[]>;
   ReadAgentPluginFiles: (name: string) => Promise<AgentPluginFile[]>;
-  InstallAgentPlugin: (name: string, files: Record<string, string>, installJSON: string) => Promise<void>;
+  InstallAgentPlugin: (
+    name: string,
+    files: Record<string, string>,
+    installJSON: string,
+  ) => Promise<void>;
   SetAgentPluginEnabled: (name: string, enabled: boolean) => Promise<void>;
   UninstallAgentPlugin: (name: string) => Promise<void>;
   ExternalHTTPRequest: (
@@ -1276,18 +1297,52 @@ export async function listPluginIDs(): Promise<string[]> {
 }
 
 export interface AgentPluginInstall {
-  name: string; repo: string; version: string; sourceType: "release" | "branch";
-  sourceRef: string; commitSha: string; enabled: boolean; skillNames: string[]; executables?: string[];
+  name: string;
+  repo: string;
+  version: string;
+  sourceType: "release" | "branch";
+  sourceRef: string;
+  commitSha: string;
+  enabled: boolean;
+  skillNames: string[];
+  executables?: string[];
 }
-export interface AgentPluginFile { path: string; content: string }
-export async function listAgentPlugins(): Promise<AgentPluginInstall[]> { return await appApi()?.ListAgentPlugins() ?? []; }
-export async function readAgentPluginFiles(name: string): Promise<AgentPluginFile[]> { return await appApi()?.ReadAgentPluginFiles(name) ?? []; }
-export async function installAgentPlugin(name: string, files: Record<string, string>, metadata: AgentPluginInstall): Promise<void> {
-  const api = appApi(); if (!api) throw new Error("Agent Plugin installation requires the desktop app.");
+export interface AgentPluginFile {
+  path: string;
+  content: string;
+}
+export async function listAgentPlugins(): Promise<AgentPluginInstall[]> {
+  return await appApi()?.ListAgentPlugins() ?? [];
+}
+export async function readAgentPluginFiles(
+  name: string,
+): Promise<AgentPluginFile[]> {
+  return await appApi()?.ReadAgentPluginFiles(name) ?? [];
+}
+export async function installAgentPlugin(
+  name: string,
+  files: Record<string, string>,
+  metadata: AgentPluginInstall,
+): Promise<void> {
+  const api = appApi();
+  if (!api) {
+    throw new Error("Agent Plugin installation requires the desktop app.");
+  }
   await api.InstallAgentPlugin(name, files, JSON.stringify(metadata));
 }
-export async function setAgentPluginEnabled(name: string, enabled: boolean): Promise<void> { const api = appApi(); if (!api) throw new Error("Desktop app required."); await api.SetAgentPluginEnabled(name, enabled); }
-export async function uninstallAgentPlugin(name: string): Promise<void> { const api = appApi(); if (!api) throw new Error("Desktop app required."); await api.UninstallAgentPlugin(name); }
+export async function setAgentPluginEnabled(
+  name: string,
+  enabled: boolean,
+): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Desktop app required.");
+  await api.SetAgentPluginEnabled(name, enabled);
+}
+export async function uninstallAgentPlugin(name: string): Promise<void> {
+  const api = appApi();
+  if (!api) throw new Error("Desktop app required.");
+  await api.UninstallAgentPlugin(name);
+}
 
 export async function installPluginFiles(
   pluginID: string,

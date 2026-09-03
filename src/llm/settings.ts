@@ -26,8 +26,28 @@ export const localLLMFrameworks: Record<
 };
 export type CLIType = "codex" | "antigravity";
 export type FileToolMode = "all" | "noSearch" | "none";
-export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
-export type OpenAIReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+export type CodexReasoningEffort =
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+export type OpenAIReasoningEffort =
+  | "default"
+  | "none"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+export type GeminiReasoningEffort =
+  | "default"
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high";
 
 export interface MCPServerConfig {
   id: string;
@@ -121,12 +141,12 @@ export interface ChatSettings {
   systemPrompt: string;
   enableFileTools: boolean;
   fileToolMode: FileToolMode;
-  thinkingEnabledModels: string[];
   cliType: CLIType;
   cliPaths: Record<CLIType, string>;
   cliModels: Record<CLIType, string>;
   codexReasoningEffort: CodexReasoningEffort;
   openAIReasoningEffort: OpenAIReasoningEffort;
+  geminiReasoningEffort: GeminiReasoningEffort;
   slashCommands: SlashCommand[];
   mcpServers: MCPServerConfig[];
   webSearchEnabled: boolean;
@@ -143,6 +163,10 @@ export const CHAT_SETTINGS_KEY = "gemihub-desktop:chat-settings";
 export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
   {
     openai: [
+      "gpt-6-astra",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
       "gpt-5.5",
       "gpt-5.5-pro",
       "gpt-5.4",
@@ -157,8 +181,6 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
       "gemini-3.5-flash-lite",
       "gemini-3.1-flash-image-preview",
       "gemini-3-pro-image-preview",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash",
     ],
     vertex: [
       "gemini-3.8-flash",
@@ -167,8 +189,6 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
       "gemini-3.5-flash-lite",
       "gemini-3.1-flash-image-preview",
       "gemini-3-pro-image-preview",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash",
     ],
     anthropic: [
       "claude-opus-4-8",
@@ -179,19 +199,6 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
       "claude-opus-4-6",
     ],
   };
-
-export function chatThinkingCapabilities(
-  provider: ChatProvider,
-  model: string,
-): { available: boolean; required: boolean } {
-  const available = ((provider === "gemini" || provider === "vertex") &&
-    /gemini-(?:2\.5|3)/i.test(model)) ||
-    (provider === "anthropic" && /claude-/i.test(model));
-  const required = available &&
-    (/gemini-(?:3|3\.1)-pro/i.test(model) ||
-      /claude-(?:fable-5|mythos)/i.test(model));
-  return { available, required };
-}
 
 export const defaultChatSettings: ChatSettings = {
   provider: "openai",
@@ -214,12 +221,12 @@ export const defaultChatSettings: ChatSettings = {
     "You are a helpful assistant working inside the user's active Workspace. Inspect Workspace files before making assumptions. Use propose_file_edit for changes.",
   enableFileTools: true,
   fileToolMode: "all",
-  thinkingEnabledModels: [],
   cliType: "codex",
   cliPaths: { codex: "", antigravity: "" },
   cliModels: { codex: "", antigravity: "" },
   codexReasoningEffort: "low",
-  openAIReasoningEffort: "medium",
+  openAIReasoningEffort: "default",
+  geminiReasoningEffort: "default",
   slashCommands: [{
     id: "cmd_infographic_default",
     name: "infographic",
@@ -651,23 +658,29 @@ export function loadChatSettings(
       selectedRagSetting: parsed.selectedRagSetting === "__websearch__"
         ? null
         : parsed.selectedRagSetting ?? null,
-      thinkingEnabledModels: Array.isArray(parsed.thinkingEnabledModels)
-        ? parsed.thinkingEnabledModels.filter((value): value is string =>
-          typeof value === "string"
-        )
-        : [],
       cliPaths: { ...defaultChatSettings.cliPaths, ...(parsed.cliPaths ?? {}) },
-      cliModels: { ...defaultChatSettings.cliModels, ...(parsed.cliModels ?? {}) },
-      codexReasoningEffort: ["minimal", "low", "medium", "high", "xhigh"].includes(
-          parsed.codexReasoningEffort ?? "",
-        )
-        ? parsed.codexReasoningEffort as CodexReasoningEffort
-        : "low",
-      openAIReasoningEffort: ["none", "low", "medium", "high", "xhigh", "max"].includes(
-          parsed.openAIReasoningEffort ?? "",
-        )
-        ? parsed.openAIReasoningEffort as OpenAIReasoningEffort
-        : "medium",
+      cliModels: {
+        ...defaultChatSettings.cliModels,
+        ...(parsed.cliModels ?? {}),
+      },
+      codexReasoningEffort:
+        ["minimal", "low", "medium", "high", "xhigh", "max"].includes(
+            parsed.codexReasoningEffort ?? "",
+          )
+          ? parsed.codexReasoningEffort as CodexReasoningEffort
+          : "low",
+      openAIReasoningEffort:
+        ["default", "none", "low", "medium", "high", "xhigh", "max"].includes(
+            parsed.openAIReasoningEffort ?? "",
+          )
+          ? parsed.openAIReasoningEffort as OpenAIReasoningEffort
+          : "default",
+      geminiReasoningEffort:
+        ["default", "none", "minimal", "low", "medium", "high"].includes(
+            parsed.geminiReasoningEffort ?? "",
+          )
+          ? parsed.geminiReasoningEffort as GeminiReasoningEffort
+          : "default",
       slashCommands: Array.isArray(parsed.slashCommands)
         ? parsed.slashCommands.map((command) => ({
           ...command,
@@ -696,8 +709,12 @@ export function loadChatSettings(
             args: Array.isArray(server.args) ? server.args : [],
             env: server.env && typeof server.env === "object" ? server.env : {},
             cwd: typeof server.cwd === "string" ? server.cwd : undefined,
-            pluginRoot: typeof server.pluginRoot === "string" ? server.pluginRoot : undefined,
-            pluginData: typeof server.pluginData === "string" ? server.pluginData : undefined,
+            pluginRoot: typeof server.pluginRoot === "string"
+              ? server.pluginRoot
+              : undefined,
+            pluginData: typeof server.pluginData === "string"
+              ? server.pluginData
+              : undefined,
             framing: server.framing === "newline"
               ? "newline"
               : "content-length",
@@ -716,7 +733,11 @@ export function loadChatSettings(
                 typeof scope === "string"
               )
               : [],
-            agentPlugin: server.agentPlugin && typeof server.agentPlugin.pluginName === "string" && typeof server.agentPlugin.serverName === "string" ? server.agentPlugin : undefined,
+            agentPlugin: server.agentPlugin &&
+                typeof server.agentPlugin.pluginName === "string" &&
+                typeof server.agentPlugin.serverName === "string"
+              ? server.agentPlugin
+              : undefined,
           };
         })
         : [],
