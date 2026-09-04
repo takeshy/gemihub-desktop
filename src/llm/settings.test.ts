@@ -54,6 +54,50 @@ Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
   assertEquals(defaultChatSettings.model, "gpt-5.5");
 });
 
+// A stored Gemini 2.x id would be sent as-is and rejected by the API, and it gets
+// no reasoning control in the chat bar, so loading drops it for a current model.
+Deno.test("stored Gemini 2.x models are migrated out of profiles on load", () => {
+  const stored = JSON.stringify({
+    ...defaultChatSettings,
+    provider: "gemini",
+    model: "gemini-2.5-pro",
+    modelProfiles: [{
+      id: "profile-gemini",
+      name: "Gemini",
+      provider: "gemini",
+      endpoint: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "key",
+      model: "gemini-2.5-pro",
+      enabledModels: [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-3.8-flash",
+      ],
+      enabled: true,
+    }],
+    selectedModelProfileId: "profile-gemini",
+  });
+  const settings = loadChatSettings({
+    getItem: (key: string) =>
+      key === "gemihub-desktop:chat-settings" ? stored : null,
+  });
+  assertEquals(settings.model, "gemini-3.1-pro-preview");
+  assertEquals(settings.modelProfiles[0].model, "gemini-3.1-pro-preview");
+  // gemini-2.5-flash and gemini-3.8-flash collapse onto one entry.
+  assertEquals(settings.modelProfiles[0].enabledModels, [
+    "gemini-3.1-pro-preview",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+  ]);
+  assertEquals(
+    configuredModelOptions(settings).some((option) =>
+      option.model.includes("2.5")
+    ),
+    false,
+  );
+});
+
 Deno.test("OpenAI reasoning effort defaults to provider behavior and validates stored values", () => {
   const storage = (value: string) => ({
     getItem: (key: string) =>

@@ -301,16 +301,28 @@ export function providerDefaults(
   return { endpoint: "https://api.openai.com/v1", model: "gpt-5.5" };
 }
 
+// Gemini 2.x is no longer offered, so a stored 2.x id is mapped to the closest
+// current model rather than left to fail at request time.
+function migrateRetiredGeminiModel(model: string): string {
+  if (!/^gemini-2\./i.test(model)) return model;
+  if (/pro/i.test(model)) return "gemini-3.1-pro-preview";
+  if (/flash-lite/i.test(model)) return "gemini-3.5-flash-lite";
+  return "gemini-3.8-flash";
+}
+
 function migrateOldDefaultModel(
   provider: ChatProvider,
   model: string | undefined,
 ): string {
   if (!model) return providerDefaults(provider).model;
   if (provider === "openai" && model === "gpt-5-mini") return "gpt-5.5";
+  if (provider === "gemini" || provider === "vertex") {
+    const current = migrateRetiredGeminiModel(model);
+    if (current !== model) return current;
+  }
   if (
     (provider === "gemini" || provider === "vertex") &&
-    (model === "gemini-2.5-flash" ||
-      model === "gemini-3.5-flash" ||
+    (model === "gemini-3.5-flash" ||
       model === "gemini-3.6-flash" ||
       model === "gemini-3.7-flash")
   ) return "gemini-3.8-flash";
@@ -603,9 +615,14 @@ export function loadChatSettings(
           ...newModelProfile(item.provider, item.local, compatible),
           ...item,
           model: migrateOldDefaultModel(item.provider, item.model),
-          enabledModels: (item.enabledModels || []).map((model) =>
-            migrateOldDefaultModel(item.provider, model)
-          ),
+          // Deduped because two retired ids can migrate onto the same model.
+          enabledModels: [
+            ...new Set(
+              (item.enabledModels || []).map((model) =>
+                migrateOldDefaultModel(item.provider, model)
+              ),
+            ),
+          ],
           openAICompatible: item.openAICompatible ?? compatible,
         };
       })
