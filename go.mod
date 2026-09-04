@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/takeshy/minipdfsplit v0.1.0
+	github.com/takeshy/minipdfsplit v0.2.0
 	github.com/wailsapp/wails/v3 v3.0.0-beta.12
 	golang.org/x/sys v0.46.0
 )

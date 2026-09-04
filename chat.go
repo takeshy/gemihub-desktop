@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -119,10 +120,28 @@ func toolCallDetail(arguments string) string {
 	for _, key := range toolDetailKeys {
 		value, _ := args[key].(string)
 		if value = strings.TrimSpace(value); value != "" {
-			return truncateRunes(value, 200)
+			return truncateRunes(value, 200) + toolCallPageRangeDetail(args)
 		}
 	}
 	return ""
+}
+
+// A PDF read with a page range shows the range next to the path so the user can
+// tell "pages 2-3" from a whole-file read.
+func toolCallPageRangeDetail(args map[string]any) string {
+	pages, err := pdfPageRangeFromArgs(args)
+	if err != nil || !pages.isSet() {
+		return ""
+	}
+	end := "end"
+	if pages.End > 0 {
+		end = strconv.Itoa(pages.End)
+	}
+	start := 1
+	if pages.Start > 0 {
+		start = pages.Start
+	}
+	return fmt.Sprintf(" (pages %d-%s)", start, end)
 }
 
 func truncateRunes(value string, limit int) string {
@@ -308,9 +327,20 @@ type openAIToolCall struct {
 	} `json:"function"`
 }
 
+// read_file and read_note share one schema; the page range only applies to PDFs.
+var readFileToolParameters = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"path":      map[string]any{"type": "string"},
+		"startPage": map[string]any{"type": "integer", "description": "For PDFs, the 1-based first page to read (inclusive). Defaults to page 1."},
+		"endPage":   map[string]any{"type": "integer", "description": "For PDFs, the 1-based last page to read (inclusive). Defaults to the final page."},
+	},
+	"required": []string{"path"},
+}
+
 var fileToolDefinitions = []map[string]any{
-	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read a supported file inside the active Workspace. Text files return their content; a PDF is attached to the result as a document you can read directly, or returned as its extracted text. Other binary files (images, Office documents, archives) are rejected; ask the user to attach them to the message instead.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
-	{"type": "function", "function": map[string]any{"name": "read_note", "description": "Agent Skills compatibility alias for read_file. Text files return their content; a PDF is attached to the result as a document or returned as its extracted text. Other binary files are rejected; ask the user to attach them to the message instead.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}}}},
+	{"type": "function", "function": map[string]any{"name": "read_file", "description": "Read a supported file inside the active Workspace. Text files return their content; a PDF is attached to the result as a document you can read directly, or returned as its extracted text. For PDFs, an inclusive page range can be selected with startPage and endPage, which also lets a long PDF be read a few pages at a time. Other binary files (images, Office documents, archives) are rejected; ask the user to attach them to the message instead.", "parameters": readFileToolParameters}},
+	{"type": "function", "function": map[string]any{"name": "read_note", "description": "Agent Skills compatibility alias for read_file. Text files return their content; a PDF is attached to the result as a document or returned as its extracted text. For PDFs, an inclusive page range can be selected with startPage and endPage. Other binary files are rejected; ask the user to attach them to the message instead.", "parameters": readFileToolParameters}},
 	{"type": "function", "function": map[string]any{"name": "search_files", "description": "Search file names and text content inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer"}}, "required": []string{"query"}}}},
 	{"type": "function", "function": map[string]any{"name": "list_files", "description": "List files inside the active Workspace.", "parameters": map[string]any{"type": "object", "properties": map[string]any{}}}},
 	{"type": "function", "function": map[string]any{"name": "propose_file_edit", "description": "Propose a Workspace file write. The user must explicitly apply it.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "string", "enum": []string{"replace", "append", "prepend"}}}, "required": []string{"path", "content"}}}},
@@ -1104,6 +1134,10 @@ func (a *App) executeFileTool(name, arguments string, delivery pdfDelivery) (any
 		if err != nil {
 			return nil, nil, err
 		}
+		pages, err := pdfPageRangeFromArgs(args)
+		if err != nil {
+			return nil, nil, err
+		}
 		// Binary files have no text to return: readLocalFile would hand back a
 		// base64 data URL (PDF, images, ...) or an empty string (Office, archives),
 		// so the model would burn its context on bytes it cannot read.
@@ -1120,11 +1154,11 @@ func (a *App) executeFileTool(name, arguments string, delivery pdfDelivery) (any
 			}
 			if delivery == pdfAttach {
 				// Falls through to the text layer when the file is too large to send.
-				if pdfResult, pdfErr := readPdfToolResult(target, path); pdfErr == nil {
+				if pdfResult, pdfErr := readPdfToolResult(target, path, pages); pdfErr == nil {
 					return pdfResult, nil, nil
 				}
 			}
-			text, textErr := extractPdfToolText(target, path)
+			text, textErr := extractPdfToolText(target, path, pages)
 			if textErr != nil {
 				return nil, nil, textErr
 			}

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	pdfsplit "github.com/takeshy/minipdfsplit"
 )
 
 type chatRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -281,17 +285,26 @@ func TestAIReadFileAttachesPdfWhenSupported(t *testing.T) {
 	}
 }
 
-// buildTextPDF writes a minimal single-page PDF whose content stream holds WinAnsi
-// text, so extractPdfToolText has a real text layer to pull from.
-func buildTextPDF(t *testing.T, body string) []byte {
+// buildTextPDF writes a minimal PDF with one page per body whose content stream
+// holds WinAnsi text, so extractPdfToolText has a real text layer to pull from.
+func buildTextPDF(t *testing.T, bodies ...string) []byte {
 	t.Helper()
-	content := fmt.Sprintf("BT /FA 12 Tf 10 80 Td (%s) Tj ET", body)
+	// Objects: 1 catalog, 2 pages, 3 font, then a page + content pair per body.
+	kids := make([]string, 0, len(bodies))
+	for i := range bodies {
+		kids = append(kids, fmt.Sprintf("%d 0 R", 4+2*i))
+	}
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] >>",
-		"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /FA 5 0 R >> >> >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d /MediaBox [0 0 100 100] >>", strings.Join(kids, " "), len(bodies)),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+	}
+	for i, body := range bodies {
+		content := fmt.Sprintf("BT /FA 12 Tf 10 80 Td (%s) Tj ET", body)
+		objects = append(objects,
+			fmt.Sprintf("<< /Type /Page /Parent 2 0 R /Contents %d 0 R /Resources << /Font << /FA 3 0 R >> >> >>", 5+2*i),
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		)
 	}
 	var b strings.Builder
 	b.WriteString("%PDF-1.4\n%test\n")
@@ -334,6 +347,93 @@ func TestAIReadFileExtractsPdfTextWithoutDocumentPart(t *testing.T) {
 	}
 	if len(toolResultAttachments(result)) != 0 {
 		t.Fatal("the extract-text path must not attach a document")
+	}
+}
+
+// startPage and endPage narrow a PDF read to a page range: the text path keeps only
+// those pages, the attach path sends one excerpt holding just those pages, and a
+// range makes a PDF that is too large to send whole readable a few pages at a time.
+func TestAIReadFilePageRange(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "book.pdf"), buildTextPDF(t, "page one", "page two", "page three", "page four"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.workspaceState = testWorkspaceState(t, workspace)
+
+	value, _, err := app.executeFileTool("read_note", `{"path":"book.pdf","startPage":2,"endPage":3}`, pdfExtractText)
+	if err != nil {
+		t.Fatalf("ranged text extraction failed: %v", err)
+	}
+	content := value.(*LocalFileResult).Content
+	for _, want := range []string{"[Page 2]\npage two", "[Page 3]\npage three"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("ranged text is missing %q: %q", want, content)
+		}
+	}
+	for _, unwanted := range []string{"page one", "page four"} {
+		if strings.Contains(content, unwanted) {
+			t.Fatalf("ranged text leaked a page outside the range: %q", content)
+		}
+	}
+
+	// An open-ended range runs to the last page; a quoted number is still a number.
+	value, _, err = app.executeFileTool("read_file", `{"path":"book.pdf","startPage":"4"}`, pdfExtractText)
+	if err != nil || strings.Contains(value.(*LocalFileResult).Content, "page three") || !strings.Contains(value.(*LocalFileResult).Content, "page four") {
+		t.Fatalf("open-ended range regressed: %#v, %v", value, err)
+	}
+	// endPage past the last page is clamped rather than rejected.
+	value, _, err = app.executeFileTool("read_file", `{"path":"book.pdf","startPage":3,"endPage":99}`, pdfExtractText)
+	if err != nil || !strings.Contains(value.(*LocalFileResult).Content, "page four") {
+		t.Fatalf("clamped endPage regressed: %#v, %v", value, err)
+	}
+
+	for _, arguments := range []string{
+		`{"path":"book.pdf","startPage":0}`,
+		`{"path":"book.pdf","startPage":1.5}`,
+		`{"path":"book.pdf","endPage":"two"}`,
+		`{"path":"book.pdf","startPage":3,"endPage":2}`,
+	} {
+		if _, _, err := app.executeFileTool("read_file", arguments, pdfExtractText); err == nil {
+			t.Fatalf("invalid page range %s was accepted", arguments)
+		}
+	}
+	_, _, err = app.executeFileTool("read_file", `{"path":"book.pdf","startPage":5}`, pdfExtractText)
+	if err == nil || !strings.Contains(err.Error(), "4 pages") {
+		t.Fatalf("startPage past the end must say how many pages there are: %v", err)
+	}
+
+	value, _, err = app.executeFileTool("read_file", `{"path":"book.pdf","startPage":2,"endPage":3}`, pdfAttach)
+	if err != nil {
+		t.Fatalf("ranged attach failed: %v", err)
+	}
+	result, ok := value.(*PdfToolResult)
+	if !ok || result.StartPage != 2 || result.EndPage != 3 {
+		t.Fatalf("expected a PdfToolResult for pages 2-3, got %#v", value)
+	}
+	attachments := toolResultAttachments(result)
+	if len(attachments) != 1 || attachments[0].Name != "book (pages 2-3).pdf" || attachments[0].MimeType != "application/pdf" {
+		t.Fatalf("expected one excerpt attachment, got %#v", attachments)
+	}
+	excerpt, err := base64.StdEncoding.DecodeString(attachments[0].Data)
+	if err != nil || !bytes.HasPrefix(excerpt, []byte("%PDF-")) {
+		t.Fatalf("attachment is not a PDF: %v", err)
+	}
+	excerptPages, err := pdfsplit.ExtractText(excerpt)
+	if err != nil || len(excerptPages) != 2 || !strings.Contains(excerptPages[0].Text, "page two") || !strings.Contains(excerptPages[1].Text, "page three") {
+		t.Fatalf("excerpt does not hold pages 2-3 in order: %#v, %v", excerptPages, err)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"startPage":2`) || !strings.Contains(string(encoded), `"endPage":3`) {
+		t.Fatalf("tool result JSON does not report the page range: %s", encoded)
+	}
+	// A whole-file read reports no range and keeps a single attachment.
+	value, _, err = app.executeFileTool("read_file", `{"path":"book.pdf"}`, pdfAttach)
+	if err != nil || value.(*PdfToolResult).StartPage != 0 || len(toolResultAttachments(value)) != 1 || toolResultAttachments(value)[0].Name != "book.pdf" {
+		t.Fatalf("whole-file attach regressed: %#v, %v", value, err)
 	}
 }
 
@@ -417,14 +517,18 @@ func TestFilesOffKeepsRegisteredFrontendTools(t *testing.T) {
 
 func TestToolCallDetailNamesTheCall(t *testing.T) {
 	cases := map[string]string{
-		`{"query":"退職金 規程"}`:                     "退職金 規程",
-		`{"path":"Notes/a.md"}`:                  "Notes/a.md",
-		`{"limit":5,"query":"needle"}`:           "needle",
-		`{"name":"index.md","content":"# Demo"}`: "index.md",
-		`{}`:                                     "",
-		"":                                       "",
-		"not json":                               "",
-		`{"content":"no identifying argument"}`:  "",
+		`{"query":"退職金 規程"}`:                            "退職金 規程",
+		`{"path":"Notes/a.md"}`:                         "Notes/a.md",
+		`{"limit":5,"query":"needle"}`:                  "needle",
+		`{"name":"index.md","content":"# Demo"}`:        "index.md",
+		`{"path":"book.pdf","startPage":2,"endPage":3}`: "book.pdf (pages 2-3)",
+		`{"path":"book.pdf","startPage":"4"}`:           "book.pdf (pages 4-end)",
+		`{"path":"book.pdf","endPage":2}`:               "book.pdf (pages 1-2)",
+		`{"path":"book.pdf","startPage":0}`:             "book.pdf",
+		`{}`:                                            "",
+		"":                                              "",
+		"not json":                                      "",
+		`{"content":"no identifying argument"}`:         "",
 	}
 	for arguments, want := range cases {
 		if got := toolCallDetail(arguments); got != want {
