@@ -82,7 +82,7 @@ const suggestedProperties: Partial<Record<WorkflowNodeType, string[]>> = {
     "savePathTo",
   ],
   "file-save": ["source", "path", "confirm", "savePathTo"],
-  mcp: ["url", "tool", "args", "headers", "saveTo", "saveUiTo"],
+  mcp: ["confirm", "url", "tool", "args", "headers", "saveTo", "saveUiTo"],
   "gemihub-command": ["command", "path", "text", "metadata", "saveTo"],
   sleep: ["duration"],
   script: ["code", "timeout", "saveTo"],
@@ -298,7 +298,12 @@ export function NodeEditorModal(
                     <X size={10} />
                   </button>
                 </span>
-                {wide
+                {key === "vaultTools" || key === "confirm" ? (
+                  <select value={String(draft[key] ?? "")} onChange={event => setDraft(current => ({ ...current, [key]: event.target.value }))}>
+                    <option value="">default</option>
+                    {(key === "vaultTools" ? ["all", "noSearch", "readOnly", "none"] : ["true", "false"]).map(value => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                ) : wide
                   ? (
                     <textarea
                       rows={5}

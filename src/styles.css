@@ -14659,3 +14659,7 @@ body.resizing-modal {
     grid-template-columns: 1fr;
   }
 }
+
+.mcp-approval-dialog { max-width: 90vw; width: 640px; background: var(--bg-primary, #222); color: inherit; }
+.mcp-approval-dialog pre { max-height: 45vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mcp-approval-dialog button { margin: 8px; }

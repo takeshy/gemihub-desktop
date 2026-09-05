@@ -29,3 +29,10 @@ MCP serverのOAuth接続は、Vertex AIの認証と同様にPKCE付きの認可�
 # 関連機能
 
 [AI Chat](/features/ai-chat.md)、[Workflow](/features/workflows.md)（`mcp` nodeからも同じApp UIを表示可能）、[Plugins](/features/plugins.md)。
+
+
+## MCP permissions and read-only tools
+
+MCP tool calls require approval by default. The dialog shows the server name, tool name and execution arguments. Choose Allow once, Always allow this tool, or Deny; dismissing the dialog denies execution. Server settings provide an Always approve option (off by default) and a removable allowed-tool list. Workflow `command` and `mcp` nodes can use `confirm: "false"` to skip MCP approval for that node, including automatic runs. Later MCP App interactions follow the server settings again. Read-only mode allows built-in reading, listing and searching, and blocks built-in writes (including timeline append). External MCP and skill/workflow operations retain their own permissions. Connection tests disable editing while running and display errors for correction.
+
+For stdio servers, the Command field accepts a full pasted command. Quote paths or arguments containing spaces. The Arguments field accepts whitespace-separated arguments with single/double quotes; backslashes in Windows paths are preserved, and doubled quotes represent literal quote characters. Inline command arguments precede the separate Arguments field. No shell is invoked. Missing executables fail immediately, failed connections are closed, and request timeout errors include captured stderr.

@@ -1,3 +1,4 @@
+import { requireMcpApproval } from "./approval";
 import { mcpStdioClose, mcpStdioRequest, mcpStdioStart, type ChatToolDefinition } from "../lib/wailsBackend";
 import type { MCPServerConfig } from "../llm/settings";
 import { MCP_APPS_CLIENT_CAPABILITIES, safeMcpName, type McpToolInfo } from "./httpClient";
@@ -20,7 +21,11 @@ export class McpStdioClient {
       let initialized = false, lastError: unknown;
       for (const protocolVersion of ["2025-03-26", "2024-11-05"]) {
         try { await mcpStdioRequest(this.sessionID, "initialize", { protocolVersion, capabilities: MCP_APPS_CLIENT_CAPABILITIES, clientInfo: { name: "gemihub-desktop", version: "0.1.0" } }); initialized = true; break; }
-        catch (error) { lastError = error; }
+        catch (error) {
+          lastError = error;
+          // Retry negotiation only for an explicit protocol error, never a failed process.
+          if (!error || typeof error !== "object" || !("code" in error) || ![-32601, -32602, -32022].includes(Number(error.code))) throw error;
+        }
       }
       if (!initialized) throw lastError instanceof Error ? lastError : new Error("MCP initialize failed.");
       await mcpStdioRequest(this.sessionID, "notifications/initialized", {});
@@ -40,7 +45,8 @@ export class McpStdioClient {
     return Array.isArray(result.tools) ? result.tools.filter((tool): tool is McpToolInfo => !!tool && typeof tool === "object" && typeof (tool as McpToolInfo).name === "string") : [];
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async callTool(name: string, args: Record<string, unknown>, skipApproval = false): Promise<Record<string, unknown>> {
+    if (!skipApproval) await requireMcpApproval(this.server, name, args);
     return await this.send("tools/call", { name, arguments: args });
   }
 

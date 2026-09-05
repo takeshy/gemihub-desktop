@@ -25,7 +25,7 @@ export const localLLMFrameworks: Record<
   opencode: { label: "OpenCode (Local)", endpoint: "http://127.0.0.1:4096" },
 };
 export type CLIType = "codex" | "antigravity";
-export type FileToolMode = "all" | "noSearch" | "none";
+export type FileToolMode = "all" | "noSearch" | "readOnly" | "none";
 export type CodexReasoningEffort =
   | "minimal"
   | "low"
@@ -63,6 +63,8 @@ export interface MCPServerConfig {
   pluginData?: string;
   framing: "content-length" | "newline";
   enabled: boolean;
+  autoApprove?: boolean;
+  allowedTools?: string[];
   toolHints: string[];
   verified: boolean;
   oauth: boolean;
@@ -715,6 +717,8 @@ export function loadChatSettings(
           const verified = server.verified === true ||
             (server.verified === undefined && toolHints.length > 0);
           return {
+            autoApprove: server.autoApprove === true,
+            allowedTools: Array.isArray(server.allowedTools) ? server.allowedTools.filter((tool): tool is string => typeof tool === "string") : [],
             id: server.id || `mcp-${crypto.randomUUID()}`,
             name: server.name || "MCP server",
             transport: server.transport === "stdio" ? "stdio" : "http",

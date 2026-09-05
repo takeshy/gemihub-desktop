@@ -31,13 +31,13 @@ type mcpStdioSession struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
-	stderr  bytes.Buffer
+	stderr  mcpStderrBuffer
 	framing string
 	nextID  int64
 }
 
 func (a *App) MCPStdioStart(request MCPStdioStartRequest) (string, error) {
-	command := strings.TrimSpace(request.Command)
+	command, args := normalizeMCPCommand(request.Command, request.Args)
 	if command == "" {
 		return "", fmt.Errorf("MCP stdio command is required")
 	}
@@ -69,9 +69,9 @@ func (a *App) MCPStdioStart(request MCPStdioStartRequest) (string, error) {
 		resolved, err = exec.LookPath(command)
 	}
 	if err != nil {
-		return "", fmt.Errorf("MCP stdio command is invalid or not found: %s", command)
+		return "", fmt.Errorf("MCP stdio command is invalid or not found: %s: %w", command, err)
 	}
-	cmd := exec.Command(resolved, request.Args...)
+	cmd := exec.Command(resolved, args...)
 	cmd.Dir = a.GetDirectoryBase()
 	if request.CWD != "" {
 		resolvedCWD, resolveErr := filepath.Abs(request.CWD)
@@ -120,7 +120,9 @@ func (a *App) MCPStdioStart(request MCPStdioStartRequest) (string, error) {
 		session.framing = "content-length"
 	}
 	if err := cmd.Start(); err != nil {
-		return "", err
+		_ = stdin.Close()
+		_ = stdout.Close()
+		return "", fmt.Errorf("MCP stdio failed to start %s: %w", command, err)
 	}
 	sessionID := fmt.Sprintf("mcp-stdio-%d", time.Now().UnixNano())
 	a.mcpStdioMu.Lock()
@@ -150,7 +152,7 @@ func (a *App) MCPStdioRequest(sessionID, method, paramsJSON string) (string, err
 		return response.value, response.err
 	case <-time.After(2 * time.Minute):
 		a.MCPStdioClose(sessionID)
-		return "", fmt.Errorf("MCP stdio request timed out: %s", method)
+		return "", fmt.Errorf("MCP stdio request timed out: %s; stderr: %s", method, strings.TrimSpace(session.stderr.String()))
 	}
 }
 
@@ -275,7 +277,7 @@ func (a *App) MCPStdioClose(sessionID string) bool {
 	if session.cmd.Process != nil {
 		_ = session.cmd.Process.Kill()
 	}
-	_, _ = session.cmd.Process.Wait()
+	_ = session.cmd.Wait()
 	return true
 }
 

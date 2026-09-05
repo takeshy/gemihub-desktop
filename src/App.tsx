@@ -1,3 +1,4 @@
+import { joinCommandLine, splitCommandLine } from "./mcp/commandLine";
 import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
@@ -1094,6 +1095,7 @@ export default function App() {
     | "plugins"
   >("general");
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
+  useEffect(() => { const update = () => setChatSettings(loadChatSettings()); window.addEventListener("mcp-approval-settings-changed", update); return () => window.removeEventListener("mcp-approval-settings-changed", update); }, []);
   const [historyEncryption, setHistoryEncryption] = useState(
     historyEncryptionPreferences,
   );
@@ -4182,6 +4184,9 @@ export default function App() {
                       <div className="mcp-server-list">
                         {chatSettings.mcpServers.map((server) => (
                           <article key={server.id}>
+                            <fieldset disabled={mcpStatus[server.id] === "Connecting…"}>
+                            <label><input type="checkbox" checked={server.autoApprove ?? false} onChange={event => setChatSettings(current => ({ ...current, mcpServers: current.mcpServers.map(item => item.id === server.id ? { ...item, autoApprove: event.target.checked } : item) }))} />Always approve / 常に承認（確認を省略）</label>
+                            <div>Allowed tools / 許可リスト{(server.allowedTools ?? []).map(tool => <div key={tool}>{tool}<button type="button" onClick={() => setChatSettings(current => ({ ...current, mcpServers: current.mcpServers.map(item => item.id === server.id ? { ...item, allowedTools: item.allowedTools?.filter(name => name !== tool) } : item) }))}>Remove / 削除</button></div>)}</div>
                             <div className="slash-command-heading">
                               <strong>{server.name || "MCP server"}</strong>
                               <div>
@@ -4565,10 +4570,10 @@ export default function App() {
                                     />
                                   </label>
                                   <label className="settings-field">
-                                    <span>Arguments (one per line)</span>
+                                    <span>Arguments (quote paths containing spaces)</span>
                                     <textarea
                                       rows={3}
-                                      value={server.args.join("\n")}
+                                      value={joinCommandLine(server.args)}
                                       onChange={(event) =>
                                         setChatSettings((current) => ({
                                           ...current,
@@ -4578,9 +4583,7 @@ export default function App() {
                                             item.id === server.id
                                               ? {
                                                 ...item,
-                                                args: event.target.value.split(
-                                                  /\r?\n/,
-                                                ).filter(Boolean),
+                                                args: splitCommandLine(event.target.value),
                                                 verified: false,
                                                 enabled: false,
                                                 toolHints: [],
@@ -4857,6 +4860,7 @@ export default function App() {
                                 {mcpStatus[server.id]}
                               </div>
                             )}
+                          </fieldset>
                           </article>
                         ))}
                       </div>

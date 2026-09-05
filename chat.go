@@ -382,14 +382,14 @@ func fileToolDefinitionsForMode(mode string) []map[string]any {
 	if mode == "none" {
 		return nil
 	}
-	if mode != "noSearch" {
+	if mode != "noSearch" && mode != "readOnly" {
 		return fileToolDefinitions
 	}
 	filtered := make([]map[string]any, 0, len(fileToolDefinitions)-2)
 	for _, definition := range fileToolDefinitions {
 		function, _ := definition["function"].(map[string]any)
 		name, _ := function["name"].(string)
-		if !discoveryToolNames[name] {
+		if builtinToolAllowed(mode, name) {
 			filtered = append(filtered, definition)
 		}
 	}
@@ -402,6 +402,9 @@ var discoveryToolNames = map[string]bool{"search_files": true, "list_files": tru
 // advertise them: registering frontend tools must not reopen Workspace access
 // the user turned off, even if the model calls a tool it was never offered.
 func builtinToolAllowed(mode, name string) bool {
+	if mode == "readOnly" {
+		return name == "read_file" || name == "list_files" || name == "search_files" || name == "read_timeline"
+	}
 	if mode == "none" {
 		return false
 	}
@@ -411,7 +414,13 @@ func builtinToolAllowed(mode, name string) bool {
 func chatToolDefinitions(request ChatRequest) []map[string]any {
 	var definitions []map[string]any
 	if requestFileToolMode(request) != "none" {
-		definitions = append(definitions, timelineToolDefinitions...)
+		for _, definition := range timelineToolDefinitions {
+			function, _ := definition["function"].(map[string]any)
+			name, _ := function["name"].(string)
+			if builtinToolAllowed(requestFileToolMode(request), name) {
+				definitions = append(definitions, definition)
+			}
+		}
 		definitions = append(definitions, fileToolDefinitionsForMode(requestFileToolMode(request))...)
 	}
 	for _, tool := range request.CustomTools {

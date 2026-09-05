@@ -1,3 +1,4 @@
+import { requireMcpApproval } from "./approval";
 import {
   type ChatToolDefinition,
   type ExternalHTTPResponse,
@@ -19,6 +20,8 @@ export interface McpHttpServerConfig {
   headers?: Record<string, string>;
   enabled: boolean;
   oauth?: boolean;
+  autoApprove?: boolean;
+  allowedTools?: string[];
 }
 
 export interface McpToolInfo {
@@ -256,7 +259,7 @@ export class McpHttpClient {
   async initialize(): Promise<void> {
     if (this.protocolMode !== "unknown") return;
     if (!this.negotiationPromise) {
-      this.negotiationPromise = this.negotiateProtocol().finally(() => {
+      this.negotiationPromise = this.negotiateProtocol().catch(async error => { await this.close().catch(() => {}); throw error; }).finally(() => {
         this.negotiationPromise = null;
       });
     }
@@ -297,7 +300,9 @@ export class McpHttpClient {
   async callTool(
     name: string,
     args: Record<string, unknown>,
+    skipApproval = false,
   ): Promise<Record<string, unknown>> {
+    if (!skipApproval) await requireMcpApproval(this.server, name, args);
     return await this.send("tools/call", { name, arguments: args });
   }
 

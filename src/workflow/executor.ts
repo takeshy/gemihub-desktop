@@ -1,3 +1,4 @@
+import { requireMcpApproval } from "../mcp/approval";
 import {
   applyPendingFileAction,
   chat,
@@ -468,6 +469,7 @@ interface WorkflowMcpClient {
   callTool: (
     name: string,
     args: Record<string, unknown>,
+    skipApproval?: boolean,
   ) => Promise<Record<string, unknown>>;
   readResource: (
     uri: string,
@@ -530,6 +532,7 @@ async function connectWorkflowMcp(
     send: (
       method: string,
       params: Record<string, unknown>,
+      skipApproval?: boolean,
     ) => Promise<Record<string, unknown>>;
     close: () => Promise<void>;
   }
@@ -591,7 +594,9 @@ async function connectWorkflowMcp(
   const send = async (
     method: string,
     params: Record<string, unknown>,
+    skipApproval = false,
   ): Promise<Record<string, unknown>> => {
+    if (method === "tools/call" && !skipApproval) await requireMcpApproval({ name: url, transport: "http", url, headers: customHeaders, enabled: true }, String(params.name), (params.arguments || {}) as Record<string, unknown>);
     const response = await workflowHTTPRequest({
       url,
       method: "POST",
@@ -612,10 +617,11 @@ async function callMcpTool(
   tool: string,
   args: Record<string, unknown>,
   customHeaders: Record<string, string>,
+  skipApproval = false,
 ): Promise<McpCallOutput> {
   const { send, close } = await connectWorkflowMcp(url, customHeaders);
   try {
-    const result = await send("tools/call", { name: tool, arguments: args });
+    const result = await send("tools/call", { name: tool, arguments: args }, skipApproval);
     const value = mcpResultValue(result);
     const content = Array.isArray(result.content)
       ? result.content as Array<
@@ -1207,6 +1213,7 @@ async function executeNode(
       const fileMode =
         (imageGenerationModel
           ? "none"
+          : node.properties.vaultTools === "readOnly" ? "readOnly"
           : node.properties.vaultTools === "noSearch"
           ? "noSearch"
           : node.properties.vaultTools === "none"
@@ -1398,7 +1405,7 @@ async function executeNode(
             );
             return;
           }
-          void client.callTool(binding.remoteName, request.arguments).then(
+          void client.callTool(binding.remoteName, request.arguments, node.properties.confirm === "false").then(
             async (toolResult) => {
               const app = await mcpAppFromResult(
                 client,
@@ -2066,7 +2073,7 @@ async function executeNode(
           string
         >
         : {};
-      const result = await callMcpTool(url, tool, args, headers);
+      const result = await callMcpTool(url, tool, args, headers, node.properties.confirm === "false");
       save(variables, node.properties.saveTo, result.value);
       const mcpAppInfo = result.app
         ? {

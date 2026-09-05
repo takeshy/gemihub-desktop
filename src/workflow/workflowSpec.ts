@@ -32,7 +32,7 @@ Supported nodes:
 - variable: required name; optional value. Omit value only for input supplied by a parent workflow, skill, hotkey, or other caller. It does not show an input dialog and becomes empty when a standalone run has no caller value.
 - set: required name and value (supports simple arithmetic; _clipboard copies the result)
 - if / while: condition using ==, !=, <, >, <=, >=, contains; required trueNext and optional falseNext
-- command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/none), confirm (true by default; reviews AI file edits in a diff before they are written, and headless runs require confirm: false), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo. When using saveImageTo, model must explicitly name a configured image-generation model (for example gemini-3.1-flash-image-preview); a text model cannot create image data.
+- command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/readOnly/none), confirm (true by default; controls MCP approval and reviews AI file edits in a diff before they are written, and headless runs require confirm: false), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo. When using saveImageTo, model must explicitly name a configured image-generation model (for example gemini-3.1-flash-image-preview); a text model cannot create image data.
 - gemihub-command: command (encrypt, duplicate, convert-to-html, rename), path, optional text, metadata JSON, saveTo. PDF conversion is unavailable; publish/unpublish require Web.
 - http: reserved for APIs, webhooks, explicit file downloads/binary transfer, or requests that must inspect status/headers; url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers JSON; body; saveTo; saveStatus; throwOnError. Binary input/output uses FileExplorerData. Do not use http to read an ordinary public webpage for summarization, translation, extraction, or infographic generation; use command with __websearch__ instead.
 - json: source (bare variable name), saveTo
@@ -50,7 +50,7 @@ Supported nodes:
 - rag-sync: ragSetting, saveTo
 - file-explorer: mode (select/create), direct path or default, title, extensions, saveTo (FileExplorerData), savePathTo
 - file-save: source FileExplorerData, path, optional confirm, savePathTo. The source extension is added when path has none. Generated images from saveImageTo can be saved here.
-- mcp: url, tool, args JSON, headers JSON, saveTo, saveUiTo; MCP App UI resources open in a sandboxed modal
+- mcp: confirm (true by default; false skips MCP approval for this node), url, tool, args JSON, headers JSON, saveTo, saveUiTo; MCP App UI resources open in a sandboxed modal
 - sleep: duration in milliseconds
 - script: code, timeout, saveTo. Code must return a cloneable value.
 - shell: command, args JSON array, cwd, env JSON object, timeout, throwOnError, saveTo, saveStderrTo, saveExitCodeTo
@@ -62,6 +62,8 @@ For skill workflows, every {{variable}} that is never initialized by variable/se
 For a standalone interactive workflow, acquire every required user value with prompt-value, prompt-file, prompt-selection, file-explorer, or dialog before using it. Do not use an uninitialized variable node as a substitute for a user prompt. Use variable without value only when the request explicitly says the workflow is called with that input, or when authoring a skill/child workflow whose caller supplies it.
 
 Interpret "infographic" as a readable, visually structured Markdown or HTML document by default. Use headings, short sections, emoji/icons, callouts, cards, tables, timelines, and restrained colors as appropriate. Do not assume it means a bitmap image. Use saveImageTo and an image-generation model only when the user explicitly asks for an image, illustration, PNG, JPEG, or other raster output. For HTML infographic output, have a command return the complete HTML to saveTo and then write it with a note node or another appropriate text-file output.
+
+readOnly permits built-in file/timeline reading, listing and searching, and blocks writes. External MCP and skill/workflow tools use their own permissions. Saved MCP server auto-approval and allowed-tool lists apply unless confirm: false bypasses approval for that node.
 
 Prefer Workspace file nodes (note, note-read, note-search, note-list) and never call them vault operations in names or descriptions. Use confirm: true for writes. Keep the graph connected and finite; only while nodes may be loop targets. Always specify saveTo for output-producing nodes. Use one task per command node and add a comment property when its purpose is not obvious.
 
@@ -205,7 +207,7 @@ const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
   while:
     "- while: required condition and trueNext; optional falseNext is the exit. Only while nodes may be loop targets.",
   command:
-    "- command: prompt; optional model, ragSetting (__websearch__/__none__/configured name), vaultTools (all/noSearch/none), confirm (true by default; AI file edits are reviewed in a diff, so headless runs need confirm: false), mcpServers, enableThinking, attachments, saveTo, saveImageTo. saveImageTo requires an explicitly selected image-generation model.",
+    "- command: prompt; optional model, ragSetting (__websearch__/__none__/configured name), vaultTools (all/noSearch/readOnly/none), confirm (true by default; controls MCP approval and reviews AI file edits in a diff, so headless runs need confirm: false), mcpServers, enableThinking, attachments, saveTo, saveImageTo. saveImageTo requires an explicitly selected image-generation model.",
   "gemihub-command":
     "- gemihub-command: command encrypt/duplicate/convert-to-html/rename and path; optional text, metadata JSON, saveTo. convert-to-pdf is unavailable; publish/unpublish require the Web service.",
   http:
@@ -243,7 +245,7 @@ const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
   "file-save":
     "- file-save: source FileExplorerData and path; optional confirm and savePathTo. Adds the source extension when needed.",
   mcp:
-    "- mcp: HTTP url and tool; optional args JSON, headers JSON, saveTo, saveUiTo. MCP App UI can be reopened from history.",
+    "- mcp: confirm (true by default; false skips MCP approval for this node), HTTP url and tool; optional args JSON, headers JSON, saveTo, saveUiTo. MCP App UI can be reopened from history.",
   sleep: "- sleep: duration in milliseconds.",
   script:
     "- script: code; optional timeout and saveTo. Runs without DOM, network or storage.",

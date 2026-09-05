@@ -257,7 +257,7 @@ export interface ChatRequest {
   systemPrompt: string;
   messages: ChatMessage[];
   enableFileTools: boolean;
-  fileToolMode: "all" | "noSearch" | "none";
+  fileToolMode: "all" | "noSearch" | "readOnly" | "none";
   cliType: "codex" | "antigravity";
   cliPath: string;
   cliSessionId: string;
@@ -1416,9 +1416,9 @@ export async function mcpStdioRequest(
   if (!api) throw new Error("MCP stdio requires the desktop app.");
   const response = JSON.parse(
     await api.MCPStdioRequest(sessionID, method, JSON.stringify(params)),
-  ) as { result?: Record<string, unknown>; error?: { message?: string } };
+  ) as { result?: Record<string, unknown>; error?: { code?: number; message?: string } };
   if (response.error) {
-    throw new Error(response.error.message || `MCP ${method} failed.`);
+    throw Object.assign(new Error(response.error.message || `MCP ${method} failed.`), { code: response.error.code });
   }
   return response.result ?? {};
 }

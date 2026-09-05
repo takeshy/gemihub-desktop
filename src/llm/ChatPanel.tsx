@@ -2932,7 +2932,7 @@ export function ChatPanel({
             </button>
             {toolMenuOpen && (
               <div className="chat-tool-menu">
-                {(["all", "noSearch", "none"] as FileToolMode[]).map((mode) => (
+                {(["all", "noSearch", "readOnly", "none"] as FileToolMode[]).map((mode) => (
                   <button
                     type="button"
                     className={settings.fileToolMode === mode ? "selected" : ""}
@@ -2947,7 +2947,7 @@ export function ChatPanel({
                   >
                     {mode === "all"
                       ? "Workspace: all"
-                      : mode === "noSearch"
+                      : mode === "readOnly" ? "Read only / 読み取り専用" : mode === "noSearch"
                       ? "Workspace: no discovery"
                       : "Workspace: off"}
                   </button>
