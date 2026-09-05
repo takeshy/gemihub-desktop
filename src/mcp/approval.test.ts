@@ -5,13 +5,16 @@ import { defaultChatSettings, loadChatSettings, saveChatSettings, type MCPServer
 Deno.test("MCP approval supports once, remember, revoke, deny and changed connection", async () => {
   const previous = Object.fromEntries(["localStorage", "document", "window"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values = new Map<string, string>();
-  let choice = "Allow once";
+  let choice = "once";
   let prompts = 0;
   class Element {
-    textContent = ""; children: Element[] = []; onclick?: () => void;
+    textContent = ""; className = ""; type = ""; dataset: Record<string, string> = {}; children: Element[] = []; onclick?: () => void;
     append(...elements: Element[]) { this.children.push(...elements); }
     remove() {}
-    showModal() { prompts++; this.children.find(child => child.textContent.startsWith(choice))?.onclick?.(); }
+    find(predicate: (element: Element) => boolean): Element | undefined {
+      for (const child of this.children) { const found = predicate(child) ? child : child.find(predicate); if (found) return found; }
+    }
+    showModal() { prompts++; this.find(child => child.dataset.choice === choice)?.onclick?.(); }
   }
   Object.defineProperties(globalThis, {
     localStorage: { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) } },
@@ -24,13 +27,13 @@ Deno.test("MCP approval supports once, remember, revoke, deny and changed connec
     await requireMcpApproval(server, "read", {});
     await requireMcpApproval(server, "read", {});
     assertEquals(prompts, 2);
-    choice = "Always allow";
+    choice = "always";
     await requireMcpApproval(server, "read", {});
     assertEquals(loadChatSettings().mcpServers[0].allowedTools, ["read"]);
     await requireMcpApproval(server, "read", {});
     assertEquals(prompts, 3);
     const revoked = loadChatSettings(); revoked.mcpServers[0].allowedTools = []; saveChatSettings(revoked);
-    choice = "Deny";
+    choice = "deny";
     await assertRejects(() => requireMcpApproval(server, "read", {}), Error, "denied");
     const automatic = loadChatSettings(); automatic.mcpServers[0].autoApprove = true; saveChatSettings(automatic);
     await requireMcpApproval(server, "write", {});

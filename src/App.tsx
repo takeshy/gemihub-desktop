@@ -4185,8 +4185,6 @@ export default function App() {
                         {chatSettings.mcpServers.map((server) => (
                           <article key={server.id}>
                             <fieldset disabled={mcpStatus[server.id] === "Connecting…"}>
-                            <label><input type="checkbox" checked={server.autoApprove ?? false} onChange={event => setChatSettings(current => ({ ...current, mcpServers: current.mcpServers.map(item => item.id === server.id ? { ...item, autoApprove: event.target.checked } : item) }))} />Always approve / 常に承認（確認を省略）</label>
-                            <div>Allowed tools / 許可リスト{(server.allowedTools ?? []).map(tool => <div key={tool}>{tool}<button type="button" onClick={() => setChatSettings(current => ({ ...current, mcpServers: current.mcpServers.map(item => item.id === server.id ? { ...item, allowedTools: item.allowedTools?.filter(name => name !== tool) } : item) }))}>Remove / 削除</button></div>)}</div>
                             <div className="slash-command-heading">
                               <strong>{server.name || "MCP server"}</strong>
                               <div>
@@ -4860,6 +4858,70 @@ export default function App() {
                                 {mcpStatus[server.id]}
                               </div>
                             )}
+                            <section className="mcp-approval-settings">
+                              <strong>{tr("mcp.approvals")}</strong>
+                              <label className="settings-check">
+                                <input
+                                  type="checkbox"
+                                  checked={server.autoApprove ?? false}
+                                  onChange={(event) =>
+                                    setChatSettings((current) => ({
+                                      ...current,
+                                      mcpServers: current.mcpServers.map((
+                                        item,
+                                      ) =>
+                                        item.id === server.id
+                                          ? {
+                                            ...item,
+                                            autoApprove: event.target.checked,
+                                          }
+                                          : item
+                                      ),
+                                    }))}
+                                />{" "}
+                                {tr("mcp.autoApprove")}
+                              </label>
+                              <p>{tr("mcp.autoApproveHint")}</p>
+                              <div className="mcp-allowed-tools">
+                                <span>{tr("mcp.allowedTools")}</span>
+                                {(server.allowedTools ?? []).length === 0
+                                  ? <em>{tr("mcp.allowedToolsEmpty")}</em>
+                                  : (
+                                    <ul>
+                                      {(server.allowedTools ?? []).map((tool) => (
+                                        <li key={tool}>
+                                          <code>{tool}</code>
+                                          <button
+                                            type="button"
+                                            title={tr("mcp.removeTool")}
+                                            aria-label={`${tr("mcp.removeTool")}: ${tool}`}
+                                            onClick={() =>
+                                              setChatSettings((current) => ({
+                                                ...current,
+                                                mcpServers: current.mcpServers
+                                                  .map((item) =>
+                                                    item.id === server.id
+                                                      ? {
+                                                        ...item,
+                                                        allowedTools: (item
+                                                          .allowedTools ?? [])
+                                                          .filter((name) =>
+                                                            name !== tool
+                                                          ),
+                                                      }
+                                                      : item
+                                                  ),
+                                              }))}
+                                          >
+                                            <X size={12} />
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                              </div>
+                              <p>{tr("mcp.allowedToolsHint")}</p>
+                            </section>
                           </fieldset>
                           </article>
                         ))}

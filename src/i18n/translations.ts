@@ -43,6 +43,19 @@ export interface TranslationStrings {
   "settings.languageSystem": string;
   "settings.languageJapanese": string;
 
+  // MCP approvals
+  "mcp.approvals": string;
+  "mcp.autoApprove": string;
+  "mcp.autoApproveHint": string;
+  "mcp.allowedTools": string;
+  "mcp.allowedToolsHint": string;
+  "mcp.allowedToolsEmpty": string;
+  "mcp.removeTool": string;
+  "mcp.approval.title": string;
+  "mcp.approval.deny": string;
+  "mcp.approval.once": string;
+  "mcp.approval.always": string;
+
   // History
   "history.title": string;
   "history.checkpointsSuffix": string;
@@ -308,6 +321,20 @@ const en: TranslationStrings = {
   "settings.languageSystem": "System",
   "settings.languageJapanese": "Japanese",
 
+  "mcp.approvals": "Tool call approval",
+  "mcp.autoApprove": "Always approve (skip confirmation)",
+  "mcp.autoApproveHint":
+    "Every tool call from this server runs without asking.",
+  "mcp.allowedTools": "Allowed tools",
+  "mcp.allowedToolsHint":
+    "Tools approved with “Always allow” run without asking. Remove one to be asked again.",
+  "mcp.allowedToolsEmpty": "No tools are pre-approved.",
+  "mcp.removeTool": "Remove",
+  "mcp.approval.title": "Approve MCP tool call",
+  "mcp.approval.deny": "Deny",
+  "mcp.approval.once": "Allow once",
+  "mcp.approval.always": "Always allow this tool",
+
   "history.title": "History",
   "history.checkpointsSuffix": "memory checkpoints and saved file versions",
   "history.restore": "Restore",
@@ -571,6 +598,19 @@ const ja: TranslationStrings = {
   "settings.language": "言語",
   "settings.languageSystem": "システム",
   "settings.languageJapanese": "日本語",
+
+  "mcp.approvals": "ツール実行の承認",
+  "mcp.autoApprove": "常に承認（確認を省略）",
+  "mcp.autoApproveHint": "このサーバーのツール実行をすべて確認なしで許可します。",
+  "mcp.allowedTools": "許可済みツール",
+  "mcp.allowedToolsHint":
+    "「常に許可」したツールは確認なしで実行されます。削除すると再度確認されます。",
+  "mcp.allowedToolsEmpty": "許可済みのツールはありません。",
+  "mcp.removeTool": "削除",
+  "mcp.approval.title": "MCPツール実行の承認",
+  "mcp.approval.deny": "拒否",
+  "mcp.approval.once": "今回だけ許可",
+  "mcp.approval.always": "このツールを常に許可",
 
   "history.title": "履歴",
   "history.checkpointsSuffix": "件（メモリ履歴と永続ファイル履歴）",
