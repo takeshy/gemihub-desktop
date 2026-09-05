@@ -1,3 +1,28 @@
+# GemiHub Desktop v1.4.12
+
+## What's new
+
+- MCP tool calls now require approval by default. The dialog shows the
+  server, tool and arguments and offers Allow once, Always allow this tool,
+  or Deny. Each server's settings provide an Always approve option and a
+  removable allowed-tool list, and workflow `command` and `mcp` nodes can
+  set `confirm: "false"` to skip approval for that node.
+- Added a read-only mode that allows built-in reading, listing and
+  searching while blocking built-in writes.
+- stdio MCP servers accept a full pasted command line with quoted paths,
+  fail immediately when the executable is missing, and include captured
+  stderr in timeout errors.
+- Added GPT-6 with reasoning effort controls in the chat bar.
+- `read_file` and `read_note` accept a 1-based page range for PDFs so large
+  documents can be read a few pages at a time.
+
+## Fixes
+
+- Retired Gemini 2.x model ids stored in provider profiles are migrated to
+  the closest current model on load.
+- The MCP approval settings and dialog are localized and restyled instead of
+  showing bilingual hard-coded labels.
+
 # GemiHub Desktop v1.4.11
 
 ## What's new
