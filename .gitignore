@@ -39,3 +39,6 @@ Thumbs.db
 # Local tooling scratch
 .codex-downloads/
 .codex-store-assets/
+
+# Generated from docs/okf by `deno task generate:builtin-okf`
+src/generated/

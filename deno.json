@@ -7,7 +7,7 @@
     "desktop": "wails3 dev",
     "desktop:build": "wails3 task build",
     "check": "deno check src/main.tsx",
-    "test": "deno test --allow-read --allow-env src"
+    "test": "deno task generate:builtin-okf && deno test --allow-read --allow-env src"
   },
   "nodeModulesDir": "auto",
   "unstable": [
