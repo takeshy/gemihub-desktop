@@ -1,3 +1,20 @@
+# GemiHub Desktop v1.4.13
+
+## What's new
+
+- Added Chat voice input with browser speech recognition, OpenAI-compatible
+  transcription endpoints, and native whisper.cpp support. Connection presets
+  populate editable URLs and models, with optional API keys for local servers.
+- Added dedicated voice input settings with microphone and connection tests,
+  language selection, and shortcuts for trying OS dictation first.
+- Recording shows an input-level equalizer; audio preparation and transcription
+  show animated progress and elapsed time.
+- Added configurable silence detection (3 seconds by default) and trailing send
+  phrases such as `over`. Cancelled or failed transcription retains recordings
+  in the current Chat so they can be retried or combined with the next recording.
+- Added an assignable voice shortcut that works across the active app and opens
+  Chat when needed. It is disabled while settings are open.
+
 # GemiHub Desktop v1.4.12
 
 ## What's new
