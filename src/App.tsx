@@ -3090,7 +3090,7 @@ export default function App() {
                     className={settingsSection === "speech" ? "active" : ""}
                     onClick={() => setSettingsSection("speech")}
                   >
-                    <SpeechIcon size={16} /> 音声入力
+                    <SpeechIcon size={16} /> {tr("speech.title")}
                   </button>
                   {aiEnabled && (
                     <>
@@ -3459,6 +3459,7 @@ export default function App() {
                   {settingsSection === "speech" && (
                     <SpeechSettingsPanel
                       settings={chatSettings.speech}
+                      aiSettings={chatSettings}
                       onChange={(speech) => setChatSettings((current) => ({ ...current, speech }))}
                     />
                   )}

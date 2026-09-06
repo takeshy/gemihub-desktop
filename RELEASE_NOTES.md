@@ -1,3 +1,26 @@
+# GemiHub Desktop v1.4.14
+
+## What's new
+
+- Added Gemini 3.5 Transcribe voice input through the Gemini API and Vertex AI.
+- Gemini and OpenAI voice input reuse configured AI API keys even when Chat uses
+  another provider. A separate voice API key can be entered when no matching AI
+  key is configured.
+- Vertex AI voice input follows the existing AI project and sign-in settings,
+  without separate voice credentials or project configuration.
+
+## Fixes
+
+- Chat slash commands and skill workflows now use the active file only when it
+  is attached at send time, and retain that snapshot while the response runs.
+- Sending clears automatic file attachments without reattaching the same file
+  when its content updates.
+- Preserve Vertex AI settings when switching to another AI model profile.
+- Shorten the OS dictation guidance and compact its layout in voice settings.
+- Voice settings, recording status, controls, and app-generated errors now
+  follow the app language. Browser speech recognition uses Japanese or English
+  to match the app language instead of always recognizing Japanese.
+
 # GemiHub Desktop v1.4.13
 
 ## What's new

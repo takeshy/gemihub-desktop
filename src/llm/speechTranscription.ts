@@ -1,4 +1,5 @@
-import type { SpeechSettings } from "./settings";
+import { SpeechError } from "./speechErrors";
+import { isGeminiSpeech, type SpeechSettings } from "./settings";
 import type {
   ExternalHTTPRequest,
   ExternalHTTPResponse,
@@ -7,15 +8,24 @@ import type {
 export function transcriptionURL(
   baseUrl: string,
   endpointType: SpeechSettings["endpointType"] = "openai",
+  vertexProjectId = "",
 ): string {
+  if (endpointType === "vertex-transcribe") {
+    const project = vertexProjectId.trim();
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(project)) {
+      throw new SpeechError("speech.error.project");
+    }
+    return `https://aiplatform.googleapis.com/v1beta1/projects/${project}/locations/global/publishers/google/models/gemini-3.5-transcribe-preview:generateContent`;
+  }
+  if (endpointType === "gemini-transcribe") {
+    return "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent";
+  }
   const url = new URL(baseUrl.trim());
   if (
     !["http:", "https:"].includes(url.protocol) || url.username ||
     url.password || url.search || url.hash
   ) {
-    throw new Error(
-      "Base URLには認証情報・クエリ・フラグメントを含まないHTTP(S) URLを指定してください。",
-    );
+    throw new SpeechError("speech.error.url");
   }
   url.pathname = url.pathname.replace(/\/+$/, "") +
     (endpointType === "whisper-cpp" ? "/inference" : "/audio/transcriptions");
@@ -84,7 +94,7 @@ export async function recordingToWav(blob: Blob): Promise<Blob> {
   const decoder = new OfflineAudioContext(1, 1, 16000);
   const decoded = await decoder.decodeAudioData(await blob.arrayBuffer());
   if (!decoded.length || decoded.duration > 301) {
-    throw new Error("録音は5分以内にしてください。");
+    throw new SpeechError("speech.error.duration");
   }
   const renderer = new OfflineAudioContext(
     1,
@@ -106,9 +116,9 @@ export async function combineSpeechWavs(wavs: Blob[]): Promise<Blob> {
     (total, buffer) => total + buffer.byteLength - 44,
     0,
   );
-  if (!buffers.length || size <= 0) throw new Error("録音が空です。");
+  if (!buffers.length || size <= 0) throw new SpeechError("speech.error.empty");
   if (size > 16000 * 2 * 301) {
-    throw new Error("保持分を含めた録音は5分以内にしてください。");
+    throw new SpeechError("speech.error.combinedDuration");
   }
   const result = new Uint8Array(44 + size);
   result.set(new Uint8Array(buffers[0], 0, 44));
@@ -137,6 +147,75 @@ export async function recordingsToWav(
   return combineSpeechWavs(wavs);
 }
 
+export function validateSpeechSettings(settings: SpeechSettings): string {
+  const url = transcriptionURL(
+    settings.baseUrl,
+    settings.endpointType,
+    settings.vertexProjectId,
+  );
+  if (isGeminiSpeech(settings.endpointType)) {
+    if (
+      settings.endpointType === "gemini-transcribe" && !settings.apiKey.trim()
+    ) {
+      throw new SpeechError("speech.error.geminiKey");
+    }
+    const language = settings.language.trim();
+    if (
+      language && language.toLowerCase() !== "auto" &&
+      !/^[a-z]{2,3}(?:-[a-z0-9]+)*$/i.test(language)
+    ) {
+      throw new SpeechError("speech.error.language");
+    }
+  } else if (
+    settings.endpointType !== "whisper-cpp" && !settings.model.trim()
+  ) {
+    throw new SpeechError("speech.error.model");
+  }
+  return url;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(binary);
+}
+
+function geminiTranscript(result: unknown): string {
+  const invalid = () => new SpeechError("speech.error.invalid");
+  if (
+    !result || typeof result !== "object" || Array.isArray(result) ||
+    "error" in result
+  ) throw invalid();
+  if (
+    "promptFeedback" in result && result.promptFeedback &&
+    typeof result.promptFeedback === "object" &&
+    "blockReason" in result.promptFeedback
+  ) {
+    throw new SpeechError("speech.error.blocked");
+  }
+  if (
+    !("candidates" in result) || !Array.isArray(result.candidates) ||
+    !result.candidates.length
+  ) throw invalid();
+  const candidate = result.candidates[0];
+  if (!candidate || typeof candidate !== "object") throw invalid();
+  // Never insert/send a partial transcript (including a partial send command).
+  if (candidate.finishReason && candidate.finishReason !== "STOP") {
+    throw new SpeechError("speech.error.incomplete");
+  }
+  const parts = candidate.content?.parts;
+  if (parts === undefined && candidate.finishReason === "STOP") return "";
+  if (!Array.isArray(parts)) throw invalid();
+  return parts.map((part: unknown) => {
+    if (!part || typeof part !== "object") throw invalid();
+    if ("thought" in part && part.thought === true) return "";
+    if (!("text" in part) || typeof part.text !== "string") throw invalid();
+    return part.text;
+  }).join("").trim();
+}
+
 export async function transcribeSpeech(
   audio: Blob,
   settings: SpeechSettings,
@@ -144,66 +223,94 @@ export async function transcribeSpeech(
   signal: AbortSignal,
 ): Promise<string> {
   signal.throwIfAborted();
-  const url = transcriptionURL(settings.baseUrl, settings.endpointType);
+  const url = validateSpeechSettings(settings);
+  const google = isGeminiSpeech(settings.endpointType);
   const native = settings.endpointType === "whisper-cpp";
-  if (!native && !settings.model.trim()) {
-    throw new Error("STTのModelを設定してください。");
-  }
-  if (!audio.size) throw new Error("録音が空です。");
-  const form = new FormData();
-  form.append("file", audio, "recording.wav");
-  if (!native) form.append("model", settings.model.trim());
-  if (native) form.append("response_format", "json");
-  const language = settings.language.trim();
-  if (native) {
-    form.append(
-      "language",
-      language && language.toLowerCase() !== "auto" ? language : "auto",
-    );
-  } else if (language && language.toLowerCase() !== "auto") {
-    form.append("language", language);
-  }
-  const request = new Request(url, { method: "POST", body: form });
-  const bytes = new Uint8Array(await request.arrayBuffer());
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  }
-  const headers: Record<string, string> = {
-    "Content-Type": request.headers.get("content-type")!,
-  };
-  if (settings.apiKey.trim()) {
-    headers.Authorization = `Bearer ${settings.apiKey.trim()}`;
+  if (!audio.size) throw new SpeechError("speech.error.empty");
+  let headers: Record<string, string>;
+  let bodyBase64: string;
+  if (google) {
+    if (audio.size <= 44) throw new SpeechError("speech.error.empty");
+    if (audio.size > 44 + 301 * 16000 * 2) {
+      throw new SpeechError("speech.error.totalDuration");
+    }
+    const language = settings.language.trim();
+    const languageCodes = !language || language.toLowerCase() === "auto"
+      ? []
+      : [language === "ja" ? "ja-JP" : language === "en" ? "en-US" : language];
+    const body = JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [{
+          inlineData: {
+            mimeType: "audio/wav",
+            data: bytesToBase64(new Uint8Array(await audio.arrayBuffer())),
+          },
+        }],
+      }],
+      generationConfig: { audioTranscriptionConfig: { languageCodes } },
+    });
+    headers = { "Content-Type": "application/json" };
+    if (settings.endpointType === "gemini-transcribe") {
+      headers["x-goog-api-key"] = settings.apiKey.trim();
+    }
+    bodyBase64 = bytesToBase64(new TextEncoder().encode(body));
+  } else {
+    const form = new FormData();
+    form.append("file", audio, "recording.wav");
+    if (!native) form.append("model", settings.model.trim());
+    if (native) form.append("response_format", "json");
+    const language = settings.language.trim();
+    if (native) {
+      form.append(
+        "language",
+        language && language.toLowerCase() !== "auto" ? language : "auto",
+      );
+    } else if (language && language.toLowerCase() !== "auto") {
+      form.append("language", language);
+    }
+    const request = new Request(url, { method: "POST", body: form });
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    bodyBase64 = bytesToBase64(bytes);
+    headers = { "Content-Type": request.headers.get("content-type")! };
+    if (settings.apiKey.trim()) {
+      headers.Authorization = `Bearer ${settings.apiKey.trim()}`;
+    }
   }
   signal.throwIfAborted();
   const response = await transport({
     url,
     method: "POST",
     headers,
-    bodyBase64: btoa(binary),
+    bodyBase64,
   });
   signal.throwIfAborted();
   // Never echo server error bodies, which may contain credentials or recorded text.
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(
-      `STT HTTP ${response.status}: ${
-        response.status === 401 || response.status === 403
-          ? "API Keyとサーバーの認証設定を確認してください。"
-          : "Base URL・Model・サーバーの対応形式を確認してください。"
-      }`,
+    throw new SpeechError(
+      response.status === 401 || response.status === 403
+        ? google
+          ? settings.endpointType === "vertex-transcribe"
+            ? "speech.error.vertexAuth"
+            : "speech.error.geminiAuth"
+          : "speech.error.auth"
+        : "speech.error.server",
+      `STT HTTP ${response.status}: `,
     );
   }
+
   let result: unknown;
   try {
     result = JSON.parse(response.body);
   } catch {
-    throw new Error("STTの応答がJSONではありません。");
+    throw new SpeechError("speech.error.json");
   }
+  if (google) return geminiTranscript(result);
   if (
     !result || typeof result !== "object" || !("text" in result) ||
     typeof result.text !== "string"
   ) {
-    throw new Error("STTの応答にtextフィールドがありません。");
+    throw new SpeechError("speech.error.text");
   }
   const text = result.text.trim();
   return /^\[BLANK_AUDIO\]$/i.test(text) ? "" : text;

@@ -83,6 +83,27 @@ Serverはtest後にのみ有効化できます。更新で接続設定が変わ�
 AIは任意です。API key、cloud
 account、network接続がなくても、GemiHubはローカルのドキュメント・ナレッジWorkspaceとして動作します。
 
+## 音声入力
+
+設定の「音声入力」で「音声認識API」を選ぶと、OpenAI、whisper.cpp、
+OpenAI互換API、Gemini 3.5 Transcribeを切り替えられます。
+Gemini／OpenAIは、現在チャットで選択中のAIに関係なく、AI設定に登録済みの対応するAPIキーを使用します。
+未登録の場合だけ音声入力用のAPIキーを設定できます。AI設定へ登録すると、自動でそちらに切り替わります。
+Transcribeは次の2つの接続方法に対応しています。
+
+- **AI Studio**：Gemini APIキーを使用します。
+- **Vertex AI**：現在のAI設定のGoogleログインとProject IDを使用し、変更にも自動追従します。
+  音声用の接続設定は不要です。Vertex AI APIの有効化とモデルの利用権限が必要です。
+  現在は `global` リージョンの `gemini-3.5-transcribe-preview` を使用します。
+
+言語は `auto`（自動判定）、`ja-JP`（日本語）、`en-US`（英語）などを指定できます。
+録音は保持分を含めて最大5分で、停止後に認識結果を下書きに反映します。
+接続テストは短い無音データを送信します。API利用料金が発生する場合があります。
+Cloud Speech-to-Text V1の設定は不要です。
+
+仕様：[Gemini API](https://ai.google.dev/gemini-api/docs/generate-content/transcribe)、
+[Vertex AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-transcribe)。
+
 ## スクリーンショット
 
 ### AIの変更をファイルへ反映する前に確認する

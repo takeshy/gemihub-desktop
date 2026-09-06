@@ -326,3 +326,32 @@ Deno.test("speech service presets set OpenAI defaults and preserve legacy whispe
   assertEquals(loadSpeechSettings(edited).baseUrl, "http://192.168.1.20:9090");
   assertEquals(loadSpeechSettings(edited).endpointType, "whisper-cpp");
 });
+
+
+Deno.test("Transcribe presets persist both backends without sharing API keys", () => {
+  const gemini = selectSpeechEndpoint({ ...defaultSpeechSettings, apiKey: "openai-secret" }, "gemini-transcribe");
+  assertEquals(gemini.model, "gemini-3.5-transcribe");
+  assertEquals(gemini.language, "auto");
+  assertEquals(gemini.apiKey, "");
+  assertEquals(loadSpeechSettings(gemini), gemini);
+  const vertex = selectSpeechEndpoint({ ...gemini, apiKey: "gemini-key", vertexProjectId: "my-project" }, "vertex-transcribe");
+  assertEquals(vertex.apiKey, "");
+  assertEquals(vertex.vertexProjectId, "my-project");
+  assertEquals(vertex.model, "gemini-3.5-transcribe-preview");
+  assertEquals(loadSpeechSettings(vertex), vertex);
+  const openai = selectSpeechEndpoint(vertex, "openai");
+  assertEquals(openai.model, "whisper-1");
+  assertEquals(openai.language, "auto");
+  assertEquals(selectSpeechEndpoint({ ...defaultSpeechSettings, language: "ja" }, "gemini-transcribe").language, "ja-JP");
+});
+
+Deno.test("old Cloud STT settings migrate to Transcribe without reusing Cloud STT credentials", () => {
+  const migrated = loadSpeechSettings({ provider: "openai-compatible", endpointType: "google-cloud", baseUrl: "https://speech.googleapis.com/v1", apiKey: "old-cloud-key", model: "default", language: "ja-JP", shortcut: "Ctrl+Space", silenceSeconds: 5 });
+  assertEquals(migrated.endpointType, "gemini-transcribe");
+  assertEquals(migrated.model, "gemini-3.5-transcribe");
+  assertEquals(migrated.baseUrl, "https://generativelanguage.googleapis.com/v1beta");
+  assertEquals(migrated.apiKey, "");
+  assertEquals(migrated.language, "ja-JP");
+  assertEquals(migrated.shortcut, "Ctrl+Space");
+  assertEquals(migrated.silenceSeconds, 5);
+});

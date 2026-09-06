@@ -1,12 +1,14 @@
+import { speechErrorMessage } from "./speechErrors";
+import { useI18n } from "../i18n/context";
 import { useEffect, useRef, useState } from "react";
-import { workflowHTTPRequest } from "../lib/wailsBackend";
+import { speechHTTPRequest } from "../lib/wailsBackend";
 import type { SpeechSettings } from "./settings";
 import { watchSpeechSilence } from "./speechSilence";
 import {
   recordingsToWav,
   speechDraft,
   transcribeSpeech,
-  transcriptionURL,
+  validateSpeechSettings,
 } from "./speechTranscription";
 
 export interface ChatSpeechOptions {
@@ -19,6 +21,7 @@ export interface ChatSpeechOptions {
 }
 
 export function useRecordedSpeech(options: ChatSpeechOptions) {
+  const { t } = useI18n();
   const latest = useRef(options);
   latest.current = options;
   const active = useRef<
@@ -117,17 +120,17 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       );
       current.controller.signal.throwIfAborted();
       setStatus("transcribing");
-      // Reuse the desktop transport that permits explicit localhost/LAN HTTP endpoints.
+      // Vertex uses stored OAuth; API-key and local services use the HTTP transport.
       const transcript = await transcribeSpeech(
         wav,
         settings,
-        workflowHTTPRequest,
+        speechHTTPRequest,
         current.controller.signal,
       );
       if (!valid()) return;
       if (!transcript) {
         throw new Error(
-          "音声を認識できませんでした。もう一度録音してください。",
+          t("speech.empty"),
         );
       }
       // Evaluate the send phrase only after the complete recording is transcribed.
@@ -145,9 +148,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     } catch (caught) {
       if (active.current === current) {
         setError(
-          `音声認識: ${
-            caught instanceof Error ? caught.message : String(caught)
-          }`,
+          `${t("speech.recognitionError")}: ${speechErrorMessage(caught, t)}`,
         );
       }
     } finally {
@@ -182,12 +183,12 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     setError("");
     if (retained.current.durationMs >= 299000) {
       setError(
-        "保持中の録音が5分に達しています。「保持中の録音を変換」を押してください。",
+        t("speech.retainedLimit"),
       );
       return;
     }
     if (!supported) {
-      setError("この環境はマイク録音に対応していません。");
+      setError(t("speech.noRecording"));
       return;
     }
     const current: NonNullable<typeof active.current> = {
@@ -202,10 +203,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       active.current === current && !latest.current.disabled &&
       latest.current.scope === scope && latest.current.input === base;
     try {
-      transcriptionURL(settings.baseUrl, settings.endpointType);
-      if (settings.endpointType !== "whisper-cpp" && !settings.model.trim()) {
-        throw new Error("STTのModelを設定してください。");
-      }
+      validateSpeechSettings(settings);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!valid()) {
         stream.getTracks().forEach((track) => track.stop());
@@ -229,13 +227,13 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       recorder.ondataavailable = (event) => {
         size += event.data.size;
         if (size > 20 * 1024 * 1024) {
-          setError("録音サイズの上限に達しました。短く録音し直してください。");
+          setError(t("speech.sizeLimit"));
           stop();
         } else if (event.data.size) chunks.push(event.data);
       };
       recorder.onerror = () => {
         setError(
-          "マイク録音に失敗しました。マイクの接続と権限を確認してください。",
+          t("speech.recordError"),
         );
         stop();
       };
@@ -277,8 +275,11 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
             if (active.current === current) {
               setSilenceHint(
                 available
-                  ? `話し終えてから約${settings.silenceSeconds}秒の無音で自動停止・文字起こしします。`
-                  : "無音検出を利用できません。停止ボタンで録音を終了してください。",
+                  ? t("speech.autoStopHint").replace(
+                    "{seconds}",
+                    String(settings.silenceSeconds),
+                  )
+                  : t("speech.noSilence"),
               );
             }
           },
@@ -292,9 +293,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       if (active.current === current) {
         stop();
         setError(
-          `録音を開始できません: ${
-            caught instanceof Error ? caught.message : String(caught)
-          }`,
+          `${t("speech.recordStartError")}: ${speechErrorMessage(caught, t)}`,
         );
       }
     }

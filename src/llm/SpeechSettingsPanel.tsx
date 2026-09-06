@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { speechErrorMessage } from "./speechErrors";
+import { useI18n } from "../i18n/context";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AudioLines,
   Check,
@@ -9,25 +11,53 @@ import {
   Server,
   Square,
 } from "lucide-react";
-import { workflowHTTPRequest } from "../lib/wailsBackend";
+import { speechHTTPRequest } from "../lib/wailsBackend";
 import { encodeSpeechWav, transcribeSpeech } from "./speechTranscription";
-import { selectSpeechEndpoint, type SpeechSettings } from "./settings";
+import {
+  type ChatSettings,
+  isGeminiSpeech,
+  resolveSpeechSettings,
+  selectSpeechEndpoint,
+  type SpeechSettings,
+} from "./settings";
 import { speechShortcutFromEvent, speechShortcutLabel } from "./speechShortcut";
 
-const providers = [
-  { id: "browser", label: "ブラウザ", hint: "話しながら文字に", icon: Globe },
-  {
-    id: "openai-compatible",
-    label: "OpenAI互換",
-    hint: "APIで文字起こし",
-    icon: AudioLines,
+export function SpeechSettingsPanel(
+  { settings, onChange, aiSettings }: {
+    settings: SpeechSettings;
+    aiSettings: ChatSettings;
+    onChange: (settings: SpeechSettings) => void;
   },
-] as const;
-
-export function SpeechSettingsPanel({ settings, onChange }: {
-  settings: SpeechSettings;
-  onChange: (settings: SpeechSettings) => void;
-}) {
+) {
+  const { t, language } = useI18n();
+  const providers = [
+    {
+      id: "browser",
+      label: t("speech.browser"),
+      hint: t("speech.browserHint"),
+      icon: Globe,
+    },
+    {
+      id: "openai-compatible",
+      label: t("speech.api"),
+      hint: t("speech.apiHint"),
+      icon: AudioLines,
+    },
+  ] as const;
+  const resolvedSettings = useMemo(
+    () => resolveSpeechSettings(aiSettings, settings),
+    [aiSettings, settings],
+  );
+  const inheritedKey = useMemo(
+    () =>
+      !!resolveSpeechSettings(aiSettings, { ...settings, apiKey: "" }).apiKey
+        .trim(),
+    [aiSettings, settings],
+  );
+  const sharedKeyService = settings.endpointType === "gemini-transcribe" ||
+    settings.endpointType === "openai";
+  const google = isGeminiSpeech(settings.endpointType);
+  const vertex = settings.endpointType === "vertex-transcribe";
   const patch = (change: Partial<SpeechSettings>) =>
     onChange({ ...settings, ...change });
   const pending = useRef<AbortController | null>(null);
@@ -44,11 +74,12 @@ export function SpeechSettingsPanel({ settings, onChange }: {
     pending.current = null;
     setChecking(null);
     setFeedback(null);
+    setShortcutHint("");
     return () => {
       pending.current?.abort();
       pending.current = null;
     };
-  }, [settings]);
+  }, [resolvedSettings, language]);
   useEffect(() => {
     if (!checking) return;
     const start = Date.now();
@@ -75,7 +106,7 @@ export function SpeechSettingsPanel({ settings, onChange }: {
       let message: string;
       if (kind === "microphone") {
         if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error("この環境ではマイクを利用できません。");
+          throw new Error(t("speech.noMic"));
         }
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -83,15 +114,15 @@ export function SpeechSettingsPanel({ settings, onChange }: {
         const name = stream.getAudioTracks()[0]?.label;
         stream.getTracks().forEach((track) => track.stop());
         controller.signal.throwIfAborted();
-        message = `マイクを確認しました${name ? `：${name}` : ""}`;
+        message = `${t("speech.micChecked")}${name ? `: ${name}` : ""}`;
       } else {
         await transcribeSpeech(
           encodeSpeechWav(new Float32Array(32000)),
-          settings,
-          workflowHTTPRequest,
+          resolvedSettings,
+          speechHTTPRequest,
           controller.signal,
         );
-        message = "接続できました。音声の送信と文字起こし応答を確認しました。";
+        message = t("speech.connected");
       }
       if (pending.current === controller) {
         setFeedback({ ok: true, text: message });
@@ -100,7 +131,7 @@ export function SpeechSettingsPanel({ settings, onChange }: {
       if (pending.current === controller) {
         setFeedback({
           ok: false,
-          text: error instanceof Error ? error.message : String(error),
+          text: speechErrorMessage(error, t),
         });
       }
     } finally {
@@ -111,22 +142,22 @@ export function SpeechSettingsPanel({ settings, onChange }: {
     }
   };
   return (
-    <section className="speech-settings" aria-label="Speech-to-Text 音声入力">
+    <section className="speech-settings" aria-label={t("speech.title")}>
       <header className="speech-settings-heading">
         <span className="speech-settings-icon">
           <Mic size={20} />
         </span>
         <div>
           <strong>
-            音声入力 <small>Speech-to-Text</small>
+            {t("speech.title")} <small>Speech-to-Text</small>
           </strong>
-          <p>マイクで話した内容を、Chatの下書きに。</p>
+          <p>{t("speech.subtitle")}</p>
         </div>
       </header>
       <aside className="speech-os-tip">
-        <strong>まずはOS標準の音声入力を試してみてください</strong>
+        <strong>{t("speech.osTitle")}</strong>
         <p>
-          環境や話し方によっては、OS標準のほうが高い精度で認識できることがあります。Chatの入力欄をクリックしてから、次のキーで始められます。APIキーの設定は不要です。
+          {t("speech.osHint")}
         </p>
         <div className="speech-os-shortcuts">
           <div>
@@ -138,25 +169,19 @@ export function SpeechSettingsPanel({ settings, onChange }: {
           <div>
             <strong>macOS</strong>
             <span>
-              <kbd>Fn</kbd> + <kbd>D</kbd> または <kbd>🎤</kbd> キー
+              <kbd>Fn</kbd> + <kbd>D</kbd> {t("speech.or")} <kbd>🎤</kbd>{" "}
+              {t("speech.key")}
             </span>
           </div>
         </div>
-        <small>
-          Macは「システム設定 → キーボード →
-          音声入力」で有効化・ショートカットを確認できます。OSやキーボードの設定によりキー操作は異なります。
-        </small>
-        <small>
-          OSの音声入力は入力欄へ直接文字を入れます。「送信の合図」はアプリ内の音声認識に適用されます。OS入力では内容を確認して送信ボタンを押してください。
-        </small>
       </aside>
       <div className="speech-settings-section-title">
-        <strong>アプリ内の音声認識を使う</strong>
+        <strong>{t("speech.inApp")}</strong>
       </div>
       <div
         className="speech-provider-options"
         role="group"
-        aria-label="音声認識の方式"
+        aria-label={t("speech.method")}
       >
         {providers.map(({ id, label, hint, icon: Icon }) => (
           <button
@@ -180,26 +205,33 @@ export function SpeechSettingsPanel({ settings, onChange }: {
       <div className="speech-settings-section">
         <div className="speech-settings-section-title">
           <Mic size={14} />
-          <strong>マイクと言語</strong>
+          <strong>{t("speech.micLanguage")}</strong>
         </div>
         <div className="speech-settings-grid">
           <div className="speech-microphone-field">
-            <span>マイク</span>
-            <strong>システムの既定のマイク</strong>
+            <span>{t("speech.mic")}</span>
+            <strong>{t("speech.defaultMic")}</strong>
             <button
               type="button"
               className="speech-secondary-button"
               disabled={!!checking}
-              onClick={() =>
-                void test("microphone")}
+              onClick={() => void test("microphone")}
             >
-              <Mic size={13} />マイクを確認
+              <Mic size={13} />
+              {t("speech.testMic")}
             </button>
           </div>
           <label className="settings-field">
-            <span>認識する言語</span>
+            <span>{t("speech.language")}</span>
             {settings.provider === "browser"
-              ? <input value="日本語 (ja-JP)" readOnly />
+              ? (
+                <input
+                  value={language === "ja"
+                    ? "日本語 (ja-JP)"
+                    : "English (en-US)"}
+                  readOnly
+                />
+              )
               : (
                 <input
                   value={settings.language}
@@ -210,32 +242,39 @@ export function SpeechSettingsPanel({ settings, onChange }: {
               )}
             <small>
               {settings.provider === "browser"
-                ? "ブラウザ認識では日本語を使用します。"
-                : "auto：自動判定 / ja：日本語 / en：英語"}
+                ? t("speech.browserLanguageHint")
+                : google
+                ? t("speech.googleLanguages")
+                : t("speech.languages")}
             </small>
           </label>
           <datalist id="speech-language-options">
             <option value="auto" />
-            <option value="ja" />
-            <option value="en" />
+            <option value={google ? "ja-JP" : "ja"} />
+            <option value={google ? "en-US" : "en"} />
           </datalist>
         </div>
         {settings.provider !== "browser" && (
           <label className="settings-field">
-            <span>無音で自動停止</span>
+            <span>{t("speech.silence")}</span>
             <select
               value={settings.silenceSeconds}
               onChange={(event) =>
                 patch({ silenceSeconds: Number(event.target.value) })}
             >
-              <option value={0}>オフ（手動で停止）</option>
+              <option value={0}>{t("speech.off")}</option>
               {Array.from(
                 { length: 10 },
-                (_, i) => <option key={i + 1} value={i + 1}>{i + 1}秒</option>,
+                (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1}
+                    {t("speech.seconds")}
+                  </option>
+                ),
               )}
             </select>
             <small>
-              話し始めた後、指定秒数の無音が続くと録音を終了して文字起こしします。送信の合図があれば送信し、なければ下書きに残します。周囲の音によって停止タイミングは変わります。
+              {t("speech.silenceHelp")}
             </small>
           </label>
         )}
@@ -244,15 +283,17 @@ export function SpeechSettingsPanel({ settings, onChange }: {
         <div className="speech-settings-section">
           <div className="speech-settings-section-title">
             <Server size={14} />
-            <strong>接続先</strong>
+            <strong>{t("speech.connection")}</strong>
             <span>
-              {settings.endpointType === "whisper-cpp"
+              {google
+                ? vertex ? "Vertex AI" : "Google AI Studio"
+                : settings.endpointType === "whisper-cpp"
                 ? "whisper.cpp"
                 : "OpenAI Compatible"}
             </span>
           </div>
           <label className="settings-field">
-            <span>サービス</span>
+            <span>{t("speech.service")}</span>
             <select
               value={settings.endpointType}
               onChange={(event) =>
@@ -264,44 +305,94 @@ export function SpeechSettingsPanel({ settings, onChange }: {
                 )}
             >
               <option value="openai">OpenAI</option>
+              <option value="gemini-transcribe">
+                Gemini 3.5 Transcribe（AI Studio）
+              </option>
+              <option value="vertex-transcribe">
+                Gemini 3.5 Transcribe（Vertex AI）
+              </option>
               <option value="whisper-cpp">whisper.cpp</option>
-              <option value="custom">その他（OpenAI互換API）</option>
+              <option value="custom">{t("speech.custom")}</option>
             </select>
             <small>
-              {settings.endpointType === "whisper-cpp"
-                ? "whisper.cpp標準サーバーに合わせて接続します。"
-                : "Base URL・モデル・APIキーを接続先に合わせて設定してください。"}
+              {google
+                ? vertex ? t("speech.vertexHelp") : t("speech.geminiHelp")
+                : settings.endpointType === "whisper-cpp"
+                ? t("speech.whisperHelp")
+                : inheritedKey
+                ? t("speech.openaiHelp")
+                : t("speech.customHelp")}
             </small>
           </label>
-          <label className="settings-field">
-            <span>API Base URL</span>
-            <input
-              type="url"
-              value={settings.baseUrl}
-              placeholder={settings.endpointType === "whisper-cpp"
-                ? "http://127.0.0.1:8080"
-                : "https://api.openai.com/v1"}
-              onChange={(event) =>
-                patch({ baseUrl: event.target.value })}
-            />
-            <small>
-              サービス選択時に初期値を入力します。接続先に合わせて自由に編集できます。
-            </small>
-          </label>
-          <div className="speech-settings-grid">
+          {(vertex || inheritedKey) && (
+            <div className="speech-model-note">
+              <strong>
+                {t("speech.sharedSettings").replace(
+                  "{service}",
+                  vertex ? "Vertex AI" : google ? "Gemini" : "OpenAI",
+                )}
+              </strong>
+            </div>
+          )}
+          {!google && !inheritedKey && (
             <label className="settings-field">
-              <span>
-                API Key <small>任意</small>
-              </span>
+              <span>API Base URL</span>
               <input
-                type="password"
-                autoComplete="off"
-                value={settings.apiKey}
-                placeholder="認証不要なら空欄"
-                onChange={(event) => patch({ apiKey: event.target.value })}
+                type="url"
+                value={settings.baseUrl}
+                placeholder={settings.endpointType === "whisper-cpp"
+                  ? "http://127.0.0.1:8080"
+                  : "https://api.openai.com/v1"}
+                onChange={(event) => patch({ baseUrl: event.target.value })}
               />
+              <small>
+                {t("speech.urlHelp")}
+              </small>
             </label>
-            {settings.endpointType !== "whisper-cpp"
+          )}
+          <div className="speech-settings-grid">
+            {!vertex && !inheritedKey && (
+              <label className="settings-field">
+                <span>
+                  API Key{" "}
+                  <small>
+                    {sharedKeyService
+                      ? t("speech.required")
+                      : t("speech.optional")}
+                  </small>
+                </span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={settings.apiKey}
+                  placeholder={google
+                    ? t("speech.geminiKey")
+                    : sharedKeyService
+                    ? t("speech.openaiKey")
+                    : t("speech.noAuth")}
+                  onChange={(event) => patch({ apiKey: event.target.value })}
+                />
+                {sharedKeyService && (
+                  <small>
+                    {t("speech.keyHelp")}
+                  </small>
+                )}
+              </label>
+            )}
+            {google || inheritedKey
+              ? (
+                <div className="speech-model-note">
+                  <span>{t("speech.model")}</span>
+                  <strong>
+                    {vertex
+                      ? "gemini-3.5-transcribe-preview"
+                      : google
+                      ? "gemini-3.5-transcribe"
+                      : settings.model}
+                  </strong>
+                </div>
+              )
+              : settings.endpointType !== "whisper-cpp"
               ? (
                 <label className="settings-field">
                   <span>Model</span>
@@ -314,8 +405,8 @@ export function SpeechSettingsPanel({ settings, onChange }: {
               )
               : (
                 <div className="speech-model-note">
-                  <span>モデル</span>
-                  <strong>サーバーで読み込み済みのモデル</strong>
+                  <span>{t("speech.model")}</span>
+                  <strong>{t("speech.serverModel")}</strong>
                 </div>
               )}
           </div>
@@ -323,12 +414,23 @@ export function SpeechSettingsPanel({ settings, onChange }: {
             <button
               type="button"
               className="speech-secondary-button"
-              disabled={!!checking || !settings.baseUrl.trim()}
+              disabled={!!checking || (vertex
+                ? !resolvedSettings.vertexProjectId?.trim()
+                : sharedKeyService
+                ? !resolvedSettings.apiKey.trim() ||
+                  (settings.endpointType === "openai" &&
+                    !settings.baseUrl.trim())
+                : !settings.baseUrl.trim())}
               onClick={() => void test("server")}
             >
-              <Radio size={14} />接続テスト
+              <Radio size={14} />
+              {t("speech.testConnection")}
             </button>
-            <small>短い無音データを送って応答を確認します。</small>
+            <small>
+              {t("speech.testHelp")}
+              {google &&
+                t("speech.costHelp")}
+            </small>
           </div>
         </div>
       )}
@@ -336,16 +438,18 @@ export function SpeechSettingsPanel({ settings, onChange }: {
         <div className="speech-test-feedback" role="status">
           <LoaderCircle size={16} className="speech-spinner" />
           <span>
-            {checking === "microphone" ? "マイクを確認中" : "接続を確認中"} ·
-            {" "}
-            {elapsed}秒
+            {checking === "microphone"
+              ? t("speech.checkingMic")
+              : t("speech.checkingConnection")} · {elapsed}
+            {t("speech.seconds")}
           </span>
           <button
             className="speech-secondary-button"
             type="button"
             onClick={cancel}
           >
-            <Square size={12} />停止
+            <Square size={12} />
+            {t("speech.stop")}
           </button>
         </div>
       )}
@@ -363,18 +467,17 @@ export function SpeechSettingsPanel({ settings, onChange }: {
       <div className="speech-settings-section">
         <div className="speech-settings-section-title">
           <AudioLines size={14} />
-          <strong>送信操作</strong>
+          <strong>{t("speech.sending")}</strong>
         </div>
         <label className="settings-field">
-          <span>音声ボタンのショートカット</span>
+          <span>{t("speech.shortcut")}</span>
           <input
             readOnly
             value={speechShortcutLabel(settings.shortcut)}
-            placeholder="クリックしてキーを押す（例：Ctrl + Shift + M）"
-            onFocus={() =>
-              setShortcutHint(
-                "Ctrl・Alt・⌘のいずれかと、文字・数字などのキーを同時に押してください。",
-              )}
+            placeholder={t("speech.shortcutPlaceholder")}
+            onFocus={() => setShortcutHint(
+              t("speech.shortcutHint"),
+            )}
             onBlur={() => setShortcutHint("")}
             onKeyDown={(event) => {
               if (event.key === "Tab") return;
@@ -388,12 +491,12 @@ export function SpeechSettingsPanel({ settings, onChange }: {
               const shortcut = speechShortcutFromEvent(event.nativeEvent);
               if (shortcut) {
                 patch({ shortcut });
-                setShortcutHint("ショートカットを保存しました。");
+                setShortcutHint(t("speech.shortcutSaved"));
               }
             }}
           />
           <small>
-            アプリがアクティブなとき、開始・停止・解析キャンセルを切り替えます。Chatが閉じていれば開きます。設定画面では無効です。OSが使用するキーは反応しない場合があります。
+            {t("speech.shortcutHelp")}
           </small>
         </label>
         <div className="speech-shortcut-actions">
@@ -403,36 +506,36 @@ export function SpeechSettingsPanel({ settings, onChange }: {
             disabled={!settings.shortcut}
             onClick={() => {
               patch({ shortcut: "" });
-              setShortcutHint("ショートカットを解除しました。");
+              setShortcutHint(t("speech.shortcutCleared"));
             }}
           >
-            割り当てを解除
+            {t("speech.clearShortcut")}
           </button>
           <small role="status">{shortcutHint}</small>
         </div>
         <>
           <label className="settings-field">
-            <span>送信の合図</span>
+            <span>{t("speech.sendPhrase")}</span>
             <input
               value={settings.sendPhrase}
-              placeholder="例：over, オーバー, 送信して"
+              placeholder={t("speech.phrasePlaceholder")}
               onChange={(event) => patch({ sendPhrase: event.target.value })}
             />
             <small>
-              複数の合図はカンマで区切ります。空欄にすると自動送信しません。
+              {t("speech.phraseHelp")}
             </small>
           </label>
           <small className="speech-settings-help">
             {settings.provider === "browser"
-              ? "確定した文章の末尾が合図と一致したとき、合図を除いて送信します。"
-              : "無音での自動停止または停止ボタンの後、文字起こしの末尾に合図があれば、合図を除いて送信します。合図がなければ下書きに残します。"}
+              ? t("speech.browserSendHelp")
+              : t("speech.apiSendHelp")}
           </small>
         </>
       </div>
       <footer className="speech-settings-help">
         {settings.provider === "browser"
-          ? "話している途中の文字も入力欄に反映します。利用可否はブラウザの音声認識機能に依存します。"
-          : "録音後、停止ボタンで文字起こしを開始します。録音は指定した接続先へ送信されます。"}
+          ? t("speech.browserFooter")
+          : t("speech.apiFooter")}
       </footer>
     </section>
   );

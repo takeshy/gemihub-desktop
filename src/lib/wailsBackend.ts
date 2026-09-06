@@ -545,6 +545,7 @@ interface WailsAppApi {
     clientSecret: string,
   ) => Promise<VertexOAuthStatus>;
   GetVertexOAuthStatus: () => Promise<VertexOAuthStatus>;
+  VertexSpeechHTTPRequest: (request: ExternalHTTPRequest) => Promise<ExternalHTTPResponse>;
   DisconnectVertexOAuth: () => Promise<void>;
   ConnectMCPOAuth: (request: MCPOAuthConnectRequest) => Promise<MCPOAuthStatus>;
   GetMCPOAuthStatus: (
@@ -1381,6 +1382,15 @@ export async function externalHTTPRequest(
   const api = appApi();
   if (!api) throw new Error("External requests require the desktop app.");
   return await api.ExternalHTTPRequest(request);
+}
+
+export async function speechHTTPRequest(request: ExternalHTTPRequest): Promise<ExternalHTTPResponse> {
+  const api = appApi();
+  if (!api) throw new Error("音声認識APIにはデスクトップアプリが必要です。");
+  if (new URL(request.url).hostname === "aiplatform.googleapis.com") {
+    return await api.VertexSpeechHTTPRequest(request);
+  }
+  return await api.WorkflowHTTPRequest(request);
 }
 
 export async function workflowHTTPRequest(

@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n/context";
 import { useEffect, useRef, useState } from "react";
 import { type ChatSpeechOptions, useRecordedSpeech } from "./useRecordedSpeech";
 import { speechDraft } from "./speechTranscription";
@@ -24,6 +25,7 @@ type SpeechWindow = Window & {
 };
 
 export function useChatSpeech(options: ChatSpeechOptions) {
+  const { t, language } = useI18n();
   const recorded = useRecordedSpeech(options);
   const latest = useRef(options);
   latest.current = options;
@@ -55,7 +57,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     stop();
     setError("");
     return stop;
-  }, [options.scope, options.disabled, options.settings.provider]);
+  }, [options.scope, options.disabled, options.settings.provider, language]);
 
   function toggle() {
     if (recognition.current) {
@@ -65,7 +67,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     if (options.disabled) return;
     setError("");
     if (!Constructor) {
-      setError("この環境は音声認識（SpeechRecognition）に対応していません。");
+      setError(t("speech.noBrowser"));
       return;
     }
     const base = options.input;
@@ -73,7 +75,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     try {
       const current = new Constructor();
       recognition.current = current;
-      current.lang = "ja-JP";
+      current.lang = language === "ja" ? "ja-JP" : "en-US";
       current.continuous = true;
       current.interimResults = true;
       current.onresult = (event) => {
@@ -100,18 +102,16 @@ export function useChatSpeech(options: ChatSpeechOptions) {
       };
       current.onerror = (event) => {
         const messages: Record<string, string> = {
-          "not-allowed":
-            "マイクの使用が許可されていません。アプリ／OSのマイク権限を確認してください。",
-          "service-not-allowed":
-            "この環境では音声認識サービスを利用できません。",
-          "audio-capture":
-            "マイクを利用できません。接続と設定を確認してください。",
-          network: "音声認識サービスに接続できません。",
-          "no-speech":
-            "音声を検出できませんでした。マイクボタンで再開できます。",
+          "not-allowed": t("speech.denied"),
+          "service-not-allowed": t("speech.serviceDenied"),
+          "audio-capture": t("speech.captureError"),
+          network: t("speech.networkError"),
+          "no-speech": t("speech.noSpeech"),
         };
         setError(
-          `音声認識: ${messages[event.error] ?? event.error} (${event.error})`,
+          `${t("speech.recognitionError")}: ${
+            messages[event.error] ?? event.error
+          } (${event.error})`,
         );
         stop();
       };
@@ -132,7 +132,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     } catch (caught) {
       stop();
       setError(
-        `音声認識を開始できません: ${
+        `${t("speech.startError")}: ${
           caught instanceof Error ? caught.message : String(caught)
         }`,
       );

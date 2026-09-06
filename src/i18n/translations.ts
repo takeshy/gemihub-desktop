@@ -5,6 +5,131 @@ export type Language = "en" | "ja";
 export type LanguageSetting = Language | "system";
 
 export interface TranslationStrings {
+  "speech.error.project": string;
+  "speech.error.url": string;
+  "speech.error.duration": string;
+  "speech.error.empty": string;
+  "speech.error.combinedDuration": string;
+  "speech.error.geminiKey": string;
+  "speech.error.language": string;
+  "speech.error.model": string;
+  "speech.error.invalid": string;
+  "speech.error.blocked": string;
+  "speech.error.incomplete": string;
+  "speech.error.totalDuration": string;
+  "speech.error.json": string;
+  "speech.error.text": string;
+  "speech.error.vertexAuth": string;
+  "speech.error.geminiAuth": string;
+  "speech.error.auth": string;
+  "speech.error.server": string;
+
+  "speech.browser": string;
+  "speech.browserHint": string;
+  "speech.api": string;
+  "speech.apiHint": string;
+  "speech.noMic": string;
+  "speech.connected": string;
+  "speech.title": string;
+  "speech.subtitle": string;
+  "speech.osTitle": string;
+  "speech.osHint": string;
+  "speech.inApp": string;
+  "speech.method": string;
+  "speech.micLanguage": string;
+  "speech.mic": string;
+  "speech.defaultMic": string;
+  "speech.testMic": string;
+  "speech.language": string;
+  "speech.browserLanguageHint": string;
+  "speech.googleLanguages": string;
+  "speech.languages": string;
+  "speech.silence": string;
+  "speech.off": string;
+  "speech.seconds": string;
+  "speech.silenceHelp": string;
+  "speech.connection": string;
+  "speech.service": string;
+  "speech.custom": string;
+  "speech.vertexHelp": string;
+  "speech.geminiHelp": string;
+  "speech.whisperHelp": string;
+  "speech.openaiHelp": string;
+  "speech.customHelp": string;
+  "speech.urlHelp": string;
+  "speech.required": string;
+  "speech.optional": string;
+  "speech.geminiKey": string;
+  "speech.openaiKey": string;
+  "speech.noAuth": string;
+  "speech.keyHelp": string;
+  "speech.model": string;
+  "speech.serverModel": string;
+  "speech.testConnection": string;
+  "speech.testHelp": string;
+  "speech.costHelp": string;
+  "speech.checkingMic": string;
+  "speech.checkingConnection": string;
+  "speech.stop": string;
+  "speech.sending": string;
+  "speech.shortcut": string;
+  "speech.shortcutPlaceholder": string;
+  "speech.shortcutHint": string;
+  "speech.shortcutSaved": string;
+  "speech.shortcutHelp": string;
+  "speech.shortcutCleared": string;
+  "speech.clearShortcut": string;
+  "speech.sendPhrase": string;
+  "speech.phrasePlaceholder": string;
+  "speech.phraseHelp": string;
+  "speech.browserSendHelp": string;
+  "speech.apiSendHelp": string;
+  "speech.browserFooter": string;
+  "speech.apiFooter": string;
+  "speech.meter": string;
+  "speech.noMeter": string;
+  "speech.level": string;
+  "speech.noLevel": string;
+  "speech.listening": string;
+  "speech.starting": string;
+  "speech.preparing": string;
+  "speech.transcribing": string;
+  "speech.liveHint": string;
+  "speech.recordHint": string;
+  "speech.cancelHint": string;
+  "speech.retainHint": string;
+  "speech.waiting": string;
+  "speech.empty": string;
+  "speech.retainedLimit": string;
+  "speech.noRecording": string;
+  "speech.sizeLimit": string;
+  "speech.recordError": string;
+  "speech.noSilence": string;
+  "speech.noBrowser": string;
+  "speech.denied": string;
+  "speech.serviceDenied": string;
+  "speech.captureError": string;
+  "speech.networkError": string;
+  "speech.noSpeech": string;
+  "speech.adding": string;
+  "speech.addHint": string;
+  "speech.retainedHelp": string;
+  "speech.retry": string;
+  "speech.cancelLabel": string;
+  "speech.stopLabel": string;
+  "speech.stopListening": string;
+  "speech.unsupported": string;
+  "speech.micChecked": string;
+  "speech.sharedSettings": string;
+  "speech.or": string;
+  "speech.key": string;
+  "speech.elapsed": string;
+  "speech.retainedCount": string;
+  "speech.autoStopHint": string;
+  "speech.recognitionError": string;
+  "speech.startError": string;
+  "speech.recordStartError": string;
+
   // Common
   "common.close": string;
   "common.cancel": string;
@@ -285,6 +410,131 @@ export interface TranslationStrings {
 }
 
 const en: TranslationStrings = {
+  "speech.error.project": "Set the Vertex AI Project ID.",
+  "speech.error.url": "Use an HTTP(S) base URL without credentials, a query, or a fragment.",
+  "speech.error.duration": "Keep recordings within 5 minutes.",
+  "speech.error.empty": "The recording is empty.",
+  "speech.error.combinedDuration": "Keep recordings, including retained audio, within 5 minutes.",
+  "speech.error.geminiKey": "Set a Google AI Studio Gemini API key.",
+  "speech.error.language": "Set recognition language to auto or a language code such as ja-JP or en-US.",
+  "speech.error.model": "Set the transcription model.",
+  "speech.error.invalid": "Gemini Transcribe returned an invalid response.",
+  "speech.error.blocked": "Gemini Transcribe refused to process the audio.",
+  "speech.error.incomplete": "Gemini Transcribe did not complete transcription. Please make a shorter recording.",
+  "speech.error.totalDuration": "Keep recordings within 5 minutes, including retained audio.",
+  "speech.error.json": "The transcription response is not JSON.",
+  "speech.error.text": "The transcription response has no text field.",
+  "speech.error.vertexAuth": "Check the Vertex AI Google sign-in, Project ID, API activation, and model permissions.",
+  "speech.error.geminiAuth": "Check the Gemini API key, API activation, and billing settings.",
+  "speech.error.auth": "Check the API key and server authentication settings.",
+  "speech.error.server": "Check the base URL, model, and supported server formats.",
+
+  "speech.browser": "Browser",
+  "speech.browserHint": "Transcribe as you speak",
+  "speech.api": "Speech recognition API",
+  "speech.apiHint": "OpenAI / Google Cloud and more",
+  "speech.noMic": "The microphone is unavailable in this environment.",
+  "speech.connected": "Connected. Audio upload and transcription response verified.",
+  "speech.title": "Voice input",
+  "speech.subtitle": "Turn your speech into a Chat draft.",
+  "speech.osTitle": "Try your system’s built-in dictation first",
+  "speech.osHint": "System dictation may work better for your voice and environment. Click the Chat input, then use these keys to start. No API key is needed.",
+  "speech.inApp": "Use in-app speech recognition",
+  "speech.method": "Speech recognition method",
+  "speech.micLanguage": "Microphone and language",
+  "speech.mic": "Microphone",
+  "speech.defaultMic": "System default microphone",
+  "speech.testMic": "Test microphone",
+  "speech.language": "Recognition language",
+  "speech.browserLanguageHint": "Browser recognition follows the app language.",
+  "speech.googleLanguages": "auto: detect automatically / ja-JP: Japanese / en-US: English",
+  "speech.languages": "auto: detect automatically / ja: Japanese / en: English",
+  "speech.silence": "Stop automatically after silence",
+  "speech.off": "Off (stop manually)",
+  "speech.seconds": "s",
+  "speech.silenceHelp": "After you start speaking, the selected period of silence stops recording and starts transcription. A send phrase sends the message; otherwise it stays in the draft. Background noise may affect timing.",
+  "speech.connection": "Connection",
+  "speech.service": "Service",
+  "speech.custom": "Other (OpenAI-compatible API)",
+  "speech.vertexHelp": "Sign in to Google under Vertex AI in AI settings. Uses the Transcribe preview in the global region.",
+  "speech.geminiHelp": "Transcribe with a Google AI Studio Gemini API key. Recordings, including retained audio, can total up to 5 minutes.",
+  "speech.whisperHelp": "Connects to the standard whisper.cpp server.",
+  "speech.openaiHelp": "Transcribe audio with the OpenAI API key from AI settings.",
+  "speech.customHelp": "Set the base URL, model, and API key for your service.",
+  "speech.urlHelp": "Selecting a service fills in defaults. You can edit them for your endpoint.",
+  "speech.required": "Required",
+  "speech.optional": "Optional",
+  "speech.geminiKey": "Google AI Studio Gemini API key",
+  "speech.openaiKey": "OpenAI API key",
+  "speech.noAuth": "Leave blank if authentication is not required",
+  "speech.keyHelp": "No matching API key is configured in AI settings. Enter a voice input key here; a key added to AI settings will be used automatically.",
+  "speech.model": "Model",
+  "speech.serverModel": "Model loaded on the server",
+  "speech.testConnection": "Test connection",
+  "speech.testHelp": "Sends a short silent audio sample to check the response. ",
+  "speech.costHelp": "Gemini API charges may apply.",
+  "speech.checkingMic": "Checking microphone",
+  "speech.checkingConnection": "Checking connection",
+  "speech.stop": "Stop",
+  "speech.sending": "Sending",
+  "speech.shortcut": "Voice button shortcut",
+  "speech.shortcutPlaceholder": "Click and press keys (e.g. Ctrl + Shift + M)",
+  "speech.shortcutHint": "Press Ctrl, Alt, or ⌘ together with a letter, number, or another key.",
+  "speech.shortcutSaved": "Shortcut saved.",
+  "speech.shortcutHelp": "Starts, stops, or cancels transcription while the app is active, opening Chat if needed. Disabled in settings. System shortcuts may take precedence.",
+  "speech.shortcutCleared": "Shortcut cleared.",
+  "speech.clearShortcut": "Clear shortcut",
+  "speech.sendPhrase": "Send phrase",
+  "speech.phrasePlaceholder": "e.g. over, send it",
+  "speech.phraseHelp": "Separate phrases with commas. Leave blank to disable automatic sending.",
+  "speech.browserSendHelp": "When finalized text ends with a send phrase, the phrase is removed and the message is sent.",
+  "speech.apiSendHelp": "After an automatic or manual stop, a trailing send phrase is removed and the message is sent. Otherwise, the transcription stays in the draft.",
+  "speech.browserFooter": "Text appears in the input as you speak. Availability depends on the browser’s speech recognition support.",
+  "speech.apiFooter": "Press Stop to transcribe your recording. Audio is sent to the configured service.",
+  "speech.meter": "Microphone input level",
+  "speech.noMeter": "Input level display unavailable",
+  "speech.level": "Input level",
+  "speech.noLevel": "No input level display",
+  "speech.listening": "Listening",
+  "speech.starting": "Preparing microphone",
+  "speech.preparing": "Preparing audio",
+  "speech.transcribing": "Transcribing audio",
+  "speech.liveHint": "Your words appear in the input as you speak. Press Stop to finish.",
+  "speech.recordHint": "Press Stop to finish recording and start transcription.",
+  "speech.cancelHint": "Press Stop to cancel",
+  "speech.retainHint": "Press Stop to cancel transcription (audio is retained)",
+  "speech.waiting": "Waiting for the server. Processing time depends on recording length and model.",
+  "speech.empty": "No speech was recognized. Please record again.",
+  "speech.retainedLimit": "Retained recordings have reached 5 minutes. Select “Transcribe retained recordings”.",
+  "speech.noRecording": "Microphone recording is not supported in this environment.",
+  "speech.sizeLimit": "The recording size limit was reached. Please make a shorter recording.",
+  "speech.recordError": "Recording failed. Check your microphone connection and permissions.",
+  "speech.noSilence": "Silence detection is unavailable. Press Stop to finish recording.",
+  "speech.noBrowser": "Speech recognition (SpeechRecognition) is not supported in this environment.",
+  "speech.denied": "Microphone access was denied. Check app and system microphone permissions.",
+  "speech.serviceDenied": "The speech recognition service is unavailable in this environment.",
+  "speech.captureError": "The microphone is unavailable. Check its connection and settings.",
+  "speech.networkError": "Cannot connect to the speech recognition service.",
+  "speech.noSpeech": "No speech was detected. Press the microphone button to try again.",
+  "speech.adding": "Adding audio to transcribe together.",
+  "speech.addHint": "Use the microphone to add audio and transcribe the recordings together.",
+  "speech.retainedHelp": "Recordings are cleared after successful transcription. Retrying resends retained audio and may increase API usage.",
+  "speech.retry": "Transcribe retained recordings",
+  "speech.cancelLabel": "Stop (cancel transcription)",
+  "speech.stopLabel": "Stop listening",
+  "speech.stopListening": "Stop listening",
+  "speech.unsupported": "Voice input unavailable (click for details)",
+  "speech.micChecked": "Microphone verified",
+  "speech.sharedSettings": "Use current {service} settings",
+  "speech.or": "or",
+  "speech.key": "key",
+  "speech.elapsed": "Elapsed time: {seconds}s",
+  "speech.retainedCount": "{count} recording(s) retained. ",
+  "speech.autoStopHint": "Automatically stops and transcribes after about {seconds} seconds of silence following speech.",
+  "speech.recognitionError": "Speech recognition",
+  "speech.startError": "Cannot start speech recognition",
+  "speech.recordStartError": "Cannot start recording",
+
   "common.close": "Close",
   "common.cancel": "Cancel",
   "common.save": "Save",
@@ -563,6 +813,131 @@ const en: TranslationStrings = {
 };
 
 const ja: TranslationStrings = {
+  "speech.error.project": "Vertex AIのProject IDを設定してください。",
+  "speech.error.url": "Base URLには認証情報・クエリ・フラグメントを含まないHTTP(S) URLを指定してください。",
+  "speech.error.duration": "録音は5分以内にしてください。",
+  "speech.error.empty": "録音が空です。",
+  "speech.error.combinedDuration": "保持分を含めた録音は5分以内にしてください。",
+  "speech.error.geminiKey": "Google AI StudioのGemini API Keyを設定してください。",
+  "speech.error.language": "認識する言語はautoまたはja-JPやen-USなどの言語コードを指定してください。",
+  "speech.error.model": "STTのModelを設定してください。",
+  "speech.error.invalid": "Gemini Transcribeの応答形式が不正です。",
+  "speech.error.blocked": "Gemini Transcribeが音声の処理を拒否しました。",
+  "speech.error.incomplete": "Gemini Transcribeの文字起こしが完了しませんでした。短く録音し直してください。",
+  "speech.error.totalDuration": "録音は保持分を含めて5分以内にしてください。",
+  "speech.error.json": "STTの応答がJSONではありません。",
+  "speech.error.text": "STTの応答にtextフィールドがありません。",
+  "speech.error.vertexAuth": "Vertex AIのGoogleログイン・Project ID・APIの有効化・モデルの利用権限を確認してください。",
+  "speech.error.geminiAuth": "Gemini API Key・APIの有効化・請求設定を確認してください。",
+  "speech.error.auth": "API Keyとサーバーの認証設定を確認してください。",
+  "speech.error.server": "Base URL・Model・サーバーの対応形式を確認してください。",
+
+  "speech.browser": "ブラウザ",
+  "speech.browserHint": "話しながら文字に",
+  "speech.api": "音声認識API",
+  "speech.apiHint": "OpenAI / Google Cloud など",
+  "speech.noMic": "この環境ではマイクを利用できません。",
+  "speech.connected": "接続できました。音声の送信と文字起こし応答を確認しました。",
+  "speech.title": "音声入力",
+  "speech.subtitle": "マイクで話した内容を、Chatの下書きに。",
+  "speech.osTitle": "まずはOS標準の音声入力を試してみてください",
+  "speech.osHint": "環境や話し方によっては、OS標準のほうが高い精度で認識できることがあります。Chatの入力欄をクリックしてから、次のキーで始められます。APIキーの設定は不要です。",
+  "speech.inApp": "アプリ内の音声認識を使う",
+  "speech.method": "音声認識の方式",
+  "speech.micLanguage": "マイクと言語",
+  "speech.mic": "マイク",
+  "speech.defaultMic": "システムの既定のマイク",
+  "speech.testMic": "マイクを確認",
+  "speech.language": "認識する言語",
+  "speech.browserLanguageHint": "ブラウザ認識ではアプリの表示言語を使用します。",
+  "speech.googleLanguages": "auto：自動判定 / ja-JP：日本語 / en-US：英語",
+  "speech.languages": "auto：自動判定 / ja：日本語 / en：英語",
+  "speech.silence": "無音で自動停止",
+  "speech.off": "オフ（手動で停止）",
+  "speech.seconds": "秒",
+  "speech.silenceHelp": "話し始めた後、指定秒数の無音が続くと録音を終了して文字起こしします。送信の合図があれば送信し、なければ下書きに残します。周囲の音によって停止タイミングは変わります。",
+  "speech.connection": "接続先",
+  "speech.service": "サービス",
+  "speech.custom": "その他（OpenAI互換API）",
+  "speech.vertexHelp": "AI設定のVertex AIでGoogleに接続してください。globalリージョンのTranscribeプレビュー版を使用します。",
+  "speech.geminiHelp": "Google AI StudioのGemini APIキーで文字起こしします。録音は保持分を含めて最大5分です。",
+  "speech.whisperHelp": "whisper.cpp標準サーバーに合わせて接続します。",
+  "speech.openaiHelp": "AI設定のOpenAI APIキーで音声を文字起こしします。",
+  "speech.customHelp": "Base URL・モデル・APIキーを接続先に合わせて設定してください。",
+  "speech.urlHelp": "サービス選択時に初期値を入力します。接続先に合わせて自由に編集できます。",
+  "speech.required": "必須",
+  "speech.optional": "任意",
+  "speech.geminiKey": "Google AI StudioのGemini APIキー",
+  "speech.openaiKey": "OpenAIのAPIキー",
+  "speech.noAuth": "認証不要なら空欄",
+  "speech.keyHelp": "AI設定に対応するAPIキーが未登録のため、音声入力用のキーを設定してください。AI設定に登録すると、そちらを自動で使用します。",
+  "speech.model": "モデル",
+  "speech.serverModel": "サーバーで読み込み済みのモデル",
+  "speech.testConnection": "接続テスト",
+  "speech.testHelp": "短い無音データを送って応答を確認します。",
+  "speech.costHelp": "Gemini APIの利用料金が発生する場合があります。",
+  "speech.checkingMic": "マイクを確認中",
+  "speech.checkingConnection": "接続を確認中",
+  "speech.stop": "停止",
+  "speech.sending": "送信操作",
+  "speech.shortcut": "音声ボタンのショートカット",
+  "speech.shortcutPlaceholder": "クリックしてキーを押す（例：Ctrl + Shift + M）",
+  "speech.shortcutHint": "Ctrl・Alt・⌘のいずれかと、文字・数字などのキーを同時に押してください。",
+  "speech.shortcutSaved": "ショートカットを保存しました。",
+  "speech.shortcutHelp": "アプリがアクティブなとき、開始・停止・解析キャンセルを切り替えます。Chatが閉じていれば開きます。設定画面では無効です。OSが使用するキーは反応しない場合があります。",
+  "speech.shortcutCleared": "ショートカットを解除しました。",
+  "speech.clearShortcut": "割り当てを解除",
+  "speech.sendPhrase": "送信の合図",
+  "speech.phrasePlaceholder": "例：over, オーバー, 送信して",
+  "speech.phraseHelp": "複数の合図はカンマで区切ります。空欄にすると自動送信しません。",
+  "speech.browserSendHelp": "確定した文章の末尾が合図と一致したとき、合図を除いて送信します。",
+  "speech.apiSendHelp": "無音での自動停止または停止ボタンの後、文字起こしの末尾に合図があれば、合図を除いて送信します。合図がなければ下書きに残します。",
+  "speech.browserFooter": "話している途中の文字も入力欄に反映します。利用可否はブラウザの音声認識機能に依存します。",
+  "speech.apiFooter": "録音後、停止ボタンで文字起こしを開始します。録音は指定した接続先へ送信されます。",
+  "speech.meter": "マイク入力音量",
+  "speech.noMeter": "音量表示を利用できません",
+  "speech.level": "入力音量",
+  "speech.noLevel": "音量表示なし",
+  "speech.listening": "聞き取り中",
+  "speech.starting": "マイクを準備中",
+  "speech.preparing": "音声データを準備中",
+  "speech.transcribing": "文字起こしを解析中",
+  "speech.liveHint": "話すと入力欄に反映されます。停止ボタンで終了。",
+  "speech.recordHint": "停止ボタンで録音を終了し、解析を開始します。",
+  "speech.cancelHint": "停止ボタンでキャンセル",
+  "speech.retainHint": "停止ボタンで解析をキャンセル（録音は保持）",
+  "speech.waiting": "サーバーの応答を待っています。処理時間は録音の長さやモデルによって変わります。",
+  "speech.empty": "音声を認識できませんでした。もう一度録音してください。",
+  "speech.retainedLimit": "保持中の録音が5分に達しています。「保持中の録音を変換」を押してください。",
+  "speech.noRecording": "この環境はマイク録音に対応していません。",
+  "speech.sizeLimit": "録音サイズの上限に達しました。短く録音し直してください。",
+  "speech.recordError": "マイク録音に失敗しました。マイクの接続と権限を確認してください。",
+  "speech.noSilence": "無音検出を利用できません。停止ボタンで録音を終了してください。",
+  "speech.noBrowser": "この環境は音声認識（SpeechRecognition）に対応していません。",
+  "speech.denied": "マイクの使用が許可されていません。アプリ／OSのマイク権限を確認してください。",
+  "speech.serviceDenied": "この環境では音声認識サービスを利用できません。",
+  "speech.captureError": "マイクを利用できません。接続と設定を確認してください。",
+  "speech.networkError": "音声認識サービスに接続できません。",
+  "speech.noSpeech": "音声を検出できませんでした。マイクボタンで再開できます。",
+  "speech.adding": "追加録音中です。まとめて文字起こしします。",
+  "speech.addHint": "マイクで録音を追加し、まとめて文字起こしできます。",
+  "speech.retainedHelp": "成功後に録音を自動で消去します。再変換は保持音声を再送するため、API利用量が増える場合があります。",
+  "speech.retry": "保持中の録音を変換",
+  "speech.cancelLabel": "停止（解析をキャンセル）",
+  "speech.stopLabel": "停止（聞き取りを終了）",
+  "speech.stopListening": "聞き取りを停止",
+  "speech.unsupported": "音声入力非対応（クリックで詳細）",
+  "speech.micChecked": "マイクを確認しました",
+  "speech.sharedSettings": "現在の{service}の設定を使用",
+  "speech.or": "または",
+  "speech.key": "キー",
+  "speech.elapsed": "経過時間 {seconds}秒",
+  "speech.retainedCount": "録音{count}件を保持しています。",
+  "speech.autoStopHint": "話し終えてから約{seconds}秒の無音で自動停止・文字起こしします。",
+  "speech.recognitionError": "音声認識",
+  "speech.startError": "音声認識を開始できません",
+  "speech.recordStartError": "録音を開始できません",
+
   "common.close": "閉じる",
   "common.cancel": "キャンセル",
   "common.save": "保存",

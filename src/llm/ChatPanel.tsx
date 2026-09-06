@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n/context";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
@@ -22,8 +23,10 @@ import {
   X,
 } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
+import { resolveSpeechSettings } from "./settings";
 import { useChatSpeech } from "./useChatSpeech";
 import { SpeechActivity } from "./SpeechActivity";
+import { attachedActiveFile } from "./chatFileContext";
 import { speechShortcutLabel } from "./speechShortcut";
 import {
   applyPendingFileAction,
@@ -606,6 +609,7 @@ export function ChatPanel({
     "idle" | "saving" | "saved"
   >("idle");
   const savedNotePathsRef = useRef(new Map<string, string>());
+  const { t } = useI18n();
   const [activeID, setActiveID] = useState("");
   const [input, setInput] = useState("");
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
@@ -700,6 +704,7 @@ export function ChatPanel({
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef(false);
   const activeRunControllerRef = useRef<AbortController | null>(null);
+  const activeRunFileRef = useRef<{ path: string; content: string } | null>(null);
   const streamRef = useRef<
     { streamId: string; sessionId: string; messageId: string } | null
   >(null);
@@ -1290,7 +1295,7 @@ export function ChatPanel({
         }
         const run = await executeWorkflow(workflow, entry.workflowPath, {
           chatSettings: settings,
-          activeFile,
+          activeFile: activeRunFileRef.current,
           openFile: onOpenFile,
           interactionMode: "panel",
           signal: activeRunControllerRef.current?.signal,
@@ -1333,7 +1338,7 @@ export function ChatPanel({
         };
       }
     },
-    [activeFile, directoryBase, onOpenFile, workspaceBase, settings],
+    [directoryBase, onOpenFile, workspaceBase, settings],
   );
 
   useEffect(() =>
@@ -1658,13 +1663,14 @@ export function ChatPanel({
         paths,
       ) => [...new Set([...paths, invokedSkill.skillFilePath])]);
     }
+    const fileAtSend = attachedActiveFile(activeFile?.path, attachedFiles);
     let promptText = invokedSkill
       ? skillInvocation?.[2]?.trim() ||
         `Use the ${invokedSkill.name} skill now. Follow its instructions and ask only for required inputs that cannot be inferred.`
       : resolveSlashCommand(
         text,
         settings.slashCommands,
-        activeFile?.content || "",
+        fileAtSend?.content || "",
       );
     // Keep slash syntax in prompt recall, but show what was actually sent in
     // the conversation history. Capture this before adding hidden file context.
@@ -1672,6 +1678,7 @@ export function ChatPanel({
     setLoading(true);
     setError("");
     setInput("");
+    setDismissedAutomaticPath(activeFile?.path ?? null);
     setAttachedFiles([]);
     setPending(null);
     const mentioned = [...text.matchAll(/(?:^|\s)@(?:"([^"]+)"|([^\s]+))/g)]
@@ -1756,6 +1763,7 @@ export function ChatPanel({
     abortRef.current = false;
     const runController = new AbortController();
     activeRunControllerRef.current = runController;
+    activeRunFileRef.current = fileAtSend;
     let releaseMcp = async () => undefined;
     try {
       skillsAtSend = await loadActiveSkillContents(skillMetadataAtSend);
@@ -2181,14 +2189,16 @@ export function ChatPanel({
       }
       if (activeRunControllerRef.current === runController) {
         activeRunControllerRef.current = null;
+        activeRunFileRef.current = null;
       }
       setLoading(false);
     }
   };
 
+  const speechSettings = useMemo(() => resolveSpeechSettings(settings), [settings]);
   const speech = useChatSpeech({
     input,
-    settings: settings.speech,
+    settings: speechSettings,
     scope: `${workspaceBase}:${activeSession?.id ?? ""}`,
     disabled: loading || !activeSession,
     onInput: (text) => {
@@ -2883,8 +2893,8 @@ export function ChatPanel({
         {speech.error && <div className="chat-error" role="alert">{speech.error}</div>}
         {speech.retainedCount > 0 && !speech.busy && (
           <div className="speech-test-feedback" role="status">
-            <div><span>録音{speech.retainedCount}件を保持しています。{speech.listening ? "追加録音中です。まとめて文字起こしします。" : "マイクで録音を追加し、まとめて文字起こしできます。"}</span><small className="speech-settings-help">成功後に録音を自動で消去します。再変換は保持音声を再送するため、API利用量が増える場合があります。</small></div>
-            <button type="button" className="speech-secondary-button" disabled={speech.listening || loading} onClick={() => void speech.retryRecording()}>保持中の録音を変換</button>
+            <div><span>{t("speech.retainedCount").replace("{count}", String(speech.retainedCount))}{speech.listening ? t("speech.adding") : t("speech.addHint")}</span><small className="speech-settings-help">{t("speech.retainedHelp")}</small></div>
+            <button type="button" className="speech-secondary-button" disabled={speech.listening || loading} onClick={() => void speech.retryRecording()}>{t("speech.retry")}</button>
           </div>
         )}
         {(speech.listening || speech.busy) && (
@@ -3082,15 +3092,15 @@ export function ChatPanel({
           <button
             type="button"
             className={`chat-send chat-speech-button ${speech.listening || speech.busy ? "is-active" : ""}`}
-            aria-label={speech.busy ? "停止（解析をキャンセル）" : speech.listening ? "停止（聞き取りを終了）" : "音声入力"}
+            aria-label={speech.busy ? t("speech.cancelLabel") : speech.listening ? t("speech.stopLabel") : t("speech.title")}
             aria-pressed={speech.listening || speech.busy}
             aria-keyshortcuts={settings.speech.shortcut.replace("Ctrl", "Control") || undefined}
-            title={`${speech.busy ? "停止ボタンでキャンセル" : speech.listening ? "聞き取りを停止" : speech.supported ? "音声入力" : "音声入力非対応（クリックで詳細）"}${settings.speech.shortcut ? ` (${speechShortcutLabel(settings.speech.shortcut)})` : ""}`}
+            title={`${speech.busy ? t("speech.cancelHint") : speech.listening ? t("speech.stopListening") : speech.supported ? t("speech.title") : t("speech.unsupported")}${settings.speech.shortcut ? ` (${speechShortcutLabel(settings.speech.shortcut)})` : ""}`}
             disabled={loading || !activeSession}
             onClick={speech.toggle}
           >
             {speech.listening || speech.busy ? <Square size={14} /> : <Mic size={15} />}
-            {(speech.listening || speech.busy) && <span>停止</span>}
+            {(speech.listening || speech.busy) && <span>{t("speech.stop")}</span>}
           </button>
           <button
             type="button"

@@ -1,7 +1,9 @@
+import { useI18n } from "../i18n/context";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 function AudioMeter({ stream }: { stream: MediaStream | null }) {
+  const { t } = useI18n();
   const bars = useRef<HTMLSpanElement[]>([]);
   const [available, setAvailable] = useState(false);
   useEffect(() => {
@@ -44,7 +46,7 @@ function AudioMeter({ stream }: { stream: MediaStream | null }) {
       <div
         className="speech-meter"
         role="img"
-        aria-label={available ? "マイク入力音量" : "音量表示を利用できません"}
+        aria-label={available ? t("speech.meter") : t("speech.noMeter")}
       >
         {Array.from({ length: 9 }, (_, i) => (
           <span
@@ -55,7 +57,7 @@ function AudioMeter({ stream }: { stream: MediaStream | null }) {
           />
         ))}
       </div>
-      <small>{available ? "入力音量" : "音量表示なし"}</small>
+      <small>{available ? t("speech.level") : t("speech.noLevel")}</small>
     </div>
   );
 }
@@ -66,6 +68,7 @@ export function SpeechActivity({ status, stream, browser, silenceHint }: {
   browser: boolean;
   silenceHint?: string;
 }) {
+  const { t } = useI18n();
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const started = Date.now();
@@ -78,12 +81,12 @@ export function SpeechActivity({ status, stream, browser, silenceHint }: {
   }, [status]);
   const listening = status === "recording";
   const title = listening
-    ? "聞き取り中"
+    ? t("speech.listening")
     : status === "starting"
-    ? "マイクを準備中"
+    ? t("speech.starting")
     : status === "preparing"
-    ? "音声データを準備中"
-    : "文字起こしを解析中";
+    ? t("speech.preparing")
+    : t("speech.transcribing");
   return (
     <div
       className={`speech-activity ${
@@ -101,21 +104,22 @@ export function SpeechActivity({ status, stream, browser, silenceHint }: {
         <strong role="status">{title}</strong>
         <small>
           {listening
-            ? browser
-              ? "話すと入力欄に反映されます。停止ボタンで終了。"
-              : "停止ボタンで録音を終了し、解析を開始します。"
+            ? browser ? t("speech.liveHint") : t("speech.recordHint")
             : browser || status === "starting"
-            ? "停止ボタンでキャンセル"
-            : "停止ボタンで解析をキャンセル（録音は保持）"}
+            ? t("speech.cancelHint")
+            : t("speech.retainHint")}
         </small>
         {listening && silenceHint && <small>{silenceHint}</small>}
         {status === "transcribing" && elapsed >= 20 && (
           <small>
-            サーバーの応答を待っています。処理時間は録音の長さやモデルによって変わります。
+            {t("speech.waiting")}
           </small>
         )}
       </div>
-      <time className="speech-elapsed" aria-label={`経過時間 ${elapsed}秒`}>
+      <time
+        className="speech-elapsed"
+        aria-label={t("speech.elapsed").replace("{seconds}", String(elapsed))}
+      >
         {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
       </time>
       {!listening && (

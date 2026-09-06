@@ -118,6 +118,29 @@ approval is cleared automatically if an update changes its connection details.
 AI is optional. Without an API key, cloud account, or network connection,
 GemiHub remains a local document and knowledge workspace.
 
+## Voice input
+
+In voice input settings, select the speech recognition API option to choose
+OpenAI, whisper.cpp, an OpenAI-compatible API, or Gemini 3.5 Transcribe.
+Gemini and OpenAI reuse the matching API key registered in AI settings, regardless
+of the active chat provider. When no matching key is configured, a speech-only
+key can be entered. Registering an AI key automatically takes priority.
+Transcribe supports two connections:
+
+- **AI Studio**: use a Gemini API key.
+- **Vertex AI**: reuse the current Google login and Project ID from AI settings,
+  automatically following changes. No separate speech connection settings are needed.
+  Enable the Vertex AI API and ensure access to the model. This uses `gemini-3.5-transcribe-preview` in `global`.
+
+Set the language to `auto`, `ja-JP`, `en-US`, or another supported language code.
+Recording is limited to five minutes including retained clips. After recording
+stops, the transcript is inserted into the draft. The connection test sends a
+short silent recording; API usage may incur charges. Cloud Speech-to-Text V1
+configuration is no longer needed.
+
+References: [Gemini API](https://ai.google.dev/gemini-api/docs/generate-content/transcribe),
+[Vertex AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-transcribe).
+
 ## Screenshots
 
 ### Review AI changes before they touch your files

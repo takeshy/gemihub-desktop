@@ -14860,11 +14860,10 @@ body.resizing-modal {
   .speech-spinner, .speech-progress > span { animation: none; }
   .speech-meter span { transition: none; }
 }
-.speech-os-tip { display: grid; gap: 10px; padding: 16px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
+.speech-os-tip { display: grid; gap: 6px; padding: 12px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
 .speech-os-tip > strong { font-size: 0.82rem; color: var(--accent); }
-.speech-os-tip p { margin: 0; color: var(--text); font-size: 0.75rem; line-height: 1.8; }
-.speech-os-tip > small { color: var(--muted); font-size: 0.68rem; line-height: 1.7; }
-.speech-os-shortcuts { display: grid; gap: 10px; padding: 10px 0; }
+.speech-os-tip p { margin: 0; color: var(--text); font-size: 0.75rem; line-height: 1.6; }
+.speech-os-shortcuts { display: flex; flex-wrap: wrap; gap: 6px 20px; }
 .speech-os-shortcuts > div { display: flex; align-items: center; gap: 14px; font-size: 0.73rem; }
 .speech-os-shortcuts strong { min-width: 65px; font-weight: 500; }
 .speech-os-shortcuts kbd { display: inline-block; padding: 3px 7px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; background: var(--panel); font-family: inherit; font-size: 0.7rem; }

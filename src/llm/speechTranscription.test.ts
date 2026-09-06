@@ -267,3 +267,223 @@ Deno.test("speech WAV encodes mono 16-bit 16 kHz PCM with clipped samples", asyn
   assertEquals(view.getInt16(46, true), 0);
   assertEquals(view.getInt16(48, true), 32767);
 });
+
+const geminiSettings = {
+  ...defaultSpeechSettings,
+  endpointType: "gemini-transcribe" as const,
+  apiKey: " gemini-key ",
+  language: "ja-JP",
+};
+const vertexSettings = {
+  ...geminiSettings,
+  endpointType: "vertex-transcribe" as const,
+  vertexProjectId: "test-project",
+};
+const transcriptionResponse = (body: unknown, status = 200) => ({
+  status,
+  headers: {},
+  body: JSON.stringify(body),
+  bodyBase64: "",
+});
+const transcriptCandidate = (parts: unknown[], finishReason = "STOP") => ({
+  candidates: [{ content: { parts }, finishReason }],
+});
+
+Deno.test("Transcribe sends WAV inline data to fixed Gemini and Vertex models with isolated auth", async () => {
+  const wav = encodeSpeechWav(new Float32Array([0.5, -0.5]));
+  for (const settings of [geminiSettings, vertexSettings]) {
+    const vertex = settings.endpointType === "vertex-transcribe";
+    const text = await transcribeSpeech(wav, {
+      ...settings,
+      baseUrl: "https://wrong.example",
+      model: "wrong-model",
+    }, async (request) => {
+      assertEquals(
+        request.url,
+        vertex
+          ? "https://aiplatform.googleapis.com/v1beta1/projects/test-project/locations/global/publishers/google/models/gemini-3.5-transcribe-preview:generateContent"
+          : "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent",
+      );
+      assertEquals(request.method, "POST");
+      assertEquals(
+        request.headers,
+        vertex ? { "Content-Type": "application/json" } : {
+          "Content-Type": "application/json",
+          "x-goog-api-key": "gemini-key",
+        },
+      );
+      const body = JSON.parse(atob(request.bodyBase64!));
+      assertEquals(body.generationConfig, {
+        audioTranscriptionConfig: { languageCodes: ["ja-JP"] },
+      });
+      assertEquals(body.contents.length, 1);
+      const audio = body.contents[0].parts[0].inlineData;
+      assertEquals(audio.mimeType, "audio/wav");
+      assertEquals(
+        Uint8Array.from(atob(audio.data), (char) => char.charCodeAt(0)),
+        new Uint8Array(await wav.arrayBuffer()),
+      );
+      return transcriptionResponse({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: "こんにちは。" }, { text: "オーバー。" }],
+            },
+            finishReason: "STOP",
+          },
+          { content: { parts: [{ text: "別候補" }] } },
+        ],
+      });
+    }, new AbortController().signal);
+    assertEquals(speechDraft("", text, true), {
+      text: "こんにちは。",
+      send: true,
+    });
+  }
+});
+
+Deno.test("Transcribe supports auto detection, short language aliases, silence and audio longer than a minute", async () => {
+  const wav = encodeSpeechWav(new Float32Array(61 * 16000));
+  for (
+    const [language, expected] of [["auto", []], ["", []], ["ja", ["ja-JP"]], [
+      "en",
+      ["en-US"],
+    ], ["ceb", ["ceb"]]] as const
+  ) {
+    assertEquals(
+      await transcribeSpeech(
+        wav,
+        { ...geminiSettings, language },
+        (request) => {
+          assertEquals(
+            JSON.parse(atob(request.bodyBase64!)).generationConfig
+              .audioTranscriptionConfig.languageCodes,
+            expected,
+          );
+          return Promise.resolve(
+            transcriptionResponse(transcriptCandidate([{ text: "" }])),
+          );
+        },
+        new AbortController().signal,
+      ),
+      "",
+    );
+  }
+});
+
+Deno.test("Transcribe rejects malformed, blocked and truncated output instead of sending partial text", async () => {
+  const wav = encodeSpeechWav(new Float32Array(160));
+  for (
+    const body of [
+      {},
+      [],
+      { error: { message: "secret" } },
+      { candidates: [] },
+      { candidates: [null] },
+      transcriptCandidate([{ text: 42 }]),
+    ]
+  ) {
+    await assertRejects(
+      () =>
+        transcribeSpeech(
+          wav,
+          geminiSettings,
+          () => Promise.resolve(transcriptionResponse(body)),
+          new AbortController().signal,
+        ),
+      Error,
+      "応答形式が不正",
+    );
+  }
+  await assertRejects(
+    () =>
+      transcribeSpeech(wav, geminiSettings, () =>
+        Promise.resolve(
+          transcriptionResponse({ promptFeedback: { blockReason: "SAFETY" } }),
+        ), new AbortController().signal),
+    Error,
+    "処理を拒否",
+  );
+  await assertRejects(
+    () =>
+      transcribeSpeech(wav, geminiSettings, () =>
+        Promise.resolve(
+          transcriptionResponse(
+            transcriptCandidate([{ text: "over" }], "MAX_TOKENS"),
+          ),
+        ), new AbortController().signal),
+    Error,
+    "完了しませんでした",
+  );
+  for (const settings of [geminiSettings, vertexSettings]) {
+    const error = await assertRejects(
+      () =>
+        transcribeSpeech(
+          wav,
+          settings,
+          () =>
+            Promise.resolve(transcriptionResponse({ error: "secret" }, 403)),
+          new AbortController().signal,
+        ),
+      Error,
+      "STT HTTP 403",
+    );
+    assertEquals(error.message.includes("secret"), false);
+  }
+});
+
+Deno.test("Transcribe validates credentials and project IDs and ignores cancelled responses", async () => {
+  const wav = encodeSpeechWav(new Float32Array(160));
+  const transport = () => {
+    throw new Error("unexpected transport");
+  };
+  await assertRejects(
+    () =>
+      transcribeSpeech(
+        wav,
+        { ...geminiSettings, apiKey: "" },
+        transport,
+        new AbortController().signal,
+      ),
+    Error,
+    "API Keyを設定",
+  );
+  for (
+    const vertexProjectId of ["", "../other", "a?key=secret", "a/b", "a#b"]
+  ) {
+    await assertRejects(
+      () =>
+        transcribeSpeech(
+          wav,
+          { ...vertexSettings, vertexProjectId },
+          transport,
+          new AbortController().signal,
+        ),
+      Error,
+      "Project IDを設定",
+    );
+  }
+  await assertRejects(
+    () =>
+      transcribeSpeech(
+        wav,
+        { ...geminiSettings, language: "ja JP" },
+        transport,
+        new AbortController().signal,
+      ),
+    Error,
+    "言語コード",
+  );
+  const controller = new AbortController();
+  await assertRejects(() =>
+    transcribeSpeech(wav, vertexSettings, () => {
+      controller.abort();
+      return Promise.resolve(
+        transcriptionResponse(transcriptCandidate([{ text: "over" }])),
+      );
+    }, controller.signal), DOMException);
+  await assertRejects(
+    () => transcribeSpeech(wav, geminiSettings, transport, controller.signal),
+    DOMException,
+  );
+});
