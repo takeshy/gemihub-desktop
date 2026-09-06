@@ -1,4 +1,5 @@
 import type { RAGSetting } from "../lib/wailsBackend";
+import { validSpeechShortcut } from "./speechShortcut";
 
 export type ChatProvider = "openai" | "gemini" | "vertex" | "anthropic" | "cli";
 export type LocalLLMFramework =
@@ -121,7 +122,57 @@ export interface DiscordIntegrationSettings {
   ragSetting: string | null;
 }
 
+export interface SpeechSettings {
+  silenceSeconds: number;
+  shortcut: string;
+  sendPhrase: string;
+  provider: "browser" | "openai-compatible";
+  endpointType: "openai" | "whisper-cpp" | "custom";
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  language: string;
+}
+
+export const defaultSpeechSettings: SpeechSettings = {
+  silenceSeconds: 3,
+  shortcut: "",
+  sendPhrase: "over, オーバー",
+  provider: "browser",
+  endpointType: "openai",
+  baseUrl: "https://api.openai.com/v1",
+  apiKey: "",
+  model: "whisper-1",
+  language: "auto",
+};
+
+export function loadSpeechSettings(saved?: Partial<Omit<SpeechSettings, "provider">> & { provider?: string }): SpeechSettings {
+  const legacyWhisper = saved?.provider === "whisper-cpp";
+  return {
+    ...defaultSpeechSettings,
+    ...saved,
+    shortcut: validSpeechShortcut(saved?.shortcut),
+    silenceSeconds: typeof saved?.silenceSeconds === "number" && Number.isInteger(saved.silenceSeconds) && saved.silenceSeconds >= 0 && saved.silenceSeconds <= 10 ? saved.silenceSeconds : defaultSpeechSettings.silenceSeconds,
+    provider: legacyWhisper || saved?.provider === "openai-compatible" ? "openai-compatible" : "browser",
+    endpointType: legacyWhisper ? "whisper-cpp" : saved?.endpointType === "whisper-cpp" || saved?.endpointType === "custom" || saved?.endpointType === "openai" ? saved.endpointType : !saved?.baseUrl || saved.baseUrl.replace(/\/+$/, "") === defaultSpeechSettings.baseUrl ? "openai" : "custom",
+    sendPhrase: typeof saved?.sendPhrase === "string" ? saved.sendPhrase : defaultSpeechSettings.sendPhrase,
+  };
+}
+
+export function selectSpeechEndpoint(settings: SpeechSettings, endpointType: SpeechSettings["endpointType"]): SpeechSettings {
+  const baseUrl = endpointType === "openai" ? "https://api.openai.com/v1" : endpointType === "whisper-cpp" ? "http://127.0.0.1:8080" : settings.baseUrl;
+  return {
+    ...settings,
+    provider: "openai-compatible",
+    endpointType,
+    baseUrl,
+    model: endpointType === "openai" ? "whisper-1" : settings.model,
+    apiKey: baseUrl === settings.baseUrl ? settings.apiKey : "",
+  };
+}
+
 export interface ChatSettings {
+  speech: SpeechSettings;
   provider: ChatProvider;
   endpoint: string;
   apiKey: string;
@@ -203,6 +254,7 @@ export const chatModelChoices: Record<Exclude<ChatProvider, "cli">, string[]> =
   };
 
 export const defaultChatSettings: ChatSettings = {
+  speech: { ...defaultSpeechSettings },
   provider: "openai",
   endpoint: "https://api.openai.com/v1",
   apiKey: "",
@@ -657,6 +709,7 @@ export function loadChatSettings(
     return {
       ...defaultChatSettings,
       ...parsed,
+      speech: loadSpeechSettings(parsed.speech),
       provider,
       model: migrateOldDefaultModel(provider, parsed.model),
       providerProfiles:

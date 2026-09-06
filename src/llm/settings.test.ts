@@ -4,6 +4,9 @@ import {
   configuredModelOptions,
   defaultChatSettings,
   defaultRAGSetting,
+  defaultSpeechSettings,
+  selectSpeechEndpoint,
+  loadSpeechSettings,
   loadChatSettings,
   localLLMFrameworks,
   newModelProfile,
@@ -12,6 +15,13 @@ import {
   selectModelProfile,
   updateModelProfile,
 } from "./settings.ts";
+
+Deno.test("speech settings keep browser as default and load compatible endpoints with an empty key", () => {
+  assertEquals(loadChatSettings({ getItem: () => "{}" }).speech.provider, "browser");
+  const speech = loadChatSettings({ getItem: () => JSON.stringify({ speech: { provider: "openai-compatible", baseUrl: "http://127.0.0.1:8080/v1", apiKey: "", model: "whisper" } }) }).speech;
+  assertEquals(speech, { provider: "openai-compatible", baseUrl: "http://127.0.0.1:8080/v1", apiKey: "", model: "whisper", language: "auto", sendPhrase: "over, オーバー", endpointType: "custom", shortcut: "", silenceSeconds: 3 });
+  assertEquals(loadChatSettings({ getItem: () => '{"speech":{"sendPhrase":""}}' }).speech.sendPhrase, "");
+});
 
 Deno.test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {
   assertEquals(chatModelChoices.openai.includes("gpt-6-astra"), true);
@@ -295,4 +305,24 @@ Deno.test("RAG embeddings use AI provider credentials or isolated custom credent
     url: "http://localhost:11434/v1",
     key: "custom-key",
   });
+});
+
+Deno.test("speech service presets set OpenAI defaults and preserve legacy whisper settings", () => {
+  const legacy = loadSpeechSettings({ provider: "whisper-cpp", baseUrl: "http://127.0.0.1:8080", language: "ja", apiKey: "local-key" });
+  assertEquals(legacy.provider, "openai-compatible");
+  assertEquals(legacy.endpointType, "whisper-cpp");
+  assertEquals(legacy.baseUrl, "http://127.0.0.1:8080");
+  const openai = selectSpeechEndpoint(legacy, "openai");
+  assertEquals(openai.baseUrl, "https://api.openai.com/v1");
+  assertEquals(openai.model, "whisper-1");
+  assertEquals(openai.apiKey, "");
+  assertEquals(openai.language, "ja");
+  const local = selectSpeechEndpoint({ ...defaultSpeechSettings, apiKey: "cloud-key" }, "whisper-cpp");
+  assertEquals(local.baseUrl, "http://127.0.0.1:8080");
+  assertEquals(local.apiKey, "");
+  assertEquals(selectSpeechEndpoint({ ...openai, apiKey: "openai-key" }, "openai").apiKey, "openai-key");
+  assertEquals(selectSpeechEndpoint(local, "custom").baseUrl, local.baseUrl);
+  const edited = { ...local, baseUrl: "http://192.168.1.20:9090" };
+  assertEquals(loadSpeechSettings(edited).baseUrl, "http://192.168.1.20:9090");
+  assertEquals(loadSpeechSettings(edited).endpointType, "whisper-cpp");
 });

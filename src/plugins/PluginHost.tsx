@@ -160,6 +160,8 @@ export function PluginHost({
   aiEnabled,
   pluginViewRequest,
   chatOpenRequest,
+  speechToggleRequest,
+  onSpeechToggleHandled,
   chatDraftRequest,
   collapsed,
   settingsOpen,
@@ -184,6 +186,8 @@ export function PluginHost({
   aiEnabled: boolean;
   pluginViewRequest: number;
   chatOpenRequest: number;
+  speechToggleRequest: number | null;
+  onSpeechToggleHandled: (id: number) => void;
   chatDraftRequest: { id: number; text: string };
   collapsed: boolean;
   settingsOpen: boolean;
@@ -923,6 +927,8 @@ export function PluginHost({
                     onSettingsChange={onChatSettingsChange}
                     activeFile={activeFile}
                     draftRequest={chatDraftRequest}
+                    speechToggleRequest={speechToggleRequest}
+                    onSpeechToggleHandled={onSpeechToggleHandled}
                     externalAttachments={chatAttachmentRequest}
                     pluginCommands={slashCommands}
                     onOpenSettings={onOpenChatSettings}

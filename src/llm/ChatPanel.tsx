@@ -10,6 +10,7 @@ import {
   FileText,
   LayoutDashboard,
   Library,
+  Mic,
   Paperclip,
   Plus,
   Search,
@@ -21,6 +22,9 @@ import {
   X,
 } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
+import { useChatSpeech } from "./useChatSpeech";
+import { SpeechActivity } from "./SpeechActivity";
+import { speechShortcutLabel } from "./speechShortcut";
 import {
   applyPendingFileAction,
   cancelChat,
@@ -567,6 +571,8 @@ export function ChatPanel({
   onSettingsChange,
   activeFile,
   draftRequest,
+  speechToggleRequest,
+  onSpeechToggleHandled,
   externalAttachments,
   pluginCommands = [],
   onOpenSettings,
@@ -580,6 +586,8 @@ export function ChatPanel({
   onSettingsChange: (settings: ChatSettings) => void;
   activeFile: { path: string; content: string } | null;
   draftRequest?: { id: number; text: string };
+  speechToggleRequest?: number | null;
+  onSpeechToggleHandled?: (id: number) => void;
   externalAttachments?: {
     id: number;
     files: Array<{ path: string; content: string; rag?: boolean }>;
@@ -1578,6 +1586,7 @@ export function ChatPanel({
   const send = async (override?: string) => {
     const text = (override ?? input).trim();
     if (!text || loading || !activeSession) return;
+    speech.stop();
     // Only what the user typed belongs in recall; continuation prompts the panel
     // sends itself (after applying a file action) would just be noise.
     if (override === undefined) {
@@ -2177,6 +2186,34 @@ export function ChatPanel({
     }
   };
 
+  const speech = useChatSpeech({
+    input,
+    settings: settings.speech,
+    scope: `${workspaceBase}:${activeSession?.id ?? ""}`,
+    disabled: loading || !activeSession,
+    onInput: (text) => {
+      historyIndexRef.current = null;
+      setInput(text);
+    },
+    onSend: (text) => {
+      rememberPrompt(text);
+      historyDraftRef.current = "";
+      void send(text);
+    },
+  });
+
+  const handledSpeechRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      speechToggleRequest == null ||
+      handledSpeechRequest.current === speechToggleRequest ||
+      loadedHistoryScope !== (workspaceBase || "__session__")
+    ) return;
+    handledSpeechRequest.current = speechToggleRequest;
+    onSpeechToggleHandled?.(speechToggleRequest);
+    if (!loading && activeSession) void speech.toggle();
+  }, [speechToggleRequest, onSpeechToggleHandled, loadedHistoryScope, workspaceBase, loading, activeSession, speech.toggle]);
+
   const applyPending = async () => {
     if (!pending) return;
     setLoading(true);
@@ -2755,10 +2792,12 @@ export function ChatPanel({
             ref={composerRef}
             value={input}
             onChange={(event) => {
+              speech.stop();
               historyIndexRef.current = null;
               setInput(event.target.value);
             }}
             onKeyDown={(event) => {
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") speech.stop();
               const menuOpen = slashMatches.length > 0 ||
                 skillSlashMatches.length > 0 || mentionMatches.length > 0;
               if (!menuOpen && recallPrompt(event)) return;
@@ -2841,6 +2880,16 @@ export function ChatPanel({
             </div>
           )}
         </div>
+        {speech.error && <div className="chat-error" role="alert">{speech.error}</div>}
+        {speech.retainedCount > 0 && !speech.busy && (
+          <div className="speech-test-feedback" role="status">
+            <div><span>録音{speech.retainedCount}件を保持しています。{speech.listening ? "追加録音中です。まとめて文字起こしします。" : "マイクで録音を追加し、まとめて文字起こしできます。"}</span><small className="speech-settings-help">成功後に録音を自動で消去します。再変換は保持音声を再送するため、API利用量が増える場合があります。</small></div>
+            <button type="button" className="speech-secondary-button" disabled={speech.listening || loading} onClick={() => void speech.retryRecording()}>保持中の録音を変換</button>
+          </div>
+        )}
+        {(speech.listening || speech.busy) && (
+          <SpeechActivity status={speech.status} stream={speech.meterStream} browser={settings.speech.provider === "browser"} silenceHint={speech.silenceHint} />
+        )}
         <div className="chat-input-actions">
           <button
             ref={filePickerButtonRef}
@@ -3030,6 +3079,19 @@ export function ChatPanel({
               Web
             </label>
           </span>
+          <button
+            type="button"
+            className={`chat-send chat-speech-button ${speech.listening || speech.busy ? "is-active" : ""}`}
+            aria-label={speech.busy ? "停止（解析をキャンセル）" : speech.listening ? "停止（聞き取りを終了）" : "音声入力"}
+            aria-pressed={speech.listening || speech.busy}
+            aria-keyshortcuts={settings.speech.shortcut.replace("Ctrl", "Control") || undefined}
+            title={`${speech.busy ? "停止ボタンでキャンセル" : speech.listening ? "聞き取りを停止" : speech.supported ? "音声入力" : "音声入力非対応（クリックで詳細）"}${settings.speech.shortcut ? ` (${speechShortcutLabel(settings.speech.shortcut)})` : ""}`}
+            disabled={loading || !activeSession}
+            onClick={speech.toggle}
+          >
+            {speech.listening || speech.busy ? <Square size={14} /> : <Mic size={15} />}
+            {(speech.listening || speech.busy) && <span>停止</span>}
+          </button>
           <button
             type="button"
             className="chat-send"

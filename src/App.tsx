@@ -1,3 +1,4 @@
+import { speechShortcutFromEvent } from "./llm/speechShortcut";
 import { joinCommandLine, splitCommandLine } from "./mcp/commandLine";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -28,6 +29,7 @@ import {
   Library,
   LockKeyhole,
   MessageSquare,
+  Mic as SpeechIcon,
   Moon,
   NotebookText,
   PenLine,
@@ -148,6 +150,7 @@ import {
 } from "./llm/settings";
 import { type ActiveSelection, formatActiveSelection } from "./llm/selection";
 import { ModelProviderManager } from "./llm/ModelProviderManager";
+import { SpeechSettingsPanel } from "./llm/SpeechSettingsPanel";
 import { McpHttpClient, McpHttpError } from "./mcp/httpClient";
 import { McpStdioClient } from "./mcp/stdioClient";
 import { getWorkflowSpecTool } from "./workflow/workflowSpec";
@@ -1083,6 +1086,7 @@ export default function App() {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<
+    | "speech"
     | "general"
     | "encryption"
     | "ai"
@@ -1265,6 +1269,11 @@ export default function App() {
   );
   const [pluginViewRequest, setPluginViewRequest] = useState(0);
   const [chatOpenRequest, setChatOpenRequest] = useState(0);
+  const [speechToggleRequest, setSpeechToggleRequest] = useState<number | null>(null);
+  const speechRequestId = useRef(0);
+  const acknowledgeSpeechToggle = useCallback((id: number) => {
+    setSpeechToggleRequest((current) => current === id ? null : current);
+  }, []);
   const [chatDraftRequest, setChatDraftRequest] = useState({ id: 0, text: "" });
   const [pluginWidgetRequest, setPluginWidgetRequest] = useState<{
     id: number;
@@ -2159,6 +2168,26 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (settingsOpen || !aiEnabled) {
+      setSpeechToggleRequest(null);
+      return;
+    }
+    const shortcut = chatSettings.speech.shortcut;
+    if (!shortcut) return;
+    const onSpeechKeyDown = (event: KeyboardEvent) => {
+      if (speechShortcutFromEvent(event) !== shortcut) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.repeat) return;
+      setChatViewOpen(true);
+      setChatOpenRequest((request) => request + 1);
+      setSpeechToggleRequest(++speechRequestId.current);
+    };
+    window.addEventListener("keydown", onSpeechKeyDown, true);
+    return () => window.removeEventListener("keydown", onSpeechKeyDown, true);
+  }, [aiEnabled, settingsOpen, chatSettings.speech.shortcut]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const meta = event.metaKey || event.ctrlKey;
       if (!meta) return;
@@ -2682,6 +2711,8 @@ export default function App() {
             aiEnabled={aiEnabled}
             pluginViewRequest={pluginViewRequest}
             chatOpenRequest={chatOpenRequest}
+            speechToggleRequest={settingsOpen || !aiEnabled ? null : speechToggleRequest}
+            onSpeechToggleHandled={acknowledgeSpeechToggle}
             chatDraftRequest={chatDraftRequest}
             collapsed={!chatViewOpen}
             settingsOpen={settingsOpen && settingsSection === "plugins"}
@@ -3054,6 +3085,13 @@ export default function App() {
                   >
                     <MessageSquare size={16} /> AI features
                   </button>
+                  <button
+                    type="button"
+                    className={settingsSection === "speech" ? "active" : ""}
+                    onClick={() => setSettingsSection("speech")}
+                  >
+                    <SpeechIcon size={16} /> 音声入力
+                  </button>
                   {aiEnabled && (
                     <>
                       <button
@@ -3417,6 +3455,12 @@ export default function App() {
                         </p>
                       </section>
                     </div>
+                  )}
+                  {settingsSection === "speech" && (
+                    <SpeechSettingsPanel
+                      settings={chatSettings.speech}
+                      onChange={(speech) => setChatSettings((current) => ({ ...current, speech }))}
+                    />
                   )}
                   {settingsSection === "ai" && (
                     <>
