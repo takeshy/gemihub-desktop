@@ -122,6 +122,14 @@ export interface DiscordIntegrationSettings {
   ragSetting: string | null;
 }
 
+export const MIN_READ_ALOUD_RATE = 0.5;
+export const MAX_READ_ALOUD_RATE = 5;
+
+export function clampReadAloudRate(rate: number): number {
+  if (!Number.isFinite(rate)) return 1;
+  return Math.min(MAX_READ_ALOUD_RATE, Math.max(MIN_READ_ALOUD_RATE, rate));
+}
+
 export interface SpeechSettings {
   silenceSeconds: number;
   shortcut: string;
@@ -143,6 +151,10 @@ export interface SpeechSettings {
   newlinePhrases?: string;
   exclamationPhrases?: string;
   replacements?: string;
+  /** Read each new assistant answer aloud after it finishes streaming. */
+  autoReadAloud: boolean;
+  /** Speech synthesis rate, clamped to MIN_READ_ALOUD_RATE..MAX_READ_ALOUD_RATE. */
+  readAloudRate: number;
 }
 
 export const defaultSpeechSettings: SpeechSettings = {
@@ -159,6 +171,8 @@ export const defaultSpeechSettings: SpeechSettings = {
   newlinePhrases: "enter",
   exclamationPhrases: "exclamation",
   replacements: "",
+  autoReadAloud: false,
+  readAloudRate: 1,
 };
 
 export function isGeminiSpeech(
@@ -207,6 +221,12 @@ export function loadSpeechSettings(
     sendPhrase: typeof saved?.sendPhrase === "string"
       ? saved.sendPhrase
       : defaultSpeechSettings.sendPhrase,
+    autoReadAloud: saved?.autoReadAloud === true,
+    readAloudRate: clampReadAloudRate(
+      typeof saved?.readAloudRate === "number"
+        ? saved.readAloudRate
+        : defaultSpeechSettings.readAloudRate,
+    ),
   };
   // Cloud STT credentials must not silently move to a different API.
   return legacyGoogle

@@ -19,25 +19,31 @@ export function parseReplacementRules(text: string): SpeechReplacement[] {
     const match = /^\s*(.+?)\s*(?:=>|⇒|→)\s*(.*?)\s*$/.exec(line);
     if (!match || match[1].trim().startsWith("#")) return [];
     const decode = (value: string) =>
-      value.replace(/\\([\\n])/g, (_, char) => char === "n" ? "\n" : "\\");
-    return [{ from: decode(match[1].trim()), to: decode(match[2]) }];
+      value.replace(/\\([\\n#])/g, (_, char) => char === "n" ? "\n" : char);
+    const from = decode(match[1].trim());
+    // An empty spoken form would match at every position.
+    return from ? [{ from, to: decode(match[2]) }] : [];
   });
 }
 
 export function serializeReplacementRules(rules: SpeechReplacement[]): string {
   const encode = (value: string) =>
     value.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n");
+  // A leading # would otherwise round-trip as a comment and be dropped.
+  const encodeFrom = (value: string) => encode(value).replace(/^#/, "\\#");
   return rules.map(({ from, to }) => ({ from: from.trim(), to: to.trim() }))
     .filter(({ from }) => from)
-    .map(({ from, to }) => `${encode(from)} => ${encode(to)}`).join("\n");
+    .map(({ from, to }) => `${encodeFrom(from)} => ${encode(to)}`).join("\n");
 }
 
 export function applyReplacementRules(
   text: string,
   rules: SpeechReplacement[],
 ): string {
-  if (!text || !rules.length) return text;
-  const ordered = [...rules].sort((a, b) => b.from.length - a.from.length);
+  const ordered = rules.filter(({ from }) => from).sort((a, b) =>
+    b.from.length - a.from.length
+  );
+  if (!text || !ordered.length) return text;
   const alternatives = ordered.map(({ from }) => {
     const edge = unspaced.test(from) || !/^[\p{L}\p{N}_]/u.test(from)
       ? ""

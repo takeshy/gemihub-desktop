@@ -31,6 +31,16 @@ Deno.test("replacement rows serialize compatibly with speech-popup", () => {
     { from: "two lines", to: "first\nsecond" },
   ]);
 });
+Deno.test("a spoken phrase may start with a hash without becoming a comment", () => {
+  const stored = serializeReplacementRules([
+    { from: "#tag", to: "hashtag" },
+    { from: "back\\slash", to: "ok" },
+  ]);
+  assertEquals(parseReplacementRules(stored), [
+    { from: "#tag", to: "hashtag" },
+    { from: "back\\slash", to: "ok" },
+  ]);
+});
 Deno.test("speech symbol commands are final trailing phrases", () => {
   assertEquals(
     applySpeechCommands("Is this working question.", {
@@ -41,4 +51,11 @@ Deno.test("speech symbol commands are final trailing phrases", () => {
     "Is this working?",
   );
   assertEquals(trailingSpeechCommand("turn over the page", "over"), null);
+});
+Deno.test("a rule with no spoken phrase is dropped instead of matching everywhere", () => {
+  assertEquals(parseReplacementRules(" => hello"), []);
+  assertEquals(
+    applyReplacementRules("this is a test", [{ from: "", to: "hello" }]),
+    "this is a test",
+  );
 });

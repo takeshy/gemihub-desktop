@@ -69,9 +69,10 @@ export async function createPCMCapture(
       if (now - first >= 50) heard = true;
       previous = now;
     }
-    pending = pending.then(() =>
-      onChunk(base64(resamplePCM16(input, context.sampleRate, outputRate)))
-    ).catch((error) => {
+    // ScriptProcessorNode recycles the input buffer between callbacks, so the
+    // samples must be converted here rather than inside the deferred send.
+    const chunk = base64(resamplePCM16(input, context.sampleRate, outputRate));
+    pending = pending.then(() => onChunk(chunk)).catch((error) => {
       stopped = true;
       onError(error);
     });

@@ -139,6 +139,21 @@ export interface TranslationStrings {
   "speech.recognitionError": string;
   "speech.startError": string;
   "speech.recordStartError": string;
+  "speech.live": string;
+  "speech.liveProviderHint": string;
+  "speech.questionCommand": string;
+  "speech.newlineCommand": string;
+  "speech.exclamationCommand": string;
+  "speech.readAloud": string;
+  "speech.autoReadAloud": string;
+  "speech.autoReadAloudHelp": string;
+  "speech.readAloudRate": string;
+  "speech.readAloudRateHelp": string;
+  "speech.readAloudChip": string;
+  "speech.readAloudChipOff": string;
+  "speech.voiceMode": string;
+  "speech.voiceModeHelp": string;
+  "speech.voiceModeEnd": string;
 
   // Common
   "common.close": string;
@@ -579,7 +594,7 @@ const en: TranslationStrings = {
     "No speech was detected. Press the microphone button to try again.",
   "speech.adding": "Adding audio to transcribe together.",
   "speech.addHint":
-    "Use the microphone to add audio and transcribe the recordings together.",
+    "Retry transcribes the retained audio; starting a new recording discards it.",
   "speech.retainedHelp":
     "Recordings are cleared after successful transcription. Retrying resends retained audio and may increase API usage.",
   "speech.retry": "Transcribe retained recordings",
@@ -598,6 +613,23 @@ const en: TranslationStrings = {
   "speech.recognitionError": "Speech recognition",
   "speech.startError": "Cannot start speech recognition",
   "speech.recordStartError": "Cannot start recording",
+  "speech.live": "Live transcription",
+  "speech.liveProviderHint": "OpenAI / Gemini / Vertex AI",
+  "speech.questionCommand": "Question command",
+  "speech.newlineCommand": "Line break command",
+  "speech.exclamationCommand": "Exclamation command",
+  "speech.readAloud": "Read aloud",
+  "speech.autoReadAloud": "Read answers aloud automatically",
+  "speech.autoReadAloudHelp":
+    "After each answer finishes, it is spoken with the system voice. Answers are kept short and speakable.",
+  "speech.readAloudRate": "Read-aloud speed",
+  "speech.readAloudRateHelp":
+    "Adjusts the speech rate. 1.0× is the system default.",
+  "speech.readAloudChip": "Reading aloud",
+  "speech.readAloudChipOff": "Turn off read-aloud",
+  "speech.voiceMode": "Voice mode",
+  "speech.voiceModeHelp": "The microphone reopens after each answer",
+  "speech.voiceModeEnd": "Stop reopening the microphone automatically",
 
   "common.close": "Close",
   "common.cancel": "Cancel",
@@ -1028,7 +1060,8 @@ const ja: TranslationStrings = {
   "speech.networkError": "音声認識サービスに接続できません。",
   "speech.noSpeech": "音声を検出できませんでした。マイクボタンで再開できます。",
   "speech.adding": "追加録音中です。まとめて文字起こしします。",
-  "speech.addHint": "マイクで録音を追加し、まとめて文字起こしできます。",
+  "speech.addHint":
+    "「保持中の録音を変換」で再送できます。新しく録音を始めると保持中の録音は破棄されます。",
   "speech.retainedHelp":
     "成功後に録音を自動で消去します。再変換は保持音声を再送するため、API利用量が増える場合があります。",
   "speech.retry": "保持中の録音を変換",
@@ -1047,6 +1080,22 @@ const ja: TranslationStrings = {
   "speech.recognitionError": "音声認識",
   "speech.startError": "音声認識を開始できません",
   "speech.recordStartError": "録音を開始できません",
+  "speech.live": "リアルタイム文字起こし",
+  "speech.liveProviderHint": "OpenAI / Gemini / Vertex AI",
+  "speech.questionCommand": "疑問符コマンド",
+  "speech.newlineCommand": "改行コマンド",
+  "speech.exclamationCommand": "感嘆符コマンド",
+  "speech.readAloud": "読み上げ",
+  "speech.autoReadAloud": "返信を自動で読み上げる",
+  "speech.autoReadAloudHelp":
+    "AIの返信が完了すると、端末の音声で読み上げます。返信は短く、読み上げやすい内容になります。",
+  "speech.readAloudRate": "読み上げスピード",
+  "speech.readAloudRateHelp": "読み上げる速さを調整します。1.0× が標準です。",
+  "speech.readAloudChip": "読み上げ中",
+  "speech.readAloudChipOff": "読み上げをオフ",
+  "speech.voiceMode": "音声モード",
+  "speech.voiceModeHelp": "返信後にマイクを自動でオンにします",
+  "speech.voiceModeEnd": "自動でマイクをオンにしない",
 
   "common.close": "閉じる",
   "common.cancel": "キャンセル",

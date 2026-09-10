@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AudioLines,
   Check,
+  Gauge,
   Globe,
   LoaderCircle,
   Mic,
@@ -11,13 +12,17 @@ import {
   Radio,
   Server,
   Square,
+  Volume2,
   X,
 } from "lucide-react";
 import { speechHTTPRequest } from "../lib/wailsBackend";
 import { encodeSpeechWav, transcribeSpeech } from "./speechTranscription";
 import {
   type ChatSettings,
+  clampReadAloudRate,
   isGeminiSpeech,
+  MAX_READ_ALOUD_RATE,
+  MIN_READ_ALOUD_RATE,
   resolveSpeechSettings,
   selectSpeechEndpoint,
   type SpeechSettings,
@@ -133,8 +138,8 @@ export function SpeechSettingsPanel(
     },
     {
       id: "live",
-      label: "Live transcription",
-      hint: "OpenAI / Gemini / Vertex AI",
+      label: t("speech.live"),
+      hint: t("speech.liveProviderHint"),
       icon: AudioLines,
     },
   ] as const;
@@ -290,18 +295,20 @@ export function SpeechSettingsPanel(
             type="button"
             aria-pressed={settings.provider === id}
             onClick={() =>
-              patch({
-                provider: id,
-                ...(id === "live" &&
-                    !["openai", "gemini-transcribe", "vertex-transcribe"]
-                      .includes(settings.endpointType)
+              onChange(
+                // Live speech has no whisper.cpp or custom endpoint, so those
+                // move to OpenAI - through selectSpeechEndpoint, so a key meant
+                // for the previous service is not sent to api.openai.com.
+                id === "live" &&
+                  !["openai", "gemini-transcribe", "vertex-transcribe"]
+                    .includes(settings.endpointType)
                   ? {
-                    endpointType: "openai",
-                    baseUrl: "https://api.openai.com/v1",
+                    ...selectSpeechEndpoint(settings, "openai"),
+                    provider: id,
                     model: "gpt-live-transcribe",
                   }
-                  : {}),
-              })}
+                  : { ...settings, provider: id },
+              )}
           >
             <Icon size={17} />
             <strong>{label}</strong>
@@ -359,7 +366,9 @@ export function SpeechSettingsPanel(
             {(customLanguageMode || customLanguage) && (
               <input
                 autoFocus
-                value={customLanguage ? settings.language : ""}
+                // The typed value may match a listed code halfway through, so
+                // the field follows the setting instead of the custom flag.
+                value={settings.language === "auto" ? "" : settings.language}
                 placeholder="ja-JP"
                 onChange={(event) => patch({ language: event.target.value })}
               />
@@ -661,7 +670,7 @@ export function SpeechSettingsPanel(
           </small>
           <div className="speech-settings-grid">
             <label className="settings-field">
-              <span>Question command</span>
+              <span>{t("speech.questionCommand")}</span>
               <input
                 value={settings.questionPhrases ?? ""}
                 onChange={(event) =>
@@ -669,7 +678,7 @@ export function SpeechSettingsPanel(
               />
             </label>
             <label className="settings-field">
-              <span>Line break command</span>
+              <span>{t("speech.newlineCommand")}</span>
               <input
                 value={settings.newlinePhrases ?? ""}
                 onChange={(event) =>
@@ -677,7 +686,7 @@ export function SpeechSettingsPanel(
               />
             </label>
             <label className="settings-field">
-              <span>Exclamation command</span>
+              <span>{t("speech.exclamationCommand")}</span>
               <input
                 value={settings.exclamationPhrases ?? ""}
                 onChange={(event) =>
@@ -690,6 +699,46 @@ export function SpeechSettingsPanel(
             onChange={(replacements) => patch({ replacements })}
           />
         </>
+      </div>
+      <div className="speech-settings-section">
+        <div className="speech-settings-section-title">
+          <Volume2 size={14} />
+          <strong>{t("speech.readAloud")}</strong>
+        </div>
+        <label className="speech-toggle-field">
+          <input
+            type="checkbox"
+            checked={settings.autoReadAloud}
+            onChange={(event) => patch({ autoReadAloud: event.target.checked })}
+          />
+          <span>
+            <strong>{t("speech.autoReadAloud")}</strong>
+            <small>{t("speech.autoReadAloudHelp")}</small>
+          </span>
+        </label>
+        <label className="settings-field">
+          <span>
+            {t("speech.readAloudRate")}{" "}
+            <small>
+              {clampReadAloudRate(settings.readAloudRate).toFixed(1)}×
+            </small>
+          </span>
+          <div className="speech-rate-slider">
+            <input
+              type="range"
+              min={MIN_READ_ALOUD_RATE}
+              max={MAX_READ_ALOUD_RATE}
+              step={0.1}
+              value={clampReadAloudRate(settings.readAloudRate)}
+              onChange={(event) =>
+                patch({ readAloudRate: Number(event.target.value) })}
+            />
+            <Gauge size={14} aria-hidden="true" />
+          </div>
+          <small>
+            {t("speech.readAloudRateHelp")}
+          </small>
+        </label>
       </div>
       <footer className="speech-settings-help">
         {settings.provider === "browser"

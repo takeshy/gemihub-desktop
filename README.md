@@ -143,6 +143,16 @@ stops, the transcript is inserted into the draft. The connection test sends a
 short silent recording; API usage may incur charges. Cloud Speech-to-Text V1
 configuration is no longer needed.
 
+Saying the send phrase with an empty draft ends listening instead of sending. A
+recording with no speech in it is never transcribed, and the notices about
+retained recordings or errors can be closed with their × button.
+
+Answers can also be spoken: turn on **Read answers aloud automatically** in voice
+settings or in the tool menu next to the Chat input, where the speaking rate can
+be adjusted as well. Starting the microphone also starts voice mode, which
+reopens the microphone after each answer; the × beside the microphone stops only
+that automatic reopening.
+
 References: [Gemini API](https://ai.google.dev/gemini-api/docs/generate-content/transcribe),
 [Vertex AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-transcribe).
 

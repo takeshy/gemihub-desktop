@@ -78,7 +78,12 @@ export function useChatSpeech(options: ChatSpeechOptions) {
       setError(t("speech.noBrowser"));
       return;
     }
-    const base = options.input;
+    let base = options.input;
+    let lastRendered = base;
+    // Recognition keeps every result of the session, so a rebase also has to
+    // skip the part of the transcript the user's edit already contains.
+    let consumed = "";
+    let rendered = "";
     const scope = options.scope;
     try {
       const current = new Constructor();
@@ -98,10 +103,20 @@ export function useChatSpeech(options: ChatSpeechOptions) {
         const transcript = results.map((result) => result[0].transcript).join(
           "",
         );
+        // The user may type or paste while dictating: keep that edit and
+        // continue from it instead of overwriting it with the stale base.
+        if (latest.current.input !== lastRendered) {
+          base = latest.current.input;
+          consumed = rendered;
+        }
+        rendered = transcript;
+        const pending = consumed && transcript.startsWith(consumed)
+          ? transcript.slice(consumed.length)
+          : transcript;
         // Only a final trailing command sends; interim hypotheses may change.
         const { text, send: shouldSend } = speechDraft(
           base,
-          transcript,
+          pending,
           results.length > 0 && results.every((result) => result.isFinal),
           latest.current.settings.sendPhrase,
           {
@@ -111,10 +126,12 @@ export function useChatSpeech(options: ChatSpeechOptions) {
           },
           latest.current.settings.replacements ?? "",
         );
+        lastRendered = text;
         latest.current.onInput(text);
         if (shouldSend) {
           stop();
           if (text.trim()) latest.current.onSend(text);
+          else latest.current.onEnd?.();
         }
       };
       current.onerror = (event) => {
@@ -170,6 +187,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     backgroundTranscribing: false,
     supported: !!Constructor,
     toggle,
+    dismiss: () => setError(""),
     stop,
   };
 }

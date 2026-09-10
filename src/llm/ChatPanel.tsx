@@ -18,14 +18,27 @@ import {
   Send,
   Settings2,
   Square,
+  Volume2,
   Workflow as WorkflowIcon,
   Wrench,
   X,
 } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
-import { resolveSpeechSettings } from "./settings";
+import {
+  clampReadAloudRate,
+  MAX_READ_ALOUD_RATE,
+  MIN_READ_ALOUD_RATE,
+  resolveSpeechSettings,
+} from "./settings";
 import { SpeechActivity } from "./SpeechActivity";
 import { useChatSpeech } from "./useChatSpeech";
+import {
+  buildReadAloudSystemPrompt,
+  stopReadingAloud,
+  useAutoReadAloud,
+  useReadAloudRate,
+  whenReadingSettles,
+} from "./readAloud";
 import { attachedActiveFile } from "./chatFileContext";
 import { speechShortcutLabel } from "./speechShortcut";
 import {
@@ -615,6 +628,8 @@ export function ChatPanel({
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [voiceMode, setVoiceMode] = useState(false);
+  const voiceModeRef = useRef(false);
   const [pending, setPending] = useState<PendingFileAction | null>(null);
   const [pendingCurrentContent, setPendingCurrentContent] = useState<
     string | null
@@ -2041,6 +2056,7 @@ export function ChatPanel({
             })
             : "",
           dynamicRagEnabled ? ragSearchSystemPrompt() : "",
+          settings.speech.autoReadAloud ? buildReadAloudSystemPrompt() : "",
         ].filter(Boolean).join("\n\n"),
         enableFileTools: settings.enableFileTools,
         fileToolMode: settings.fileToolMode,
@@ -2214,7 +2230,64 @@ export function ChatPanel({
       historyDraftRef.current = "";
       void send(text);
     },
+    // Nothing was dictated, so the send phrase alone means "stop listening":
+    // end the hands-free loop too, or the microphone would reopen later.
+    onEnd: () => setVoiceMode(false),
   });
+
+  useReadAloudRate(settings.speech.readAloudRate);
+  useAutoReadAloud(messages, loading, settings.speech.autoReadAloud);
+  voiceModeRef.current = voiceMode;
+  const speechToggleRef = useRef(speech.toggle);
+  speechToggleRef.current = speech.toggle;
+
+  // Only the automatic reopening stops: a recording in progress and whatever is
+  // being read aloud are the user's current turn and are left alone.
+  const exitVoiceMode = () => setVoiceMode(false);
+  const toggleSpeech = () => {
+    // Starting the microphone also starts a hands-free conversation: the
+    // microphone reopens after each answer until the voice-mode badge is closed.
+    // Stopping also leaves voice mode, so it never reopens after the user asked
+    // to stop.
+    setVoiceMode(!speech.listening && !speech.busy);
+    speech.toggle();
+  };
+
+  useEffect(() => {
+    setVoiceMode(false);
+    stopReadingAloud();
+  }, [activeSession?.id, workspaceBase]);
+
+  const previousLoadingRef = useRef(loading);
+  // Read through refs: a re-render for an unrelated change (a new session
+  // object, the read-aloud toggle) would otherwise cancel the pending reopen
+  // without ever retrying it, and the microphone would stay closed.
+  const autoReadAloudRef = useRef(settings.speech.autoReadAloud);
+  autoReadAloudRef.current = settings.speech.autoReadAloud;
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
+  useEffect(() => {
+    const completed = previousLoadingRef.current && !loading;
+    previousLoadingRef.current = loading;
+    if (!completed || !voiceModeRef.current || !activeSessionRef.current) {
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    const reopen = async () => {
+      if (autoReadAloudRef.current) {
+        await whenReadingSettles(300, controller.signal);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      if (cancelled || !voiceModeRef.current) return;
+      speechToggleRef.current();
+    };
+    void reopen();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [loading]);
 
   const handledSpeechRequest = useRef<number | null>(null);
   useEffect(() => {
@@ -2225,7 +2298,7 @@ export function ChatPanel({
     ) return;
     handledSpeechRequest.current = speechToggleRequest;
     onSpeechToggleHandled?.(speechToggleRequest);
-    if (!loading && activeSession) void speech.toggle();
+    if (!loading && activeSession) toggleSpeech();
   }, [
     speechToggleRequest,
     onSpeechToggleHandled,
@@ -2809,6 +2882,34 @@ export function ChatPanel({
             ))}
           </div>
         )}
+        {settings.speech.autoReadAloud && (
+          <div className="chat-chip-row">
+            <span
+              className="chat-read-aloud-chip"
+              title={t("speech.autoReadAloud")}
+            >
+              <Volume2 size={11} aria-hidden="true" />
+              <span>
+                {t("speech.readAloudChip")} ·{" "}
+                {clampReadAloudRate(settings.speech.readAloudRate).toFixed(1)}×
+              </span>
+              <button
+                type="button"
+                title={t("speech.readAloudChipOff")}
+                aria-label={t("speech.readAloudChipOff")}
+                onClick={() => {
+                  stopReadingAloud();
+                  onSettingsChange({
+                    ...settings,
+                    speech: { ...settings.speech, autoReadAloud: false },
+                  });
+                }}
+              >
+                <X size={10} />
+              </button>
+            </span>
+          </div>
+        )}
         <div className="chat-composer">
           <textarea
             ref={composerRef}
@@ -2903,7 +3004,19 @@ export function ChatPanel({
           )}
         </div>
         {speech.error && (
-          <div className="chat-error" role="alert">{speech.error}</div>
+          <div className="chat-error chat-error-dismissable" role="alert">
+            <span>{speech.error}</span>
+            <button
+              type="button"
+              className="speech-dismiss"
+              title={t("common.close")}
+              aria-label={t("common.close")}
+              onClick={() =>
+                speech.dismiss()}
+            >
+              <X size={13} />
+            </button>
+          </div>
         )}
         {speech.retainedCount > 0 && !speech.listening && !speech.busy && (
           <div className="speech-test-feedback" role="status">
@@ -2927,6 +3040,16 @@ export function ChatPanel({
                 void speech.retryRecording()}
             >
               {t("speech.retry")}
+            </button>
+            <button
+              type="button"
+              className="speech-dismiss"
+              title={t("common.close")}
+              aria-label={t("common.close")}
+              onClick={() =>
+                speech.dismiss()}
+            >
+              <X size={13} />
             </button>
           </div>
         )}
@@ -3021,10 +3144,9 @@ export function ChatPanel({
                   ? "active"
                   : ""
               }`}
-              disabled={loading ||
-                (!workspaceBase && settings.mcpServers.length === 0)}
+              disabled={loading}
               onClick={() => setToolMenuOpen((open) => !open)}
-              title="Workspace (vault) and MCP tools"
+              title="Workspace (vault), MCP tools and read-aloud"
             >
               <Database size={15} />
             </button>
@@ -3110,6 +3232,50 @@ export function ChatPanel({
                     ))}
                   </>
                 )}
+                <div className="chat-tool-menu-heading">
+                  {t("speech.readAloud")}
+                </div>
+                <label className="chat-tool-menu-speech-row">
+                  <input
+                    type="checkbox"
+                    checked={settings.speech.autoReadAloud}
+                    onChange={(event) =>
+                      onSettingsChange({
+                        ...settings,
+                        speech: {
+                          ...settings.speech,
+                          autoReadAloud: event.target.checked,
+                        },
+                      })}
+                  />
+                  <span>{t("speech.autoReadAloud")}</span>
+                </label>
+                {settings.speech.autoReadAloud && (
+                  // The pace belongs next to the switch, where the answers are
+                  // heard, rather than only in the settings screen.
+                  <label className="chat-tool-menu-speech-row">
+                    <span>{t("speech.readAloudRate")}</span>
+                    <input
+                      type="range"
+                      min={MIN_READ_ALOUD_RATE}
+                      max={MAX_READ_ALOUD_RATE}
+                      step={0.1}
+                      value={clampReadAloudRate(settings.speech.readAloudRate)}
+                      onChange={(event) =>
+                        onSettingsChange({
+                          ...settings,
+                          speech: {
+                            ...settings.speech,
+                            readAloudRate: Number(event.target.value),
+                          },
+                        })}
+                    />
+                    <small>
+                      {clampReadAloudRate(settings.speech.readAloudRate)
+                        .toFixed(1)}×
+                    </small>
+                  </label>
+                )}
               </div>
             )}
           </div>
@@ -3133,44 +3299,64 @@ export function ChatPanel({
               Web
             </label>
           </span>
-          <button
-            type="button"
-            className={`chat-send chat-speech-button ${
-              speech.listening || speech.busy ? "is-active" : ""
-            }`}
-            aria-label={speech.busy
-              ? t("speech.cancelLabel")
-              : speech.listening
-              ? t("speech.stopLabel")
-              : t("speech.title")}
-            aria-pressed={speech.listening || speech.busy}
-            aria-keyshortcuts={settings.speech.shortcut.replace(
-              "Ctrl",
-              "Control",
-            ) || undefined}
-            title={`${
-              speech.busy
-                ? t("speech.cancelHint")
-                : speech.listening
-                ? t("speech.stopListening")
-                : speech.supported
-                ? t("speech.title")
-                : t("speech.unsupported")
-            }${
-              settings.speech.shortcut
-                ? ` (${speechShortcutLabel(settings.speech.shortcut)})`
-                : ""
-            }`}
-            disabled={loading || !activeSession}
-            onClick={speech.toggle}
-          >
-            {speech.listening || speech.busy
-              ? <Square size={14} />
-              : <Mic size={15} />}
-            {(speech.listening || speech.busy) && (
-              <span>{t("speech.stop")}</span>
+          <div className="chat-speech-wrap">
+            {voiceMode && (
+              <span
+                className="chat-voice-chip"
+                role="status"
+                title={`${t("speech.voiceMode")}: ${t("speech.voiceModeHelp")}`}
+              >
+                <Mic size={10} aria-hidden="true" />
+                <span>{t("speech.voiceMode")}</span>
+                <button
+                  type="button"
+                  title={t("speech.voiceModeEnd")}
+                  aria-label={t("speech.voiceModeEnd")}
+                  onClick={exitVoiceMode}
+                >
+                  <X size={10} />
+                </button>
+              </span>
             )}
-          </button>
+            <button
+              type="button"
+              className={`chat-send chat-speech-button ${
+                speech.listening || speech.busy ? "is-active" : ""
+              }`}
+              aria-label={speech.busy
+                ? t("speech.cancelLabel")
+                : speech.listening
+                ? t("speech.stopLabel")
+                : t("speech.title")}
+              aria-pressed={speech.listening || speech.busy}
+              aria-keyshortcuts={settings.speech.shortcut.replace(
+                "Ctrl",
+                "Control",
+              ) || undefined}
+              title={`${
+                speech.busy
+                  ? t("speech.cancelHint")
+                  : speech.listening
+                  ? t("speech.stopListening")
+                  : speech.supported
+                  ? t("speech.title")
+                  : t("speech.unsupported")
+              }${
+                settings.speech.shortcut
+                  ? ` (${speechShortcutLabel(settings.speech.shortcut)})`
+                  : ""
+              }`}
+              disabled={loading || !activeSession}
+              onClick={toggleSpeech}
+            >
+              {speech.listening || speech.busy
+                ? <Square size={14} />
+                : <Mic size={15} />}
+              {(speech.listening || speech.busy) && (
+                <span>{t("speech.stop")}</span>
+              )}
+            </button>
+          </div>
           <button
             type="button"
             className="chat-send"

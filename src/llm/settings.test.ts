@@ -46,12 +46,26 @@ Deno.test("speech settings keep browser as default and load compatible endpoints
     newlinePhrases: "enter",
     exclamationPhrases: "exclamation",
     replacements: "",
+    autoReadAloud: false,
+    readAloudRate: 1,
   });
   assertEquals(
     loadChatSettings({ getItem: () => '{"speech":{"sendPhrase":""}}' }).speech
       .sendPhrase,
     "",
   );
+});
+
+Deno.test("read-aloud settings load with clamped values", () => {
+  const loaded = loadSpeechSettings({
+    autoReadAloud: true,
+    readAloudRate: 99,
+  });
+  assertEquals(loaded.autoReadAloud, true);
+  assertEquals(loaded.readAloudRate, 5);
+  assertEquals(loadSpeechSettings({ readAloudRate: 0 }).readAloudRate, 0.5);
+  assertEquals(loadSpeechSettings({ readAloudRate: NaN }).readAloudRate, 1);
+  assertEquals(loadSpeechSettings({}).autoReadAloud, false);
 });
 
 Deno.test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {

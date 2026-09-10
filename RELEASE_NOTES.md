@@ -1,3 +1,43 @@
+# GemiHub Desktop v1.5.0
+
+## What's new
+
+- Added live streaming transcription with OpenAI, the Gemini API, and Vertex AI.
+  Interim text appears in the Chat draft while you speak.
+- Added voice commands for question marks, line breaks, and exclamation marks,
+  plus replacement rules such as `daily note => /daily`.
+- Answers can be read aloud automatically. The switch and the speaking rate are
+  available in voice settings and in the tool menu next to the Chat input.
+- Starting the microphone also starts voice mode, which reopens the microphone
+  after each answer. The button beside the microphone stops only that automatic
+  reopening; recording and read-aloud in progress continue.
+- Saying the send phrase with an empty draft now ends listening, and voice mode
+  with it, instead of doing nothing.
+- Retained-recording and error notices can be closed, which also discards the
+  retained audio.
+
+## Fixes
+
+- Live capture no longer sends duplicated or garbled audio when a chunk upload
+  outlasts an audio frame.
+- Switching to live transcription from whisper.cpp or a custom endpoint no
+  longer carries that service's API key to api.openai.com.
+- Browser dictation keeps text typed or pasted while dictating instead of
+  overwriting it with the next interim result.
+- In voice mode the microphone reopens reliably: an unrelated re-render, such as
+  a session update, no longer cancels the pending reopen for good.
+- Stopping live transcription right after starting it no longer leaves the level
+  meter showing a recording that has already ended.
+- A live session whose closing transcript never arrives now reports an error
+  instead of a normal completion, after ten seconds instead of three.
+- A replacement rule with an empty spoken phrase is ignored instead of matching
+  at every position.
+- The custom language field no longer clears itself while a code that appears in
+  the list is being typed.
+- A recording with no speech in it is no longer transcribed, so it costs no
+  request and cannot return an invented sentence. This also applies when
+  automatic stopping is off.
+
 # GemiHub Desktop v1.4.14
 
 ## What's new

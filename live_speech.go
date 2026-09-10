@@ -15,6 +15,12 @@ import (
 	"github.com/coder/websocket"
 )
 
+var vertexProjectIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
+// How long a provider may take to send the closing transcript after the audio
+// stream ends before the session is abandoned.
+const liveSpeechFinalizeTimeout = 10 * time.Second
+
 type LiveSpeechSettings struct {
 	EndpointType    string `json:"endpointType"`
 	APIKey          string `json:"apiKey"`
@@ -58,7 +64,7 @@ func (a *App) StartLiveSpeech(settings LiveSpeechSettings) (string, error) {
 	if settings.EndpointType != "vertex-transcribe" && strings.TrimSpace(settings.APIKey) == "" {
 		return "", errors.New("API key is required")
 	}
-	if settings.EndpointType == "vertex-transcribe" && !regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`).MatchString(strings.TrimSpace(settings.VertexProjectID)) {
+	if settings.EndpointType == "vertex-transcribe" && !vertexProjectIDPattern.MatchString(strings.TrimSpace(settings.VertexProjectID)) {
 		return "", errors.New("valid Vertex AI project ID is required")
 	}
 	parent := a.ctx
@@ -184,8 +190,10 @@ func (a *App) FinishLiveSpeech(id string) error {
 	go func() {
 		select {
 		case <-s.done:
-		case <-time.After(3 * time.Second):
-			a.emitEvent("speech:live", liveSpeechEventData{SessionID: s.id, Kind: "done"})
+		case <-time.After(liveSpeechFinalizeTimeout):
+			// The closing transcript never arrived, so the draft is missing its
+			// tail: report that rather than a normal completion.
+			a.emitEvent("speech:live", liveSpeechEventData{SessionID: s.id, Kind: "error", Message: "live transcription did not finish in time; the last words may be missing"})
 			a.stopLiveSpeechSession(s)
 		}
 	}()

@@ -18,6 +18,11 @@ export interface ChatSpeechOptions {
   settings: SpeechSettings;
   onInput: (text: string) => void;
   onSend: (text: string) => void;
+  /**
+   * The send phrase ended listening with nothing to send. The user asked to
+   * stop rather than to say something, so hands-free mode ends with it.
+   */
+  onEnd?: () => void;
 }
 interface QueuedClip {
   clip: Blob;
@@ -161,9 +166,12 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
         current.base = draft.text;
         current.lastRendered = draft.text;
         latest.current.onInput(draft.text);
-        if (draft.send && draft.text.trim()) {
+        // The send phrase always ends the session, even when it is the only
+        // thing said: there is then nothing to send, but recording must stop.
+        if (draft.send) {
           stop(false);
-          latest.current.onSend(draft.text);
+          if (draft.text.trim()) latest.current.onSend(draft.text);
+          else latest.current.onEnd?.();
           return;
         }
       }
@@ -245,7 +253,13 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       current.pendingCaptures--;
       if (active.current !== current) return;
       const clip = new Blob(chunks, { type: recorder.mimeType });
-      if (clip.size && !(followsSilence && silenceAvailable && !heardVoice)) {
+      // A clip the voice gate never fired on is silence: transcribing it costs a
+      // request and invites an invented sentence, so it is dropped unqueued.
+      const silent = silenceAvailable && !heardVoice;
+      if (silent && current.ending && !retained.current.length) {
+        setError(t("speech.noSpeech"));
+      }
+      if (clip.size && !silent) {
         retained.current.push({
           clip,
           durationMs: performance.now() - startedAt,
@@ -261,30 +275,39 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     };
     current.startedAt ??= performance.now();
     recorder.start(1000);
-    if (current.settings.silenceSeconds > 0) {
-      current.stopSilence = watchSpeechSilence(
-        stream,
-        current.settings.silenceSeconds,
-        () => finishRecording(current, true),
-        (available) => {
-          silenceAvailable = available;
-          if (active.current === current) {
-            setSilenceHint(
-              available
-                ? t("speech.autoStopHint").replace(
-                  "{seconds}",
-                  String(current.settings.silenceSeconds),
-                )
-                : t("speech.noSilence"),
-            );
-          }
-        },
-        () => {
-          heardVoice = true;
-        },
-        followsSilence ? 0 : 3000,
-      );
-    }
+    // The watcher also feeds the voice gate that keeps a silent clip from being
+    // transcribed, so it runs even when automatic stopping is off.
+    current.stopSilence = watchSpeechSilence(
+      stream,
+      current.settings.silenceSeconds,
+      () => finishRecording(current, true),
+      (available) => {
+        silenceAvailable = available;
+        if (active.current === current) {
+          setSilenceHint(
+            current.settings.silenceSeconds <= 0
+              ? ""
+              : available
+              ? t("speech.autoStopHint").replace(
+                "{seconds}",
+                String(current.settings.silenceSeconds),
+              )
+              : t("speech.noSilence"),
+          );
+        }
+      },
+      () => {
+        heardVoice = true;
+      },
+      followsSilence ? 0 : 3000,
+    );
+  }
+
+  /** Close the retained-clips notice: drop the audio it offers and the error. */
+  function dismiss() {
+    retained.current = [];
+    publishQueue();
+    setError("");
   }
 
   async function retryRecording() {
@@ -321,6 +344,10 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
+      // Retry deliberately reuses retained audio; starting a new recording is
+      // the opposite choice: abandon a clip that may itself be why transcription
+      // keeps failing. Only after the microphone is acquired, so a permission
+      // failure does not destroy the one retryable recording.
       retained.current = [];
       current.stream = stream;
       current.mimeType = [
@@ -356,6 +383,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     backgroundTranscribing,
     supported,
     toggle,
+    dismiss,
     stop: () => stop(),
   };
 }

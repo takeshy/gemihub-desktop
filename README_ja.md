@@ -106,6 +106,15 @@ Transcribeは次の2つの接続方法に対応しています。
 接続テストは短い無音データを送信します。API利用料金が発生する場合があります。
 Cloud Speech-to-Text V1の設定は不要です。
 
+下書きが空のまま送信の合図だけを言うと、送信せずに聞き取りを終了します。
+発話を検出できなかった録音は文字起こしせず、APIへも送りません。
+保持中の録音の案内やエラー表示は、右端の×でその場で閉じられます。
+
+返信の読み上げにも対応しています。設定の「音声入力 > 読み上げ」、またはChat入力欄の
+ツールボタンのメニューで「返信を自動で読み上げる」を有効にでき、読み上げ速度も同じ場所で変更できます。
+マイクボタンで開始すると音声モードに入り、返信のたびにマイクを自動で開き直します。
+マイク横の×は、この「返信後に自動でマイクをオンにする」動作だけを止めます。
+
 仕様：[Gemini API](https://ai.google.dev/gemini-api/docs/generate-content/transcribe)、
 [Vertex AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-transcribe)。
 

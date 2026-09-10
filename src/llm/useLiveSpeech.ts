@@ -25,12 +25,16 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
   latest.current = options;
   const active = useRef<ActiveLiveSpeech | null>(null);
   const ending = useRef(false);
+  // Invalidates an in-flight start when the hook is cleared or a new start
+  // begins, so an unmount or scope change cannot leak a live session or mic.
+  const startToken = useRef(0);
   const [status, setStatus] = useState<
     "idle" | "starting" | "recording" | "transcribing"
   >("idle");
   const [meterStream, setMeterStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState("");
   const clear = async () => {
+    startToken.current++;
     const current = active.current;
     active.current = null;
     ending.current = false;
@@ -124,9 +128,12 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
           ? draft(current, current.partial, false).text
           : result.text,
       );
-      if (result.send && result.text.trim()) {
+      // The send phrase always ends listening, even when it is the only thing
+      // said: there is then nothing to send, but the microphone must still stop.
+      if (result.send) {
         void clear();
-        latest.current.onSend(result.text);
+        if (result.text.trim()) latest.current.onSend(result.text);
+        else latest.current.onEnd?.();
       }
     }
   }
@@ -156,16 +163,26 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
     }
     if (options.disabled) return;
     setError("");
+    const token = ++startToken.current;
     try {
       validateSpeechSettings(options.settings);
       setStatus("starting");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (token !== startToken.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const id = await liveSpeechTransport.start({
         endpointType: options.settings.endpointType,
         apiKey: options.settings.apiKey,
         language: options.settings.language,
         vertexProjectId: options.settings.vertexProjectId,
       });
+      if (token !== startToken.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        await liveSpeechTransport.stop().catch(() => {});
+        return;
+      }
       const current: ActiveLiveSpeech = {
         id,
         stream,
@@ -183,6 +200,13 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
           void clear();
         },
       );
+      // The session may have been stopped while the capture was starting: it is
+      // then already finishing, so the meter must not come back to life.
+      if (token !== startToken.current || ending.current) {
+        await current.capture?.stop().catch(() => {});
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       setMeterStream(stream);
       setStatus("recording");
     } catch (caught) {
@@ -206,6 +230,7 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
     backgroundTranscribing: false,
     supported: !!navigator.mediaDevices?.getUserMedia,
     toggle,
+    dismiss: () => setError(""),
     stop: () => {
       void clear();
     },
