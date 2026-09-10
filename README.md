@@ -127,6 +127,11 @@ of the active chat provider. When no matching key is configured, a speech-only
 key can be entered. Registering an AI key automatically takes priority.
 Transcribe supports two connections:
 
+For lower-latency dictation, choose **Live transcription** with OpenAI, Gemini
+API, or Vertex AI. Interim text appears in the Chat draft while you speak.
+Speech settings also support question, line-break, exclamation and send commands,
+plus replacement rules such as `daily note => /daily`.
+
 - **AI Studio**: use a Gemini API key.
 - **Vertex AI**: reuse the current Google login and Project ID from AI settings,
   automatically following changes. No separate speech connection settings are needed.

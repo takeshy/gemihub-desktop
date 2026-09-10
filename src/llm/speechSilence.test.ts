@@ -26,8 +26,9 @@ Deno.test("resumed speech resets the silence window", () => {
   sample(0.1, 300);
   assertEquals(sample(0, 2200), false);
   assertEquals(sample(0.1, 2250), false);
-  assertEquals(sample(0, 4249), false);
-  assertEquals(sample(0, 4250), true);
+  assertEquals(sample(0.1, 2350), false);
+  assertEquals(sample(0, 4349), false);
+  assertEquals(sample(0, 4350), true);
 });
 
 Deno.test("disabled silence detection never stops recording", () => {

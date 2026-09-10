@@ -91,6 +91,11 @@ Gemini／OpenAIは、現在チャットで選択中のAIに関係なく、AI設�
 未登録の場合だけ音声入力用のAPIキーを設定できます。AI設定へ登録すると、自動でそちらに切り替わります。
 Transcribeは次の2つの接続方法に対応しています。
 
+より低遅延で入力する場合は、OpenAI、Gemini API、Vertex AI に対応する
+「Live transcription」を選べます。話している途中の認識結果も Chat の下書きへ表示されます。
+疑問符・改行・感嘆符・送信の音声コマンドと、`日記書いて => /daily` のような
+置換ルールも設定できます。
+
 - **AI Studio**：Gemini APIキーを使用します。
 - **Vertex AI**：現在のAI設定のGoogleログインとProject IDを使用し、変更にも自動追従します。
   音声用の接続設定は不要です。Vertex AI APIの有効化とモデルの利用権限が必要です。

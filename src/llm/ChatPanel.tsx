@@ -24,8 +24,8 @@ import {
 } from "lucide-react";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { resolveSpeechSettings } from "./settings";
-import { useChatSpeech } from "./useChatSpeech";
 import { SpeechActivity } from "./SpeechActivity";
+import { useChatSpeech } from "./useChatSpeech";
 import { attachedActiveFile } from "./chatFileContext";
 import { speechShortcutLabel } from "./speechShortcut";
 import {
@@ -704,7 +704,9 @@ export function ChatPanel({
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef(false);
   const activeRunControllerRef = useRef<AbortController | null>(null);
-  const activeRunFileRef = useRef<{ path: string; content: string } | null>(null);
+  const activeRunFileRef = useRef<{ path: string; content: string } | null>(
+    null,
+  );
   const streamRef = useRef<
     { streamId: string; sessionId: string; messageId: string } | null
   >(null);
@@ -2195,7 +2197,9 @@ export function ChatPanel({
     }
   };
 
-  const speechSettings = useMemo(() => resolveSpeechSettings(settings), [settings]);
+  const speechSettings = useMemo(() => resolveSpeechSettings(settings), [
+    settings,
+  ]);
   const speech = useChatSpeech({
     input,
     settings: speechSettings,
@@ -2222,7 +2226,15 @@ export function ChatPanel({
     handledSpeechRequest.current = speechToggleRequest;
     onSpeechToggleHandled?.(speechToggleRequest);
     if (!loading && activeSession) void speech.toggle();
-  }, [speechToggleRequest, onSpeechToggleHandled, loadedHistoryScope, workspaceBase, loading, activeSession, speech.toggle]);
+  }, [
+    speechToggleRequest,
+    onSpeechToggleHandled,
+    loadedHistoryScope,
+    workspaceBase,
+    loading,
+    activeSession,
+    speech.toggle,
+  ]);
 
   const applyPending = async () => {
     if (!pending) return;
@@ -2802,12 +2814,12 @@ export function ChatPanel({
             ref={composerRef}
             value={input}
             onChange={(event) => {
-              speech.stop();
               historyIndexRef.current = null;
               setInput(event.target.value);
             }}
             onKeyDown={(event) => {
-              if (event.key === "ArrowUp" || event.key === "ArrowDown") speech.stop();
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") {speech
+                  .stop();}
               const menuOpen = slashMatches.length > 0 ||
                 skillSlashMatches.length > 0 || mentionMatches.length > 0;
               if (!menuOpen && recallPrompt(event)) return;
@@ -2890,15 +2902,42 @@ export function ChatPanel({
             </div>
           )}
         </div>
-        {speech.error && <div className="chat-error" role="alert">{speech.error}</div>}
-        {speech.retainedCount > 0 && !speech.busy && (
+        {speech.error && (
+          <div className="chat-error" role="alert">{speech.error}</div>
+        )}
+        {speech.retainedCount > 0 && !speech.listening && !speech.busy && (
           <div className="speech-test-feedback" role="status">
-            <div><span>{t("speech.retainedCount").replace("{count}", String(speech.retainedCount))}{speech.listening ? t("speech.adding") : t("speech.addHint")}</span><small className="speech-settings-help">{t("speech.retainedHelp")}</small></div>
-            <button type="button" className="speech-secondary-button" disabled={speech.listening || loading} onClick={() => void speech.retryRecording()}>{t("speech.retry")}</button>
+            <div>
+              <span>
+                {t("speech.retainedCount").replace(
+                  "{count}",
+                  String(speech.retainedCount),
+                )}
+                {speech.listening ? t("speech.adding") : t("speech.addHint")}
+              </span>
+              <small className="speech-settings-help">
+                {t("speech.retainedHelp")}
+              </small>
+            </div>
+            <button
+              type="button"
+              className="speech-secondary-button"
+              disabled={speech.listening || loading}
+              onClick={() =>
+                void speech.retryRecording()}
+            >
+              {t("speech.retry")}
+            </button>
           </div>
         )}
         {(speech.listening || speech.busy) && (
-          <SpeechActivity status={speech.status} stream={speech.meterStream} browser={settings.speech.provider === "browser"} silenceHint={speech.silenceHint} />
+          <SpeechActivity
+            status={speech.status}
+            stream={speech.meterStream}
+            browser={settings.speech.provider === "browser"}
+            silenceHint={speech.silenceHint}
+            backgroundTranscribing={speech.backgroundTranscribing}
+          />
         )}
         <div className="chat-input-actions">
           <button
@@ -2991,26 +3030,31 @@ export function ChatPanel({
             </button>
             {toolMenuOpen && (
               <div className="chat-tool-menu">
-                {(["all", "noSearch", "readOnly", "none"] as FileToolMode[]).map((mode) => (
-                  <button
-                    type="button"
-                    className={settings.fileToolMode === mode ? "selected" : ""}
-                    key={mode}
-                    onClick={() => {
-                      onSettingsChange({
-                        ...settings,
-                        fileToolMode: mode,
-                        enableFileTools: mode !== "none",
-                      });
-                    }}
-                  >
-                    {mode === "all"
-                      ? "Workspace: all"
-                      : mode === "readOnly" ? "Read only / 読み取り専用" : mode === "noSearch"
-                      ? "Workspace: no discovery"
-                      : "Workspace: off"}
-                  </button>
-                ))}
+                {(["all", "noSearch", "readOnly", "none"] as FileToolMode[])
+                  .map((mode) => (
+                    <button
+                      type="button"
+                      className={settings.fileToolMode === mode
+                        ? "selected"
+                        : ""}
+                      key={mode}
+                      onClick={() => {
+                        onSettingsChange({
+                          ...settings,
+                          fileToolMode: mode,
+                          enableFileTools: mode !== "none",
+                        });
+                      }}
+                    >
+                      {mode === "all"
+                        ? "Workspace: all"
+                        : mode === "readOnly"
+                        ? "Read only / 読み取り専用"
+                        : mode === "noSearch"
+                        ? "Workspace: no discovery"
+                        : "Workspace: off"}
+                    </button>
+                  ))}
                 {settings.mcpServers.length > 0 && (
                   <>
                     <div className="chat-tool-menu-heading">MCP servers</div>
@@ -3091,16 +3135,41 @@ export function ChatPanel({
           </span>
           <button
             type="button"
-            className={`chat-send chat-speech-button ${speech.listening || speech.busy ? "is-active" : ""}`}
-            aria-label={speech.busy ? t("speech.cancelLabel") : speech.listening ? t("speech.stopLabel") : t("speech.title")}
+            className={`chat-send chat-speech-button ${
+              speech.listening || speech.busy ? "is-active" : ""
+            }`}
+            aria-label={speech.busy
+              ? t("speech.cancelLabel")
+              : speech.listening
+              ? t("speech.stopLabel")
+              : t("speech.title")}
             aria-pressed={speech.listening || speech.busy}
-            aria-keyshortcuts={settings.speech.shortcut.replace("Ctrl", "Control") || undefined}
-            title={`${speech.busy ? t("speech.cancelHint") : speech.listening ? t("speech.stopListening") : speech.supported ? t("speech.title") : t("speech.unsupported")}${settings.speech.shortcut ? ` (${speechShortcutLabel(settings.speech.shortcut)})` : ""}`}
+            aria-keyshortcuts={settings.speech.shortcut.replace(
+              "Ctrl",
+              "Control",
+            ) || undefined}
+            title={`${
+              speech.busy
+                ? t("speech.cancelHint")
+                : speech.listening
+                ? t("speech.stopListening")
+                : speech.supported
+                ? t("speech.title")
+                : t("speech.unsupported")
+            }${
+              settings.speech.shortcut
+                ? ` (${speechShortcutLabel(settings.speech.shortcut)})`
+                : ""
+            }`}
             disabled={loading || !activeSession}
             onClick={speech.toggle}
           >
-            {speech.listening || speech.busy ? <Square size={14} /> : <Mic size={15} />}
-            {(speech.listening || speech.busy) && <span>{t("speech.stop")}</span>}
+            {speech.listening || speech.busy
+              ? <Square size={14} />
+              : <Mic size={15} />}
+            {(speech.listening || speech.busy) && (
+              <span>{t("speech.stop")}</span>
+            )}
           </button>
           <button
             type="button"

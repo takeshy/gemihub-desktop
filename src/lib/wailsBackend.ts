@@ -545,7 +545,20 @@ interface WailsAppApi {
     clientSecret: string,
   ) => Promise<VertexOAuthStatus>;
   GetVertexOAuthStatus: () => Promise<VertexOAuthStatus>;
-  VertexSpeechHTTPRequest: (request: ExternalHTTPRequest) => Promise<ExternalHTTPResponse>;
+  VertexSpeechHTTPRequest: (
+    request: ExternalHTTPRequest,
+  ) => Promise<ExternalHTTPResponse>;
+  StartLiveSpeech: (
+    settings: {
+      endpointType: string;
+      apiKey: string;
+      language: string;
+      vertexProjectId?: string;
+    },
+  ) => Promise<string>;
+  SendLiveSpeechAudio: (sessionID: string, audio: string) => Promise<void>;
+  FinishLiveSpeech: (sessionID: string) => Promise<void>;
+  StopLiveSpeech: () => Promise<void>;
   DisconnectVertexOAuth: () => Promise<void>;
   ConnectMCPOAuth: (request: MCPOAuthConnectRequest) => Promise<MCPOAuthStatus>;
   GetMCPOAuthStatus: (
@@ -639,6 +652,51 @@ export function onChatStream(
     callback as (event: never) => void,
   ) ?? (() => undefined);
 }
+
+export interface LiveSpeechEvent {
+  sessionId: string;
+  kind: "delta" | "interim" | "final" | "done" | "error";
+  itemId?: string;
+  text?: string;
+  message?: string;
+}
+export function onLiveSpeech(
+  callback: (event: LiveSpeechEvent) => void,
+): () => void {
+  return window.runtime?.EventsOn?.(
+    "speech:live",
+    callback as (event: never) => void,
+  ) ?? (() => undefined);
+}
+
+export const liveSpeechTransport = {
+  start: async (
+    settings: {
+      endpointType: string;
+      apiKey: string;
+      language: string;
+      vertexProjectId?: string;
+    },
+  ) => {
+    const api = appApi();
+    if (!api) throw new Error("Live speech requires the desktop app.");
+    return await api.StartLiveSpeech(settings);
+  },
+  send: async (id: string, audio: string) => {
+    const api = appApi();
+    if (!api) throw new Error("Live speech requires the desktop app.");
+    await api.SendLiveSpeechAudio(id, audio);
+  },
+  finish: async (id: string) => {
+    const api = appApi();
+    if (!api) throw new Error("Live speech requires the desktop app.");
+    await api.FinishLiveSpeech(id);
+  },
+  stop: async () => {
+    const api = appApi();
+    if (api) await api.StopLiveSpeech();
+  },
+};
 
 export function onChatToolRequest(
   callback: (event: ChatToolRequest) => void,
@@ -1384,7 +1442,9 @@ export async function externalHTTPRequest(
   return await api.ExternalHTTPRequest(request);
 }
 
-export async function speechHTTPRequest(request: ExternalHTTPRequest): Promise<ExternalHTTPResponse> {
+export async function speechHTTPRequest(
+  request: ExternalHTTPRequest,
+): Promise<ExternalHTTPResponse> {
   const api = appApi();
   if (!api) throw new Error("音声認識APIにはデスクトップアプリが必要です。");
   if (new URL(request.url).hostname === "aiplatform.googleapis.com") {
@@ -1426,9 +1486,15 @@ export async function mcpStdioRequest(
   if (!api) throw new Error("MCP stdio requires the desktop app.");
   const response = JSON.parse(
     await api.MCPStdioRequest(sessionID, method, JSON.stringify(params)),
-  ) as { result?: Record<string, unknown>; error?: { code?: number; message?: string } };
+  ) as {
+    result?: Record<string, unknown>;
+    error?: { code?: number; message?: string };
+  };
   if (response.error) {
-    throw Object.assign(new Error(response.error.message || `MCP ${method} failed.`), { code: response.error.code });
+    throw Object.assign(
+      new Error(response.error.message || `MCP ${method} failed.`),
+      { code: response.error.code },
+    );
   }
   return response.result ?? {};
 }

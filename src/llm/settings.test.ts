@@ -5,22 +5,53 @@ import {
   defaultChatSettings,
   defaultRAGSetting,
   defaultSpeechSettings,
-  selectSpeechEndpoint,
-  loadSpeechSettings,
   loadChatSettings,
+  loadSpeechSettings,
   localLLMFrameworks,
   newModelProfile,
   resolveRAGSetting,
   selectConfiguredModel,
   selectModelProfile,
+  selectSpeechEndpoint,
   updateModelProfile,
 } from "./settings.ts";
 
 Deno.test("speech settings keep browser as default and load compatible endpoints with an empty key", () => {
-  assertEquals(loadChatSettings({ getItem: () => "{}" }).speech.provider, "browser");
-  const speech = loadChatSettings({ getItem: () => JSON.stringify({ speech: { provider: "openai-compatible", baseUrl: "http://127.0.0.1:8080/v1", apiKey: "", model: "whisper" } }) }).speech;
-  assertEquals(speech, { provider: "openai-compatible", baseUrl: "http://127.0.0.1:8080/v1", apiKey: "", model: "whisper", language: "auto", sendPhrase: "over, オーバー", endpointType: "custom", shortcut: "", silenceSeconds: 3 });
-  assertEquals(loadChatSettings({ getItem: () => '{"speech":{"sendPhrase":""}}' }).speech.sendPhrase, "");
+  assertEquals(
+    loadChatSettings({ getItem: () => "{}" }).speech.provider,
+    "browser",
+  );
+  const speech = loadChatSettings({
+    getItem: () =>
+      JSON.stringify({
+        speech: {
+          provider: "openai-compatible",
+          baseUrl: "http://127.0.0.1:8080/v1",
+          apiKey: "",
+          model: "whisper",
+        },
+      }),
+  }).speech;
+  assertEquals(speech, {
+    provider: "openai-compatible",
+    baseUrl: "http://127.0.0.1:8080/v1",
+    apiKey: "",
+    model: "whisper",
+    language: "auto",
+    sendPhrase: "over, オーバー",
+    endpointType: "custom",
+    shortcut: "",
+    silenceSeconds: 3,
+    questionPhrases: "question, question mark",
+    newlinePhrases: "enter",
+    exclamationPhrases: "exclamation",
+    replacements: "",
+  });
+  assertEquals(
+    loadChatSettings({ getItem: () => '{"speech":{"sendPhrase":""}}' }).speech
+      .sendPhrase,
+    "",
+  );
 });
 
 Deno.test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {
@@ -308,7 +339,12 @@ Deno.test("RAG embeddings use AI provider credentials or isolated custom credent
 });
 
 Deno.test("speech service presets set OpenAI defaults and preserve legacy whisper settings", () => {
-  const legacy = loadSpeechSettings({ provider: "whisper-cpp", baseUrl: "http://127.0.0.1:8080", language: "ja", apiKey: "local-key" });
+  const legacy = loadSpeechSettings({
+    provider: "whisper-cpp",
+    baseUrl: "http://127.0.0.1:8080",
+    language: "ja",
+    apiKey: "local-key",
+  });
   assertEquals(legacy.provider, "openai-compatible");
   assertEquals(legacy.endpointType, "whisper-cpp");
   assertEquals(legacy.baseUrl, "http://127.0.0.1:8080");
@@ -317,24 +353,36 @@ Deno.test("speech service presets set OpenAI defaults and preserve legacy whispe
   assertEquals(openai.model, "whisper-1");
   assertEquals(openai.apiKey, "");
   assertEquals(openai.language, "ja");
-  const local = selectSpeechEndpoint({ ...defaultSpeechSettings, apiKey: "cloud-key" }, "whisper-cpp");
+  const local = selectSpeechEndpoint({
+    ...defaultSpeechSettings,
+    apiKey: "cloud-key",
+  }, "whisper-cpp");
   assertEquals(local.baseUrl, "http://127.0.0.1:8080");
   assertEquals(local.apiKey, "");
-  assertEquals(selectSpeechEndpoint({ ...openai, apiKey: "openai-key" }, "openai").apiKey, "openai-key");
+  assertEquals(
+    selectSpeechEndpoint({ ...openai, apiKey: "openai-key" }, "openai").apiKey,
+    "openai-key",
+  );
   assertEquals(selectSpeechEndpoint(local, "custom").baseUrl, local.baseUrl);
   const edited = { ...local, baseUrl: "http://192.168.1.20:9090" };
   assertEquals(loadSpeechSettings(edited).baseUrl, "http://192.168.1.20:9090");
   assertEquals(loadSpeechSettings(edited).endpointType, "whisper-cpp");
 });
 
-
 Deno.test("Transcribe presets persist both backends without sharing API keys", () => {
-  const gemini = selectSpeechEndpoint({ ...defaultSpeechSettings, apiKey: "openai-secret" }, "gemini-transcribe");
+  const gemini = selectSpeechEndpoint({
+    ...defaultSpeechSettings,
+    apiKey: "openai-secret",
+  }, "gemini-transcribe");
   assertEquals(gemini.model, "gemini-3.5-transcribe");
   assertEquals(gemini.language, "auto");
   assertEquals(gemini.apiKey, "");
   assertEquals(loadSpeechSettings(gemini), gemini);
-  const vertex = selectSpeechEndpoint({ ...gemini, apiKey: "gemini-key", vertexProjectId: "my-project" }, "vertex-transcribe");
+  const vertex = selectSpeechEndpoint({
+    ...gemini,
+    apiKey: "gemini-key",
+    vertexProjectId: "my-project",
+  }, "vertex-transcribe");
   assertEquals(vertex.apiKey, "");
   assertEquals(vertex.vertexProjectId, "my-project");
   assertEquals(vertex.model, "gemini-3.5-transcribe-preview");
@@ -342,14 +390,32 @@ Deno.test("Transcribe presets persist both backends without sharing API keys", (
   const openai = selectSpeechEndpoint(vertex, "openai");
   assertEquals(openai.model, "whisper-1");
   assertEquals(openai.language, "auto");
-  assertEquals(selectSpeechEndpoint({ ...defaultSpeechSettings, language: "ja" }, "gemini-transcribe").language, "ja-JP");
+  assertEquals(
+    selectSpeechEndpoint(
+      { ...defaultSpeechSettings, language: "ja" },
+      "gemini-transcribe",
+    ).language,
+    "ja-JP",
+  );
 });
 
 Deno.test("old Cloud STT settings migrate to Transcribe without reusing Cloud STT credentials", () => {
-  const migrated = loadSpeechSettings({ provider: "openai-compatible", endpointType: "google-cloud", baseUrl: "https://speech.googleapis.com/v1", apiKey: "old-cloud-key", model: "default", language: "ja-JP", shortcut: "Ctrl+Space", silenceSeconds: 5 });
+  const migrated = loadSpeechSettings({
+    provider: "openai-compatible",
+    endpointType: "google-cloud",
+    baseUrl: "https://speech.googleapis.com/v1",
+    apiKey: "old-cloud-key",
+    model: "default",
+    language: "ja-JP",
+    shortcut: "Ctrl+Space",
+    silenceSeconds: 5,
+  });
   assertEquals(migrated.endpointType, "gemini-transcribe");
   assertEquals(migrated.model, "gemini-3.5-transcribe");
-  assertEquals(migrated.baseUrl, "https://generativelanguage.googleapis.com/v1beta");
+  assertEquals(
+    migrated.baseUrl,
+    "https://generativelanguage.googleapis.com/v1beta",
+  );
   assertEquals(migrated.apiKey, "");
   assertEquals(migrated.language, "ja-JP");
   assertEquals(migrated.shortcut, "Ctrl+Space");

@@ -126,14 +126,23 @@ export interface SpeechSettings {
   silenceSeconds: number;
   shortcut: string;
   sendPhrase: string;
-  provider: "browser" | "openai-compatible";
+  provider: "browser" | "openai-compatible" | "live";
   // Filled from AI settings at use time; old speech-specific values are ignored.
   vertexProjectId?: string;
-  endpointType: "openai" | "whisper-cpp" | "custom" | "gemini-transcribe" | "vertex-transcribe";
+  endpointType:
+    | "openai"
+    | "whisper-cpp"
+    | "custom"
+    | "gemini-transcribe"
+    | "vertex-transcribe";
   baseUrl: string;
   apiKey: string;
   model: string;
   language: string;
+  questionPhrases?: string;
+  newlinePhrases?: string;
+  exclamationPhrases?: string;
+  replacements?: string;
 }
 
 export const defaultSpeechSettings: SpeechSettings = {
@@ -146,29 +155,67 @@ export const defaultSpeechSettings: SpeechSettings = {
   apiKey: "",
   model: "whisper-1",
   language: "auto",
+  questionPhrases: "question, question mark",
+  newlinePhrases: "enter",
+  exclamationPhrases: "exclamation",
+  replacements: "",
 };
 
-export function isGeminiSpeech(endpointType: SpeechSettings["endpointType"]): boolean {
-  return endpointType === "gemini-transcribe" || endpointType === "vertex-transcribe";
+export function isGeminiSpeech(
+  endpointType: SpeechSettings["endpointType"],
+): boolean {
+  return endpointType === "gemini-transcribe" ||
+    endpointType === "vertex-transcribe";
 }
 
-export function loadSpeechSettings(saved?: Partial<Omit<SpeechSettings, "provider" | "endpointType">> & { provider?: string; endpointType?: string }): SpeechSettings {
+export function loadSpeechSettings(
+  saved?: Partial<Omit<SpeechSettings, "provider" | "endpointType">> & {
+    provider?: string;
+    endpointType?: string;
+  },
+): SpeechSettings {
   const legacyWhisper = saved?.provider === "whisper-cpp";
   const legacyGoogle = saved?.endpointType === "google-cloud";
-  const endpointType: SpeechSettings["endpointType"] = legacyGoogle ? "gemini-transcribe" : legacyWhisper ? "whisper-cpp"
-    : saved?.endpointType === "gemini-transcribe" || saved?.endpointType === "vertex-transcribe" || saved?.endpointType === "whisper-cpp" || saved?.endpointType === "custom" || saved?.endpointType === "openai" ? saved.endpointType
-    : !saved?.baseUrl || saved.baseUrl.replace(/\/+$/, "") === defaultSpeechSettings.baseUrl ? "openai" : "custom";
+  const endpointType: SpeechSettings["endpointType"] = legacyGoogle
+    ? "gemini-transcribe"
+    : legacyWhisper
+    ? "whisper-cpp"
+    : saved?.endpointType === "gemini-transcribe" ||
+        saved?.endpointType === "vertex-transcribe" ||
+        saved?.endpointType === "whisper-cpp" ||
+        saved?.endpointType === "custom" || saved?.endpointType === "openai"
+    ? saved.endpointType
+    : !saved?.baseUrl ||
+        saved.baseUrl.replace(/\/+$/, "") === defaultSpeechSettings.baseUrl
+    ? "openai"
+    : "custom";
   const settings: SpeechSettings = {
     ...defaultSpeechSettings,
     ...saved,
     shortcut: validSpeechShortcut(saved?.shortcut),
-    silenceSeconds: typeof saved?.silenceSeconds === "number" && Number.isInteger(saved.silenceSeconds) && saved.silenceSeconds >= 0 && saved.silenceSeconds <= 10 ? saved.silenceSeconds : defaultSpeechSettings.silenceSeconds,
-    provider: legacyWhisper || saved?.provider === "openai-compatible" ? "openai-compatible" : "browser",
+    silenceSeconds: typeof saved?.silenceSeconds === "number" &&
+        Number.isInteger(saved.silenceSeconds) && saved.silenceSeconds >= 0 &&
+        saved.silenceSeconds <= 10
+      ? saved.silenceSeconds
+      : defaultSpeechSettings.silenceSeconds,
+    provider: saved?.provider === "live"
+      ? "live"
+      : legacyWhisper || saved?.provider === "openai-compatible"
+      ? "openai-compatible"
+      : "browser",
     endpointType,
-    sendPhrase: typeof saved?.sendPhrase === "string" ? saved.sendPhrase : defaultSpeechSettings.sendPhrase,
+    sendPhrase: typeof saved?.sendPhrase === "string"
+      ? saved.sendPhrase
+      : defaultSpeechSettings.sendPhrase,
   };
   // Cloud STT credentials must not silently move to a different API.
-  return legacyGoogle ? { ...selectSpeechEndpoint(settings, "gemini-transcribe"), provider: settings.provider, apiKey: "" } : settings;
+  return legacyGoogle
+    ? {
+      ...selectSpeechEndpoint(settings, "gemini-transcribe"),
+      provider: settings.provider,
+      apiKey: "",
+    }
+    : settings;
 }
 
 export function selectSpeechEndpoint(
@@ -193,12 +240,25 @@ export function selectSpeechEndpoint(
     endpointType,
     baseUrl,
     model: google
-      ? endpointType === "vertex-transcribe" ? "gemini-3.5-transcribe-preview" : "gemini-3.5-transcribe"
-      : endpointType === "openai" || leavingGoogle ? "whisper-1" : settings.model,
+      ? endpointType === "vertex-transcribe"
+        ? "gemini-3.5-transcribe-preview"
+        : "gemini-3.5-transcribe"
+      : endpointType === "openai" || leavingGoogle
+      ? "whisper-1"
+      : settings.model,
     language: google
-      ? language === "en" ? "en-US" : language === "ja" ? "ja-JP" : language || "auto"
-      : leavingGoogle ? "auto" : settings.language,
-    apiKey: baseUrl === settings.baseUrl && google === isGeminiSpeech(settings.endpointType) ? settings.apiKey : "",
+      ? language === "en"
+        ? "en-US"
+        : language === "ja"
+        ? "ja-JP"
+        : language || "auto"
+      : leavingGoogle
+      ? "auto"
+      : settings.language,
+    apiKey: baseUrl === settings.baseUrl &&
+        google === isGeminiSpeech(settings.endpointType)
+      ? settings.apiKey
+      : "",
   };
 }
 
@@ -252,18 +312,25 @@ export function resolveSpeechSettings(
   if (speech.endpointType === "vertex-transcribe") {
     const project = settings.provider === "vertex"
       ? settings.vertexProjectId
-      : settings.providerProfiles.vertex?.vertexProjectId ?? settings.vertexProjectId;
+      : settings.providerProfiles.vertex?.vertexProjectId ??
+        settings.vertexProjectId;
     return { ...speech, vertexProjectId: project.trim(), apiKey: "" };
   }
-  const provider = speech.endpointType === "gemini-transcribe" ? "gemini"
-    : speech.endpointType === "openai" ? "openai" : null;
+  const provider = speech.endpointType === "gemini-transcribe"
+    ? "gemini"
+    : speech.endpointType === "openai"
+    ? "openai"
+    : null;
   if (!provider) return speech;
-  const origin = provider === "openai" ? "https://api.openai.com" : "https://generativelanguage.googleapis.com";
+  const origin = provider === "openai"
+    ? "https://api.openai.com"
+    : "https://generativelanguage.googleapis.com";
   const officialEndpoint = (endpoint: string) => {
     if (!endpoint.trim()) return true; // The AI provider's default endpoint.
     try {
       const url = new URL(endpoint.trim());
-      return url.origin === origin && !url.username && !url.password && !url.search && !url.hash;
+      return url.origin === origin && !url.username && !url.password &&
+        !url.search && !url.hash;
     } catch {
       return false;
     }
@@ -271,13 +338,17 @@ export function resolveSpeechSettings(
   // OpenAI speech allows editing Base URL. Never inherit an AI key for a
   // custom host, even if the service preset still says OpenAI.
   if (provider === "openai" && !officialEndpoint(speech.baseUrl)) return speech;
-  const profiles = settings.modelProfiles.filter((profile) => profile.provider === provider);
+  const profiles = settings.modelProfiles.filter((profile) =>
+    profile.provider === provider
+  );
   const ordered = [...profiles].sort((a, b) =>
-    Number(b.id === settings.selectedModelProfileId) - Number(a.id === settings.selectedModelProfileId)
+    Number(b.id === settings.selectedModelProfileId) -
+    Number(a.id === settings.selectedModelProfileId)
   );
   for (const profile of ordered) {
     if (!profile.enabled || profile.local || profile.openAICompatible) continue;
-    const active = profile.id === settings.selectedModelProfileId && settings.provider === provider;
+    const active = profile.id === settings.selectedModelProfileId &&
+      settings.provider === provider;
     const endpoint = active ? settings.endpoint : profile.endpoint;
     const apiKey = (active ? settings.apiKey : profile.apiKey).trim();
     if (apiKey && officialEndpoint(endpoint)) return { ...speech, apiKey };
@@ -285,7 +356,9 @@ export function resolveSpeechSettings(
   // Modern profiles are authoritative; do not revive removed/disabled keys
   // from the legacy provider cache.
   if (profiles.length) return speech;
-  const legacy = settings.provider === provider ? settings : settings.providerProfiles[provider];
+  const legacy = settings.provider === provider
+    ? settings
+    : settings.providerProfiles[provider];
   if (legacy?.apiKey.trim() && officialEndpoint(legacy.endpoint)) {
     return { ...speech, apiKey: legacy.apiKey.trim() };
   }
@@ -855,7 +928,11 @@ export function loadChatSettings(
             (server.verified === undefined && toolHints.length > 0);
           return {
             autoApprove: server.autoApprove === true,
-            allowedTools: Array.isArray(server.allowedTools) ? server.allowedTools.filter((tool): tool is string => typeof tool === "string") : [],
+            allowedTools: Array.isArray(server.allowedTools)
+              ? server.allowedTools.filter((tool): tool is string =>
+                typeof tool === "string"
+              )
+              : [],
             id: server.id || `mcp-${crypto.randomUUID()}`,
             name: server.name || "MCP server",
             transport: server.transport === "stdio" ? "stdio" : "http",

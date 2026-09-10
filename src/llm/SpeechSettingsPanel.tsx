@@ -7,9 +7,11 @@ import {
   Globe,
   LoaderCircle,
   Mic,
+  Plus,
   Radio,
   Server,
   Square,
+  X,
 } from "lucide-react";
 import { speechHTTPRequest } from "../lib/wailsBackend";
 import { encodeSpeechWav, transcribeSpeech } from "./speechTranscription";
@@ -21,6 +23,92 @@ import {
   type SpeechSettings,
 } from "./settings";
 import { speechShortcutFromEvent, speechShortcutLabel } from "./speechShortcut";
+import { speechLanguageCodes, speechLanguageLabel } from "./speechLanguages";
+import {
+  parseReplacementRules,
+  serializeReplacementRules,
+  type SpeechReplacement,
+} from "./speechText";
+
+function ReplacementRulesEditor(
+  { value, onChange }: { value: string; onChange: (value: string) => void },
+) {
+  const { t } = useI18n();
+  const initial = () => {
+    const parsed = parseReplacementRules(value);
+    return parsed.length ? parsed : [{ from: "", to: "" }];
+  };
+  const [rows, setRows] = useState<SpeechReplacement[]>(initial);
+  useEffect(() => {
+    if (serializeReplacementRules(rows) !== value) setRows(initial());
+  }, [value]);
+  const update = (next: SpeechReplacement[]) => {
+    setRows(next);
+    onChange(serializeReplacementRules(next).slice(0, 4000));
+  };
+  return (
+    <div className="speech-replacements">
+      <div className="speech-replacement-head" aria-hidden="true">
+        <span>{t("speech.replacementSpoken")}</span>
+        <span /> <span>{t("speech.replacementResult")}</span>
+        <span />
+      </div>
+      {rows.map((rule, index) => (
+        <div className="speech-replacement-row" key={index}>
+          <input
+            aria-label={t("speech.replacementSpoken")}
+            value={rule.from}
+            placeholder={t("speech.replacementSpokenPlaceholder")}
+            onChange={(event) =>
+              update(rows.map((item, itemIndex) =>
+                itemIndex === index
+                  ? { ...item, from: event.target.value }
+                  : item
+              ))}
+          />
+          <span aria-hidden="true">→</span>
+          <textarea
+            aria-label={t("speech.replacementResult")}
+            rows={1}
+            value={rule.to}
+            placeholder="/daily"
+            onChange={(event) =>
+              update(
+                rows.map((item, itemIndex) =>
+                  itemIndex === index
+                    ? { ...item, to: event.target.value }
+                    : item
+                ),
+              )}
+          />
+          <button
+            type="button"
+            aria-label={t("speech.replacementRemove")}
+            onClick={() => {
+              const next = rows.filter((_, itemIndex) =>
+                itemIndex !== index
+              );
+              update(next.length ? next : [{ from: "", to: "" }]);
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="speech-secondary-button speech-replacement-add"
+        onClick={() => setRows([...rows, { from: "", to: "" }])}
+      >
+        <Plus size={13} />
+        {t("speech.replacementAdd")}
+      </button>
+      <small className="speech-settings-help">
+        {t("speech.replacementHelp")}
+      </small>
+    </div>
+  );
+}
 
 export function SpeechSettingsPanel(
   { settings, onChange, aiSettings }: {
@@ -41,6 +129,12 @@ export function SpeechSettingsPanel(
       id: "openai-compatible",
       label: t("speech.api"),
       hint: t("speech.apiHint"),
+      icon: AudioLines,
+    },
+    {
+      id: "live",
+      label: "Live transcription",
+      hint: "OpenAI / Gemini / Vertex AI",
       icon: AudioLines,
     },
   ] as const;
@@ -69,6 +163,13 @@ export function SpeechSettingsPanel(
   >(null);
   const [elapsed, setElapsed] = useState(0);
   const [shortcutHint, setShortcutHint] = useState("");
+  const [customLanguageMode, setCustomLanguageMode] = useState(false);
+  const languageCodes = speechLanguageCodes(
+    settings.provider,
+    settings.endpointType,
+  );
+  const customLanguage = settings.language !== "auto" &&
+    !languageCodes.includes(settings.language);
   useEffect(() => {
     pending.current?.abort();
     pending.current = null;
@@ -191,6 +292,15 @@ export function SpeechSettingsPanel(
             onClick={() =>
               patch({
                 provider: id,
+                ...(id === "live" &&
+                    !["openai", "gemini-transcribe", "vertex-transcribe"]
+                      .includes(settings.endpointType)
+                  ? {
+                    endpointType: "openai",
+                    baseUrl: "https://api.openai.com/v1",
+                    model: "gpt-live-transcribe",
+                  }
+                  : {}),
               })}
           >
             <Icon size={17} />
@@ -223,23 +333,37 @@ export function SpeechSettingsPanel(
           </div>
           <label className="settings-field">
             <span>{t("speech.language")}</span>
-            {settings.provider === "browser"
-              ? (
-                <input
-                  value={language === "ja"
-                    ? "日本語 (ja-JP)"
-                    : "English (en-US)"}
-                  readOnly
-                />
-              )
-              : (
-                <input
-                  value={settings.language}
-                  placeholder="auto"
-                  list="speech-language-options"
-                  onChange={(event) => patch({ language: event.target.value })}
-                />
-              )}
+            <select
+              value={customLanguageMode || customLanguage
+                ? "__custom__"
+                : settings.language || "auto"}
+              onChange={(event) => {
+                if (event.target.value === "__custom__") {
+                  setCustomLanguageMode(
+                    true,
+                  );
+                } else {
+                  setCustomLanguageMode(false);
+                  patch({ language: event.target.value });
+                }
+              }}
+            >
+              <option value="auto">{t("speech.languageAuto")}</option>
+              {languageCodes.map((code) => (
+                <option key={code} value={code}>
+                  {speechLanguageLabel(code, language)}
+                </option>
+              ))}
+              <option value="__custom__">{t("speech.languageOther")}</option>
+            </select>
+            {(customLanguageMode || customLanguage) && (
+              <input
+                autoFocus
+                value={customLanguage ? settings.language : ""}
+                placeholder="ja-JP"
+                onChange={(event) => patch({ language: event.target.value })}
+              />
+            )}
             <small>
               {settings.provider === "browser"
                 ? t("speech.browserLanguageHint")
@@ -248,11 +372,6 @@ export function SpeechSettingsPanel(
                 : t("speech.languages")}
             </small>
           </label>
-          <datalist id="speech-language-options">
-            <option value="auto" />
-            <option value={google ? "ja-JP" : "ja"} />
-            <option value={google ? "en-US" : "en"} />
-          </datalist>
         </div>
         {settings.provider !== "browser" && (
           <label className="settings-field">
@@ -298,10 +417,13 @@ export function SpeechSettingsPanel(
               value={settings.endpointType}
               onChange={(event) =>
                 onChange(
-                  selectSpeechEndpoint(
-                    settings,
-                    event.target.value as SpeechSettings["endpointType"],
-                  ),
+                  {
+                    ...selectSpeechEndpoint(
+                      settings,
+                      event.target.value as SpeechSettings["endpointType"],
+                    ),
+                    provider: settings.provider,
+                  },
                 )}
             >
               <option value="openai">OpenAI</option>
@@ -311,8 +433,12 @@ export function SpeechSettingsPanel(
               <option value="vertex-transcribe">
                 Gemini 3.5 Transcribe（Vertex AI）
               </option>
-              <option value="whisper-cpp">whisper.cpp</option>
-              <option value="custom">{t("speech.custom")}</option>
+              {settings.provider !== "live" && (
+                <option value="whisper-cpp">whisper.cpp</option>
+              )}
+              {settings.provider !== "live" && (
+                <option value="custom">{t("speech.custom")}</option>
+              )}
             </select>
             <small>
               {google
@@ -410,28 +536,30 @@ export function SpeechSettingsPanel(
                 </div>
               )}
           </div>
-          <div className="speech-connection-test">
-            <button
-              type="button"
-              className="speech-secondary-button"
-              disabled={!!checking || (vertex
-                ? !resolvedSettings.vertexProjectId?.trim()
-                : sharedKeyService
-                ? !resolvedSettings.apiKey.trim() ||
-                  (settings.endpointType === "openai" &&
-                    !settings.baseUrl.trim())
-                : !settings.baseUrl.trim())}
-              onClick={() => void test("server")}
-            >
-              <Radio size={14} />
-              {t("speech.testConnection")}
-            </button>
-            <small>
-              {t("speech.testHelp")}
-              {google &&
-                t("speech.costHelp")}
-            </small>
-          </div>
+          {settings.provider !== "live" && (
+            <div className="speech-connection-test">
+              <button
+                type="button"
+                className="speech-secondary-button"
+                disabled={!!checking || (vertex
+                  ? !resolvedSettings.vertexProjectId?.trim()
+                  : sharedKeyService
+                  ? !resolvedSettings.apiKey.trim() ||
+                    (settings.endpointType === "openai" &&
+                      !settings.baseUrl.trim())
+                  : !settings.baseUrl.trim())}
+                onClick={() => void test("server")}
+              >
+                <Radio size={14} />
+                {t("speech.testConnection")}
+              </button>
+              <small>
+                {t("speech.testHelp")}
+                {google &&
+                  t("speech.costHelp")}
+              </small>
+            </div>
+          )}
         </div>
       )}
       {checking && (
@@ -475,9 +603,10 @@ export function SpeechSettingsPanel(
             readOnly
             value={speechShortcutLabel(settings.shortcut)}
             placeholder={t("speech.shortcutPlaceholder")}
-            onFocus={() => setShortcutHint(
-              t("speech.shortcutHint"),
-            )}
+            onFocus={() =>
+              setShortcutHint(
+                t("speech.shortcutHint"),
+              )}
             onBlur={() => setShortcutHint("")}
             onKeyDown={(event) => {
               if (event.key === "Tab") return;
@@ -530,6 +659,36 @@ export function SpeechSettingsPanel(
               ? t("speech.browserSendHelp")
               : t("speech.apiSendHelp")}
           </small>
+          <div className="speech-settings-grid">
+            <label className="settings-field">
+              <span>Question command</span>
+              <input
+                value={settings.questionPhrases ?? ""}
+                onChange={(event) =>
+                  patch({ questionPhrases: event.target.value })}
+              />
+            </label>
+            <label className="settings-field">
+              <span>Line break command</span>
+              <input
+                value={settings.newlinePhrases ?? ""}
+                onChange={(event) =>
+                  patch({ newlinePhrases: event.target.value })}
+              />
+            </label>
+            <label className="settings-field">
+              <span>Exclamation command</span>
+              <input
+                value={settings.exclamationPhrases ?? ""}
+                onChange={(event) =>
+                  patch({ exclamationPhrases: event.target.value })}
+              />
+            </label>
+          </div>
+          <ReplacementRulesEditor
+            value={settings.replacements ?? ""}
+            onChange={(replacements) => patch({ replacements })}
+          />
         </>
       </div>
       <footer className="speech-settings-help">

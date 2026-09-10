@@ -1,8 +1,8 @@
-import { speechErrorMessage } from "./speechErrors";
-import { useI18n } from "../i18n/context";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/context";
 import { speechHTTPRequest } from "../lib/wailsBackend";
 import type { SpeechSettings } from "./settings";
+import { speechErrorMessage } from "./speechErrors";
 import { watchSpeechSilence } from "./speechSilence";
 import {
   recordingsToWav,
@@ -19,27 +19,36 @@ export interface ChatSpeechOptions {
   onInput: (text: string) => void;
   onSend: (text: string) => void;
 }
+interface QueuedClip {
+  clip: Blob;
+  durationMs: number;
+  afterSilence: boolean;
+}
+interface Session {
+  controller: AbortController;
+  settings: SpeechSettings;
+  stream?: MediaStream;
+  mimeType?: string;
+  recorder?: MediaRecorder;
+  recorders: Set<MediaRecorder>;
+  stopSilence?: () => void;
+  timer?: ReturnType<typeof setTimeout>;
+  pendingCaptures: number;
+  processing: boolean;
+  ending?: boolean;
+  cancelAfterStop?: boolean;
+  startedAt?: number;
+  base: string;
+  lastRendered: string;
+}
+type TaggedRecorder = MediaRecorder & { afterSilence?: boolean };
 
 export function useRecordedSpeech(options: ChatSpeechOptions) {
   const { t } = useI18n();
   const latest = useRef(options);
   latest.current = options;
-  const active = useRef<
-    {
-      controller: AbortController;
-      stream?: MediaStream;
-      recorder?: MediaRecorder;
-      timer?: ReturnType<typeof setTimeout>;
-      stopSilence?: () => void;
-      startedAt?: number;
-      captured?: boolean;
-      cancelAfterStop?: boolean;
-    } | null
-  >(null);
-  const retained = useRef<{ clips: Blob[]; durationMs: number }>({
-    clips: [],
-    durationMs: 0,
-  });
+  const active = useRef<Session | null>(null);
+  const retained = useRef<QueuedClip[]>([]);
   const [retainedCount, setRetainedCount] = useState(0);
   const [status, setStatus] = useState<
     "idle" | "starting" | "recording" | "preparing" | "transcribing"
@@ -47,10 +56,14 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
   const [meterStream, setMeterStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState("");
   const [silenceHint, setSilenceHint] = useState("");
+  const [backgroundTranscribing, setBackgroundTranscribing] = useState(false);
   const supported = !!navigator.mediaDevices?.getUserMedia &&
     typeof MediaRecorder !== "undefined" &&
     typeof OfflineAudioContext !== "undefined";
 
+  function publishQueue() {
+    setRetainedCount(retained.current.length);
+  }
   function stop(preserve = true) {
     const current = active.current;
     active.current = null;
@@ -58,34 +71,18 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       current.controller.abort();
       clearTimeout(current.timer);
       current.stopSilence?.();
-      if (current.recorder) {
-        current.recorder.onstop = null;
-        current.recorder.ondataavailable = null;
-        current.recorder.onerror = null;
-        if (current.recorder.state !== "inactive") current.recorder.stop();
+      for (const recorder of current.recorders) {
+        recorder.onstop = recorder.ondataavailable = recorder.onerror = null;
+        if (recorder.state !== "inactive") recorder.stop();
       }
       current.stream?.getTracks().forEach((track) => track.stop());
     }
+    if (!preserve) retained.current = [];
+    publishQueue();
     setStatus("idle");
     setMeterStream(null);
     setSilenceHint("");
-    if (!preserve) {
-      retained.current = { clips: [], durationMs: 0 };
-      setRetainedCount(0);
-    }
-  }
-
-  function finishRecording(current: NonNullable<typeof active.current>) {
-    if (active.current !== current || current.recorder?.state !== "recording") {
-      return;
-    }
-    clearTimeout(current.timer);
-    current.stopSilence?.();
-    current.recorder.stop();
-    current.stream?.getTracks().forEach((track) => track.stop());
-    setStatus("preparing");
-    setMeterStream(null);
-    setSilenceHint("");
+    setBackgroundTranscribing(false);
   }
 
   useEffect(() => {
@@ -93,202 +90,249 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     setError("");
     return () => stop(false);
   }, [options.scope, options.settings.provider]);
-
   useEffect(() => {
     if (options.disabled) stop();
   }, [options.disabled]);
-
   useEffect(() => {
     stop();
   }, [options.settings]);
 
-  async function transcribeRetained(
-    current: NonNullable<typeof active.current>,
-    base: string,
-    scope: string,
-    settings: SpeechSettings,
-  ) {
-    const valid = () =>
-      active.current === current && !latest.current.disabled &&
-      latest.current.scope === scope && latest.current.input === base;
-    setStatus("preparing");
-    setMeterStream(null);
+  function newSession(settings = { ...options.settings }): Session {
+    return {
+      controller: new AbortController(),
+      settings,
+      recorders: new Set(),
+      pendingCaptures: 0,
+      processing: false,
+      base: options.input,
+      lastRendered: options.input,
+    };
+  }
+
+  async function drain(current: Session) {
+    if (current.processing || active.current !== current) return;
+    current.processing = true;
     try {
-      const wav = await recordingsToWav(
-        retained.current.clips,
-        current.controller.signal,
-      );
-      current.controller.signal.throwIfAborted();
-      setStatus("transcribing");
-      // Vertex uses stored OAuth; API-key and local services use the HTTP transport.
-      const transcript = await transcribeSpeech(
-        wav,
-        settings,
-        speechHTTPRequest,
-        current.controller.signal,
-      );
-      if (!valid()) return;
-      if (!transcript) {
-        throw new Error(
-          t("speech.empty"),
+      while (retained.current.length && active.current === current) {
+        const queued = retained.current[0];
+        if (current.ending) {
+          setStatus("preparing");
+          setMeterStream(null);
+        }
+        const wav = await recordingsToWav(
+          [queued.clip],
+          current.controller.signal,
         );
-      }
-      // Evaluate the send phrase only after the complete recording is transcribed.
-      const draft = speechDraft(
-        base,
-        transcript,
-        true,
-        settings.sendPhrase,
-      );
-      stop(false);
-      latest.current.onInput(draft.text);
-      if (draft.send && draft.text.trim()) {
-        latest.current.onSend(draft.text);
+        current.controller.signal.throwIfAborted();
+        if (current.ending) setStatus("transcribing");
+        else setBackgroundTranscribing(true);
+        const transcript = await transcribeSpeech(
+          wav,
+          current.settings,
+          speechHTTPRequest,
+          current.controller.signal,
+        );
+        if (active.current !== current) return;
+        if (!transcript) {
+          if (queued.afterSilence) {
+            retained.current.shift();
+            publishQueue();
+            continue;
+          }
+          throw new Error(t("speech.empty"));
+        }
+        if (latest.current.input !== current.lastRendered) {
+          current.base = latest.current.input;
+        }
+        const draft = speechDraft(
+          current.base,
+          transcript,
+          true,
+          current.settings.sendPhrase,
+          {
+            question: current.settings.questionPhrases ?? "",
+            newline: current.settings.newlinePhrases ?? "",
+            exclamation: current.settings.exclamationPhrases ?? "",
+          },
+          current.settings.replacements ?? "",
+        );
+        retained.current.shift();
+        publishQueue();
+        current.base = draft.text;
+        current.lastRendered = draft.text;
+        latest.current.onInput(draft.text);
+        if (draft.send && draft.text.trim()) {
+          stop(false);
+          latest.current.onSend(draft.text);
+          return;
+        }
       }
     } catch (caught) {
       if (active.current === current) {
         setError(
           `${t("speech.recognitionError")}: ${speechErrorMessage(caught, t)}`,
         );
+        current.cancelAfterStop = true;
+        if (current.recorder?.state === "recording") finishRecording(current);
+        else if (!current.pendingCaptures) stop();
       }
     } finally {
-      if (active.current === current) stop();
+      current.processing = false;
+      if (active.current === current && !current.ending) {
+        setBackgroundTranscribing(false);
+      }
+      if (
+        active.current === current && current.ending &&
+        !current.pendingCaptures && !retained.current.length
+      ) stop(false);
+    }
+  }
+
+  function finishRecording(current: Session, afterSilence = false) {
+    if (active.current !== current || current.recorder?.state !== "recording") {
+      return;
+    }
+    const recorder = current.recorder as TaggedRecorder;
+    recorder.afterSilence = afterSilence;
+    current.stopSilence?.();
+    if (!afterSilence) {
+      current.ending = true;
+      clearTimeout(current.timer);
+    }
+    recorder.stop();
+    if (afterSilence) startChunk(current, true);
+    else {
+      current.stream?.getTracks().forEach((track) => track.stop());
+      setStatus("preparing");
+      setMeterStream(null);
+      setSilenceHint("");
+    }
+  }
+
+  function startChunk(current: Session, followsSilence = false) {
+    if (!current.stream) return;
+    const stream = current.stream;
+    const recorder = new MediaRecorder(
+      stream,
+      current.mimeType ? { mimeType: current.mimeType } : undefined,
+    ) as TaggedRecorder;
+    current.recorder = recorder;
+    current.recorders.add(recorder);
+    current.pendingCaptures++;
+    const chunks: Blob[] = [];
+    let size = 0;
+    let heardVoice = false;
+    let silenceAvailable = false;
+    const startedAt = performance.now();
+    recorder.ondataavailable = (event) => {
+      if (active.current !== current) return;
+      size += event.data.size;
+      const queuedBytes = retained.current.reduce(
+        (sum, item) => sum + item.clip.size,
+        0,
+      );
+      if (size + queuedBytes > 20 * 1024 * 1024) {
+        setError(t("speech.sizeLimit"));
+        stop();
+      } else if (event.data.size) chunks.push(event.data);
+    };
+    recorder.onerror = () => {
+      setError(t("speech.recordError"));
+      stop();
+    };
+    recorder.onstop = async () => {
+      current.recorders.delete(recorder);
+      current.pendingCaptures--;
+      if (active.current !== current) return;
+      const clip = new Blob(chunks, { type: recorder.mimeType });
+      if (clip.size && !(followsSilence && silenceAvailable && !heardVoice)) {
+        retained.current.push({
+          clip,
+          durationMs: performance.now() - startedAt,
+          afterSilence: recorder.afterSilence === true,
+        });
+      }
+      publishQueue();
+      if (current.cancelAfterStop) {
+        if (!current.pendingCaptures) stop();
+        return;
+      }
+      await drain(current);
+    };
+    current.startedAt ??= performance.now();
+    recorder.start(1000);
+    if (current.settings.silenceSeconds > 0) {
+      current.stopSilence = watchSpeechSilence(
+        stream,
+        current.settings.silenceSeconds,
+        () => finishRecording(current, true),
+        (available) => {
+          silenceAvailable = available;
+          if (active.current === current) {
+            setSilenceHint(
+              available
+                ? t("speech.autoStopHint").replace(
+                  "{seconds}",
+                  String(current.settings.silenceSeconds),
+                )
+                : t("speech.noSilence"),
+            );
+          }
+        },
+        () => {
+          heardVoice = true;
+        },
+        followsSilence ? 0 : 3000,
+      );
     }
   }
 
   async function retryRecording() {
-    if (active.current || options.disabled || !retained.current.clips.length) {
-      return;
-    }
-    const current = { controller: new AbortController(), captured: true };
+    if (active.current || options.disabled || !retained.current.length) return;
+    const current = newSession();
+    current.ending = true;
     active.current = current;
     setError("");
-    await transcribeRetained(current, options.input, options.scope, {
-      ...options.settings,
-    });
+    await drain(current);
   }
 
   async function toggle() {
-    const previous = active.current;
-    if (previous) {
-      if (previous.recorder?.state === "recording") {
-        finishRecording(previous);
-      } else if (previous.recorder && !previous.captured) {
-        // Let the final dataavailable/stop events retain the complete last chunk.
-        previous.cancelAfterStop = true;
+    if (active.current) {
+      if (active.current.recorder?.state === "recording") {
+        finishRecording(active.current);
+      } else if (active.current.pendingCaptures) {
+        active.current.cancelAfterStop = true;
       } else stop();
       return;
     }
     if (options.disabled) return;
     setError("");
-    if (retained.current.durationMs >= 299000) {
-      setError(
-        t("speech.retainedLimit"),
-      );
-      return;
-    }
     if (!supported) {
       setError(t("speech.noRecording"));
       return;
     }
-    const current: NonNullable<typeof active.current> = {
-      controller: new AbortController(),
-    };
-    const base = options.input;
-    const scope = options.scope;
-    const settings = { ...options.settings };
+    const current = newSession();
     active.current = current;
     setStatus("starting");
-    const valid = () =>
-      active.current === current && !latest.current.disabled &&
-      latest.current.scope === scope && latest.current.input === base;
     try {
-      validateSpeechSettings(settings);
+      validateSpeechSettings(current.settings);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!valid()) {
+      if (active.current !== current) {
         stream.getTracks().forEach((track) => track.stop());
-        if (active.current === current) stop();
         return;
       }
+      retained.current = [];
       current.stream = stream;
-      setMeterStream(stream);
-      const mimeType = [
+      current.mimeType = [
         "audio/webm;codecs=opus",
         "audio/mp4",
         "audio/ogg;codecs=opus",
       ].find((type) => MediaRecorder.isTypeSupported(type));
-      const recorder = new MediaRecorder(
-        stream,
-        mimeType ? { mimeType } : undefined,
-      );
-      current.recorder = recorder;
-      const chunks: Blob[] = [];
-      let size = 0;
-      recorder.ondataavailable = (event) => {
-        size += event.data.size;
-        if (size > 20 * 1024 * 1024) {
-          setError(t("speech.sizeLimit"));
-          stop();
-        } else if (event.data.size) chunks.push(event.data);
-      };
-      recorder.onerror = () => {
-        setError(
-          t("speech.recordError"),
-        );
-        stop();
-      };
-      recorder.onstop = async () => {
-        clearTimeout(current.timer);
-        current.stopSilence?.();
-        setSilenceHint("");
-        stream.getTracks().forEach((track) => track.stop());
-        if (!valid()) {
-          if (active.current === current) stop();
-          return;
-        }
-        const clip = new Blob(chunks, { type: recorder.mimeType });
-        chunks.length = 0;
-        current.captured = true;
-        if (clip.size) {
-          retained.current = {
-            clips: [...retained.current.clips, clip],
-            durationMs: retained.current.durationMs +
-              (performance.now() - (current.startedAt ?? performance.now())),
-          };
-          setRetainedCount(retained.current.clips.length);
-        }
-        if (current.cancelAfterStop) {
-          stop();
-          return;
-        }
-        await transcribeRetained(current, base, scope, settings);
-      };
-      recorder.start(1000);
-      current.startedAt = performance.now();
+      startChunk(current);
+      setMeterStream(stream);
       setStatus("recording");
-      if (settings.silenceSeconds > 0) {
-        current.stopSilence = watchSpeechSilence(
-          stream,
-          settings.silenceSeconds,
-          () => finishRecording(current),
-          (available) => {
-            if (active.current === current) {
-              setSilenceHint(
-                available
-                  ? t("speech.autoStopHint").replace(
-                    "{seconds}",
-                    String(settings.silenceSeconds),
-                  )
-                  : t("speech.noSilence"),
-              );
-            }
-          },
-        );
-      }
-      current.timer = setTimeout(
-        () => finishRecording(current),
-        Math.max(1000, 5 * 60 * 1000 - retained.current.durationMs),
-      );
+      publishQueue();
+      current.timer = setTimeout(() => finishRecording(current), 5 * 60 * 1000);
     } catch (caught) {
       if (active.current === current) {
         stop();
@@ -309,6 +353,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     retryRecording,
     status,
     error,
+    backgroundTranscribing,
     supported,
     toggle,
     stop: () => stop(),

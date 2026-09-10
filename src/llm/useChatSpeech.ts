@@ -2,6 +2,7 @@ import { useI18n } from "../i18n/context";
 import { useEffect, useRef, useState } from "react";
 import { type ChatSpeechOptions, useRecordedSpeech } from "./useRecordedSpeech";
 import { speechDraft } from "./speechTranscription";
+import { useLiveSpeech } from "./useLiveSpeech";
 
 interface SpeechResult {
   isFinal: boolean;
@@ -27,6 +28,7 @@ type SpeechWindow = Window & {
 export function useChatSpeech(options: ChatSpeechOptions) {
   const { t, language } = useI18n();
   const recorded = useRecordedSpeech(options);
+  const live = useLiveSpeech(options);
   const latest = useRef(options);
   latest.current = options;
   const recognition = useRef<Recognition | null>(null);
@@ -57,7 +59,13 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     stop();
     setError("");
     return stop;
-  }, [options.scope, options.disabled, options.settings.provider, language]);
+  }, [
+    options.scope,
+    options.disabled,
+    options.settings.provider,
+    options.settings.language,
+    language,
+  ]);
 
   function toggle() {
     if (recognition.current) {
@@ -75,7 +83,10 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     try {
       const current = new Constructor();
       recognition.current = current;
-      current.lang = language === "ja" ? "ja-JP" : "en-US";
+      current.lang =
+        !options.settings.language || options.settings.language === "auto"
+          ? language === "ja" ? "ja-JP" : "en-US"
+          : options.settings.language;
       current.continuous = true;
       current.interimResults = true;
       current.onresult = (event) => {
@@ -93,6 +104,12 @@ export function useChatSpeech(options: ChatSpeechOptions) {
           transcript,
           results.length > 0 && results.every((result) => result.isFinal),
           latest.current.settings.sendPhrase,
+          {
+            question: latest.current.settings.questionPhrases ?? "",
+            newline: latest.current.settings.newlinePhrases ?? "",
+            exclamation: latest.current.settings.exclamationPhrases ?? "",
+          },
+          latest.current.settings.replacements ?? "",
         );
         latest.current.onInput(text);
         if (shouldSend) {
@@ -139,6 +156,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     }
   }
 
+  if (options.settings.provider === "live") return live;
   if (options.settings.provider !== "browser") return recorded;
   return {
     listening,
@@ -149,6 +167,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     retryRecording: () => {},
     status: listening ? "recording" : "idle",
     error,
+    backgroundTranscribing: false,
     supported: !!Constructor,
     toggle,
     stop,

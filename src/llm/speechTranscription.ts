@@ -4,6 +4,13 @@ import type {
   ExternalHTTPRequest,
   ExternalHTTPResponse,
 } from "../lib/wailsBackend";
+import {
+  applyReplacementRules,
+  applySpeechCommands,
+  parseReplacementRules,
+  type SpeechCommands,
+  trailingSpeechCommand,
+} from "./speechText";
 
 export function transcriptionURL(
   baseUrl: string,
@@ -37,20 +44,18 @@ export function speechDraft(
   transcript: string,
   final: boolean,
   sendPhrase = "over, オーバー",
+  commands?: SpeechCommands,
+  replacements = "",
 ) {
-  const phrases = sendPhrase.split(/[,、\n]/).map((phrase) => phrase.trim())
-    .filter(Boolean).sort((a, b) => b.length - a.length);
-  const pattern = phrases.map((phrase) => {
-    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return (/^[a-z0-9_]/i.test(phrase) ? "\\b" : "") + escaped;
-  }).join("|");
-  const command = pattern
-    ? new RegExp(`(?:${pattern})[\\s。．.!！?？、,]*$`, "i")
-    : null;
-  const send = final && !!command && command.test(transcript);
-  const spoken = send && command
-    ? transcript.replace(command, "").trimEnd()
+  const command = trailingSpeechCommand(transcript, sendPhrase);
+  const send = final && !!command;
+  let spoken = send && command
+    ? transcript.slice(0, command.index).trimEnd()
     : transcript;
+  if (final) {
+    spoken = applyReplacementRules(spoken, parseReplacementRules(replacements));
+    if (commands) spoken = applySpeechCommands(spoken, commands);
+  }
   return {
     text: base + (base && spoken && !/\s$/.test(base) ? " " : "") + spoken,
     send,
@@ -148,6 +153,25 @@ export async function recordingsToWav(
 }
 
 export function validateSpeechSettings(settings: SpeechSettings): string {
+  if (settings.provider === "live") {
+    if (
+      !["openai", "gemini-transcribe", "vertex-transcribe"].includes(
+        settings.endpointType,
+      )
+    ) throw new SpeechError("speech.error.model");
+    if (
+      settings.endpointType !== "vertex-transcribe" && !settings.apiKey.trim()
+    ) throw new SpeechError("speech.error.geminiKey");
+    if (
+      settings.endpointType === "vertex-transcribe" &&
+      !/^[a-z0-9][a-z0-9_-]*$/i.test(settings.vertexProjectId?.trim() ?? "")
+    ) throw new SpeechError("speech.error.project");
+    return settings.endpointType === "openai"
+      ? "wss://api.openai.com/v1/realtime?intent=transcription"
+      : settings.endpointType === "vertex-transcribe"
+      ? "wss://aiplatform.googleapis.com"
+      : "wss://generativelanguage.googleapis.com";
+  }
   const url = transcriptionURL(
     settings.baseUrl,
     settings.endpointType,

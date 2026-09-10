@@ -62,12 +62,15 @@ function AudioMeter({ stream }: { stream: MediaStream | null }) {
   );
 }
 
-export function SpeechActivity({ status, stream, browser, silenceHint }: {
-  status: string;
-  stream: MediaStream | null;
-  browser: boolean;
-  silenceHint?: string;
-}) {
+export function SpeechActivity(
+  { status, stream, browser, silenceHint, backgroundTranscribing = false }: {
+    status: string;
+    stream: MediaStream | null;
+    browser: boolean;
+    silenceHint?: string;
+    backgroundTranscribing?: boolean;
+  },
+) {
   const { t } = useI18n();
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -81,7 +84,9 @@ export function SpeechActivity({ status, stream, browser, silenceHint }: {
   }, [status]);
   const listening = status === "recording";
   const title = listening
-    ? t("speech.listening")
+    ? backgroundTranscribing
+      ? t("speech.recordingAndSending")
+      : t("speech.listening")
     : status === "starting"
     ? t("speech.starting")
     : status === "preparing"
@@ -104,7 +109,11 @@ export function SpeechActivity({ status, stream, browser, silenceHint }: {
         <strong role="status">{title}</strong>
         <small>
           {listening
-            ? browser ? t("speech.liveHint") : t("speech.recordHint")
+            ? backgroundTranscribing
+              ? t("speech.sendingWhileRecording")
+              : browser
+              ? t("speech.liveHint")
+              : t("speech.recordHint")
             : browser || status === "starting"
             ? t("speech.cancelHint")
             : t("speech.retainHint")}

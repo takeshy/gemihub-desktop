@@ -43,6 +43,8 @@ type App struct {
 	mcpStdio           map[string]*mcpStdioSession
 	mcpOAuthMu         sync.Mutex
 	pluginMu           sync.Mutex
+	liveMu             sync.Mutex
+	liveSpeech         *liveSpeechSession
 }
 
 type LocalFileResult struct {
@@ -85,6 +87,7 @@ func (a *App) ServiceShutdown() error {
 	a.StopDiscordBot()
 	a.StopCLI()
 	a.closeAllMCPStdio()
+	a.StopLiveSpeech()
 	return nil
 }
 
