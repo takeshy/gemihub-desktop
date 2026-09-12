@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
 import { defaultSpeechSettings } from "./settings.ts";
+import { speechLanguageCodes } from "./speechLanguages.ts";
 import {
   combineSpeechWavs,
   encodeSpeechWav,
@@ -47,6 +48,13 @@ Deno.test("STT builds compatible endpoint URLs and rejects ambiguous base URLs",
     transcriptionURL("http://stt.lan:8080"),
     "http://stt.lan:8080/audio/transcriptions",
   );
+  assertEquals(
+    transcriptionURL(
+      "https://speech.example.azure.com/",
+      "azure-mai-transcribe",
+    ),
+    "https://speech.example.azure.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15",
+  );
   for (
     const url of [
       "file:///tmp",
@@ -57,6 +65,63 @@ Deno.test("STT builds compatible endpoint URLs and rejects ambiguous base URLs",
   ) {
     assertThrows(() => transcriptionURL(url));
   }
+});
+
+Deno.test("Azure MAI sends Fast Transcription multipart fields and reads combined phrases", async () => {
+  const audio = encodeSpeechWav(new Float32Array([0]));
+  const text = await transcribeSpeech(audio, {
+    ...defaultSpeechSettings,
+    provider: "openai-compatible",
+    endpointType: "azure-mai-transcribe",
+    baseUrl: "https://speech.example.azure.com",
+    apiKey: " azure-key ",
+    model: "MAI-Transcribe-2",
+    language: "ja",
+  }, async (request) => {
+    assertEquals(
+      request.url,
+      "https://speech.example.azure.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15",
+    );
+    assertEquals(request.headers?.["Ocp-Apim-Subscription-Key"], "azure-key");
+    assertEquals(request.headers?.Authorization, undefined);
+    const bytes = Uint8Array.from(
+      atob(request.bodyBase64!),
+      (char) => char.charCodeAt(0),
+    );
+    const form = await new Response(bytes, { headers: request.headers })
+      .formData();
+    assertEquals(form.has("file"), false);
+    assertEquals(form.has("model"), false);
+    assertEquals((form.get("audio") as File).name, "recording.wav");
+    assertEquals(JSON.parse(String(form.get("definition"))), {
+      enhancedMode: { enabled: true, model: "MAI-Transcribe-2" },
+      locales: ["ja"],
+    });
+    return {
+      status: 200,
+      headers: {},
+      body: '{"combinedPhrases":[{"text":" こんにちは "},{"text":"世界。"}]}',
+      bodyBase64: "",
+    };
+  }, new AbortController().signal);
+  assertEquals(text, "こんにちは 世界。");
+});
+
+Deno.test("Azure MAI language choices follow the selected model", () => {
+  const current = speechLanguageCodes(
+    "openai-compatible",
+    "azure-mai-transcribe",
+    "MAI-Transcribe-2",
+  );
+  const legacy = speechLanguageCodes(
+    "openai-compatible",
+    "azure-mai-transcribe",
+    "MAI-Transcribe-1.5",
+  );
+  assertEquals(current.includes("ja"), true);
+  assertEquals(current.includes("yue"), true);
+  assertEquals(legacy.includes("ja"), true);
+  assertEquals(legacy.includes("yue"), false);
 });
 
 Deno.test("native whisper.cpp uses inference with JSON and explicit language auto", async () => {

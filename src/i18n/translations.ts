@@ -11,6 +11,9 @@ export interface TranslationStrings {
   "speech.error.empty": string;
   "speech.error.combinedDuration": string;
   "speech.error.geminiKey": string;
+  "speech.error.azureKey": string;
+  "speech.error.azureAuth": string;
+  "speech.error.azureInvalid": string;
   "speech.error.language": string;
   "speech.error.model": string;
   "speech.error.invalid": string;
@@ -55,6 +58,7 @@ export interface TranslationStrings {
   "speech.custom": string;
   "speech.vertexHelp": string;
   "speech.geminiHelp": string;
+  "speech.azureMaiHelp": string;
   "speech.whisperHelp": string;
   "speech.openaiHelp": string;
   "speech.customHelp": string;
@@ -443,6 +447,11 @@ const en: TranslationStrings = {
   "speech.error.combinedDuration":
     "Keep recordings, including retained audio, within 5 minutes.",
   "speech.error.geminiKey": "Set a Google AI Studio Gemini API key.",
+  "speech.error.azureKey": "Set the Azure Speech API key.",
+  "speech.error.azureAuth":
+    "Check the Azure Speech endpoint, API key, region, and MAI Transcribe access.",
+  "speech.error.azureInvalid":
+    "Azure MAI Transcribe returned an invalid response.",
   "speech.error.language":
     "Set recognition language to auto or a language code such as ja-JP or en-US.",
   "speech.error.model": "Set the transcription model.",
@@ -500,6 +509,8 @@ const en: TranslationStrings = {
     "Sign in to Google under Vertex AI in AI settings. Uses the Transcribe preview in the global region.",
   "speech.geminiHelp":
     "Transcribe with a Google AI Studio Gemini API key. Recordings, including retained audio, can total up to 5 minutes.",
+  "speech.azureMaiHelp":
+    "Uses Azure Speech Fast Transcription with a selectable MAI Transcribe model. Availability depends on the resource region.",
   "speech.whisperHelp": "Connects to the standard whisper.cpp server.",
   "speech.openaiHelp":
     "Transcribe audio with the OpenAI API key from AI settings.",
@@ -918,6 +929,10 @@ const ja: TranslationStrings = {
     "保持分を含めた録音は5分以内にしてください。",
   "speech.error.geminiKey":
     "Google AI StudioのGemini API Keyを設定してください。",
+  "speech.error.azureKey": "Azure SpeechのAPI Keyを設定してください。",
+  "speech.error.azureAuth":
+    "Azure Speechのエンドポイント・API Key・リージョン・MAI Transcribeの利用権限を確認してください。",
+  "speech.error.azureInvalid": "Azure MAI Transcribeの応答形式が不正です。",
   "speech.error.language":
     "認識する言語はautoまたはja-JPやen-USなどの言語コードを指定してください。",
   "speech.error.model": "STTのModelを設定してください。",
@@ -973,6 +988,8 @@ const ja: TranslationStrings = {
     "AI設定のVertex AIでGoogleに接続してください。globalリージョンのTranscribeプレビュー版を使用します。",
   "speech.geminiHelp":
     "Google AI StudioのGemini APIキーで文字起こしします。録音は保持分を含めて最大5分です。",
+  "speech.azureMaiHelp":
+    "Azure SpeechのFast Transcription APIを使用します。MAI Transcribeモデルを選択でき、利用可否はリソースのリージョンに依存します。",
   "speech.whisperHelp": "whisper.cpp標準サーバーに合わせて接続します。",
   "speech.openaiHelp": "AI設定のOpenAI APIキーで音声を文字起こしします。",
   "speech.customHelp":

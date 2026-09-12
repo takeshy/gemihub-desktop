@@ -157,6 +157,7 @@ export function SpeechSettingsPanel(
     settings.endpointType === "openai";
   const google = isGeminiSpeech(settings.endpointType);
   const vertex = settings.endpointType === "vertex-transcribe";
+  const azure = settings.endpointType === "azure-mai-transcribe";
   const patch = (change: Partial<SpeechSettings>) =>
     onChange({ ...settings, ...change });
   const pending = useRef<AbortController | null>(null);
@@ -172,6 +173,7 @@ export function SpeechSettingsPanel(
   const languageCodes = speechLanguageCodes(
     settings.provider,
     settings.endpointType,
+    settings.model,
   );
   const customLanguage = settings.language !== "auto" &&
     !languageCodes.includes(settings.language);
@@ -443,6 +445,11 @@ export function SpeechSettingsPanel(
                 Gemini 3.5 Transcribe（Vertex AI）
               </option>
               {settings.provider !== "live" && (
+                <option value="azure-mai-transcribe">
+                  Azure MAI Transcribe
+                </option>
+              )}
+              {settings.provider !== "live" && (
                 <option value="whisper-cpp">whisper.cpp</option>
               )}
               {settings.provider !== "live" && (
@@ -452,6 +459,8 @@ export function SpeechSettingsPanel(
             <small>
               {google
                 ? vertex ? t("speech.vertexHelp") : t("speech.geminiHelp")
+                : settings.endpointType === "azure-mai-transcribe"
+                ? t("speech.azureMaiHelp")
                 : settings.endpointType === "whisper-cpp"
                 ? t("speech.whisperHelp")
                 : inheritedKey
@@ -475,7 +484,9 @@ export function SpeechSettingsPanel(
               <input
                 type="url"
                 value={settings.baseUrl}
-                placeholder={settings.endpointType === "whisper-cpp"
+                placeholder={settings.endpointType === "azure-mai-transcribe"
+                  ? "https://YOUR_RESOURCE.cognitiveservices.azure.com"
+                  : settings.endpointType === "whisper-cpp"
                   ? "http://127.0.0.1:8080"
                   : "https://api.openai.com/v1"}
                 onChange={(event) => patch({ baseUrl: event.target.value })}
@@ -491,7 +502,7 @@ export function SpeechSettingsPanel(
                 <span>
                   API Key{" "}
                   <small>
-                    {sharedKeyService
+                    {sharedKeyService || azure
                       ? t("speech.required")
                       : t("speech.optional")}
                   </small>
@@ -500,7 +511,9 @@ export function SpeechSettingsPanel(
                   type="password"
                   autoComplete="off"
                   value={settings.apiKey}
-                  placeholder={google
+                  placeholder={settings.endpointType === "azure-mai-transcribe"
+                    ? "Azure Speech API Key"
+                    : google
                     ? t("speech.geminiKey")
                     : sharedKeyService
                     ? t("speech.openaiKey")
@@ -527,6 +540,21 @@ export function SpeechSettingsPanel(
                   </strong>
                 </div>
               )
+              : azure
+              ? (
+                <label className="settings-field">
+                  <span>Model</span>
+                  <select
+                    value={settings.model}
+                    onChange={(event) => patch({ model: event.target.value })}
+                  >
+                    <option value="MAI-Transcribe-2">MAI-Transcribe-2</option>
+                    <option value="MAI-Transcribe-1.5">
+                      MAI-Transcribe-1.5
+                    </option>
+                  </select>
+                </label>
+              )
               : settings.endpointType !== "whisper-cpp"
               ? (
                 <label className="settings-field">
@@ -552,7 +580,7 @@ export function SpeechSettingsPanel(
                 className="speech-secondary-button"
                 disabled={!!checking || (vertex
                   ? !resolvedSettings.vertexProjectId?.trim()
-                  : sharedKeyService
+                  : sharedKeyService || azure
                   ? !resolvedSettings.apiKey.trim() ||
                     (settings.endpointType === "openai" &&
                       !settings.baseUrl.trim())

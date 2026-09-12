@@ -34,6 +34,12 @@ export function transcriptionURL(
   ) {
     throw new SpeechError("speech.error.url");
   }
+  if (endpointType === "azure-mai-transcribe") {
+    url.pathname = url.pathname.replace(/\/+$/, "") +
+      "/speechtotext/transcriptions:transcribe";
+    url.searchParams.set("api-version", "2025-10-15");
+    return url.toString();
+  }
   url.pathname = url.pathname.replace(/\/+$/, "") +
     (endpointType === "whisper-cpp" ? "/inference" : "/audio/transcriptions");
   return url.toString();
@@ -177,7 +183,19 @@ export function validateSpeechSettings(settings: SpeechSettings): string {
     settings.endpointType,
     settings.vertexProjectId,
   );
-  if (isGeminiSpeech(settings.endpointType)) {
+  if (settings.endpointType === "azure-mai-transcribe") {
+    if (!settings.apiKey.trim()) {
+      throw new SpeechError("speech.error.azureKey");
+    }
+    if (!["MAI-Transcribe-2", "MAI-Transcribe-1.5"].includes(settings.model)) {
+      throw new SpeechError("speech.error.model");
+    }
+    const language = settings.language.trim();
+    if (
+      language && language.toLowerCase() !== "auto" &&
+      !/^[a-z]{2,3}(?:-[a-z0-9]+)*$/i.test(language)
+    ) throw new SpeechError("speech.error.language");
+  } else if (isGeminiSpeech(settings.endpointType)) {
     if (
       settings.endpointType === "gemini-transcribe" && !settings.apiKey.trim()
     ) {
@@ -250,6 +268,7 @@ export async function transcribeSpeech(
   const url = validateSpeechSettings(settings);
   const google = isGeminiSpeech(settings.endpointType);
   const native = settings.endpointType === "whisper-cpp";
+  const azure = settings.endpointType === "azure-mai-transcribe";
   if (!audio.size) throw new SpeechError("speech.error.empty");
   let headers: Record<string, string>;
   let bodyBase64: string;
@@ -281,11 +300,22 @@ export async function transcribeSpeech(
     bodyBase64 = bytesToBase64(new TextEncoder().encode(body));
   } else {
     const form = new FormData();
-    form.append("file", audio, "recording.wav");
-    if (!native) form.append("model", settings.model.trim());
+    form.append(azure ? "audio" : "file", audio, "recording.wav");
+    if (!native && !azure) form.append("model", settings.model.trim());
     if (native) form.append("response_format", "json");
     const language = settings.language.trim();
-    if (native) {
+    if (azure) {
+      const definition: {
+        enhancedMode: { enabled: true; model: string };
+        locales?: string[];
+      } = {
+        enhancedMode: { enabled: true, model: settings.model },
+      };
+      if (language && language.toLowerCase() !== "auto") {
+        definition.locales = [language];
+      }
+      form.append("definition", JSON.stringify(definition));
+    } else if (native) {
       form.append(
         "language",
         language && language.toLowerCase() !== "auto" ? language : "auto",
@@ -297,7 +327,9 @@ export async function transcribeSpeech(
     const bytes = new Uint8Array(await request.arrayBuffer());
     bodyBase64 = bytesToBase64(bytes);
     headers = { "Content-Type": request.headers.get("content-type")! };
-    if (settings.apiKey.trim()) {
+    if (azure) {
+      headers["Ocp-Apim-Subscription-Key"] = settings.apiKey.trim();
+    } else if (settings.apiKey.trim()) {
       headers.Authorization = `Bearer ${settings.apiKey.trim()}`;
     }
   }
@@ -317,6 +349,8 @@ export async function transcribeSpeech(
           ? settings.endpointType === "vertex-transcribe"
             ? "speech.error.vertexAuth"
             : "speech.error.geminiAuth"
+          : azure
+          ? "speech.error.azureAuth"
           : "speech.error.auth"
         : "speech.error.server",
       `STT HTTP ${response.status}: `,
@@ -330,6 +364,20 @@ export async function transcribeSpeech(
     throw new SpeechError("speech.error.json");
   }
   if (google) return geminiTranscript(result);
+  if (azure) {
+    if (
+      !result || typeof result !== "object" ||
+      !("combinedPhrases" in result) ||
+      !Array.isArray(result.combinedPhrases) ||
+      result.combinedPhrases.some((phrase) =>
+        !phrase || typeof phrase !== "object" || !("text" in phrase) ||
+        typeof phrase.text !== "string"
+      )
+    ) throw new SpeechError("speech.error.azureInvalid");
+    return result.combinedPhrases.map((phrase) => phrase.text.trim()).filter(
+      Boolean,
+    ).join(" ");
+  }
   if (
     !result || typeof result !== "object" || !("text" in result) ||
     typeof result.text !== "string"

@@ -141,6 +141,7 @@ export interface SpeechSettings {
     | "openai"
     | "whisper-cpp"
     | "custom"
+    | "azure-mai-transcribe"
     | "gemini-transcribe"
     | "vertex-transcribe";
   baseUrl: string;
@@ -197,7 +198,8 @@ export function loadSpeechSettings(
     : saved?.endpointType === "gemini-transcribe" ||
         saved?.endpointType === "vertex-transcribe" ||
         saved?.endpointType === "whisper-cpp" ||
-        saved?.endpointType === "custom" || saved?.endpointType === "openai"
+        saved?.endpointType === "custom" || saved?.endpointType === "openai" ||
+        saved?.endpointType === "azure-mai-transcribe"
     ? saved.endpointType
     : !saved?.baseUrl ||
         saved.baseUrl.replace(/\/+$/, "") === defaultSpeechSettings.baseUrl
@@ -243,6 +245,7 @@ export function selectSpeechEndpoint(
   endpointType: SpeechSettings["endpointType"],
 ): SpeechSettings {
   const google = isGeminiSpeech(endpointType);
+  const azure = endpointType === "azure-mai-transcribe";
   const leavingGoogle = isGeminiSpeech(settings.endpointType) && !google;
   const baseUrl = endpointType === "gemini-transcribe"
     ? "https://generativelanguage.googleapis.com/v1beta"
@@ -250,6 +253,8 @@ export function selectSpeechEndpoint(
     ? "https://aiplatform.googleapis.com/v1beta1"
     : endpointType === "whisper-cpp"
     ? "http://127.0.0.1:8080"
+    : azure
+    ? ""
     : endpointType === "openai" || leavingGoogle
     ? "https://api.openai.com/v1"
     : settings.baseUrl;
@@ -259,14 +264,18 @@ export function selectSpeechEndpoint(
     provider: "openai-compatible",
     endpointType,
     baseUrl,
-    model: google
+    model: azure
+      ? "MAI-Transcribe-2"
+      : google
       ? endpointType === "vertex-transcribe"
         ? "gemini-3.5-transcribe-preview"
         : "gemini-3.5-transcribe"
       : endpointType === "openai" || leavingGoogle
       ? "whisper-1"
       : settings.model,
-    language: google
+    language: azure
+      ? "auto"
+      : google
       ? language === "en"
         ? "en-US"
         : language === "ja"
@@ -275,7 +284,7 @@ export function selectSpeechEndpoint(
       : leavingGoogle
       ? "auto"
       : settings.language,
-    apiKey: baseUrl === settings.baseUrl &&
+    apiKey: !azure && baseUrl === settings.baseUrl &&
         google === isGeminiSpeech(settings.endpointType)
       ? settings.apiKey
       : "",
