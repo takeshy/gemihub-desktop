@@ -67,7 +67,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
     language,
   ]);
 
-  function toggle() {
+  function toggle(input = options.input) {
     if (recognition.current) {
       stop();
       return;
@@ -78,7 +78,7 @@ export function useChatSpeech(options: ChatSpeechOptions) {
       setError(t("speech.noBrowser"));
       return;
     }
-    let base = options.input;
+    let base = input;
     let lastRendered = base;
     // Recognition keeps every result of the session, so a rebase also has to
     // skip the part of the transcript the user's edit already contains.

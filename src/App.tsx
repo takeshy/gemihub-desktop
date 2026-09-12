@@ -1790,11 +1790,15 @@ export default function App() {
     let cancelled = false;
     if (!directoryContextLoaded || startupPaths === null) return;
     if (startupPaths.length > 0) {
-      // Show the associated file immediately in the lightweight default
-      // dashboard. Load the persisted Workspace dashboard in the background,
-      // then re-apply the file to its existing FileWidget.
-      setDashboardContextReady(true);
-      if (!workspaceContextLoaded || !workspaceState.activeWorkspaceId) return;
+      // Restore the persisted Dashboard first, then let DashboardView open the
+      // associated file exactly once. Opening it in the default Dashboard first
+      // races restoration and can leave the previously persisted file visible.
+      if (!workspaceContextLoaded) return;
+      if (!workspaceState.activeWorkspaceId) {
+        setDashboardContextReady(true);
+        return;
+      }
+      setDashboardContextReady(false);
       void (async () => {
         const files = await listDashboardFiles();
         if (cancelled) return;
@@ -1821,18 +1825,13 @@ export default function App() {
           localStorage.setItem(homeKey, path);
           setHomeDashboardPath(path);
         }
-        if (!cancelled) {
-          setOpenPathRequest((current) => ({
-            id: current.id + 1,
-            file: fileRef("absolute", startupPaths[0]),
-            source: "startup",
-          }));
-        }
+        if (!cancelled) setDashboardContextReady(true);
       })().catch((error) => {
         if (!cancelled) {
           setDashboardError(
             error instanceof Error ? error.message : String(error),
           );
+          setDashboardContextReady(true);
         }
       });
       return () => {

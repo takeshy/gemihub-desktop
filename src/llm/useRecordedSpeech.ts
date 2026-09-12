@@ -43,6 +43,7 @@ interface Session {
   ending?: boolean;
   cancelAfterStop?: boolean;
   startedAt?: number;
+  transcribedAny: boolean;
   base: string;
   lastRendered: string;
 }
@@ -102,15 +103,19 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     stop();
   }, [options.settings]);
 
-  function newSession(settings = { ...options.settings }): Session {
+  function newSession(
+    settings = { ...options.settings },
+    input = options.input,
+  ): Session {
     return {
       controller: new AbortController(),
       settings,
       recorders: new Set(),
       pendingCaptures: 0,
       processing: false,
-      base: options.input,
-      lastRendered: options.input,
+      transcribedAny: false,
+      base: input,
+      lastRendered: input,
     };
   }
 
@@ -165,6 +170,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
         publishQueue();
         current.base = draft.text;
         current.lastRendered = draft.text;
+        current.transcribedAny = true;
         latest.current.onInput(draft.text);
         // The send phrase always ends the session, even when it is the only
         // thing said: there is then nothing to send, but recording must stop.
@@ -253,10 +259,13 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       current.pendingCaptures--;
       if (active.current !== current) return;
       const clip = new Blob(chunks, { type: recorder.mimeType });
-      // A clip the voice gate never fired on is silence: transcribing it costs a
-      // request and invites an invented sentence, so it is dropped unqueued.
+      // A silent trailing chunk is normal after earlier chunks were transcribed
+      // while recording continued. Discard it without showing a false error.
       const silent = silenceAvailable && !heardVoice;
-      if (silent && current.ending && !retained.current.length) {
+      if (
+        silent && current.ending && !retained.current.length &&
+        !current.transcribedAny
+      ) {
         setError(t("speech.noSpeech"));
       }
       if (clip.size && !silent) {
@@ -319,7 +328,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
     await drain(current);
   }
 
-  async function toggle() {
+  async function toggle(input = options.input) {
     if (active.current) {
       if (active.current.recorder?.state === "recording") {
         finishRecording(active.current);
@@ -334,7 +343,7 @@ export function useRecordedSpeech(options: ChatSpeechOptions) {
       setError(t("speech.noRecording"));
       return;
     }
-    const current = newSession();
+    const current = newSession({ ...options.settings }, input);
     active.current = current;
     setStatus("starting");
     try {

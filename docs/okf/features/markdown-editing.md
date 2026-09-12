@@ -8,6 +8,8 @@ timestamp: 2026-07-15T00:00:00+09:00
 
 MarkdownのFile widgetでは、用途に応じて3つのモードを切り替えます。**Preview**はレンダリング表示、**WYSIWYG**は見た目に近い直接編集、**Raw**はMarkdownソースの編集です。大きな編集には外部エディタを開き、完了後にReloadできます。
 
+MarkdownのRaw表示とPlain Text表示では、右下のマイクボタンまたは`Ctrl+Space`でChatと同じ音声入力設定を使えます。録音中は音量と変換状態を表示し、設定した終了フレーズでも自動停止します。認識結果は現在のカーソル位置へ挿入され、選択範囲があれば置き換えます。`Ctrl+K/U`（行末・行頭まで削除）の編集コマンドにも対応します。`Ctrl+F`や`Ctrl+A`などはFile WidgetとOSの標準操作を維持します。
+
 # 対応する主な記法
 
 CommonMarkとGFMに加え、table、task list、syntax highlight、YAML frontmatter、`[[wiki link]]`、embed、callout、tag、コメント、ハイライト、数式、脚注、Mermaid diagramを扱えます。wiki linkから関連ファイルを新しいwidgetで開けます。

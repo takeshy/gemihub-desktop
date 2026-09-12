@@ -63,12 +63,20 @@ function AudioMeter({ stream }: { stream: MediaStream | null }) {
 }
 
 export function SpeechActivity(
-  { status, stream, browser, silenceHint, backgroundTranscribing = false }: {
+  {
+    status,
+    stream,
+    browser,
+    silenceHint,
+    backgroundTranscribing = false,
+    endPhrase = "",
+  }: {
     status: string;
     stream: MediaStream | null;
     browser: boolean;
     silenceHint?: string;
     backgroundTranscribing?: boolean;
+    endPhrase?: string;
   },
 ) {
   const { t } = useI18n();
@@ -119,6 +127,11 @@ export function SpeechActivity(
             : t("speech.retainHint")}
         </small>
         {listening && silenceHint && <small>{silenceHint}</small>}
+        {listening && endPhrase.trim() && (
+          <small>
+            {t("speech.endPhraseHint").replace("{phrase}", endPhrase.trim())}
+          </small>
+        )}
         {status === "transcribing" && elapsed >= 20 && (
           <small>
             {t("speech.waiting")}

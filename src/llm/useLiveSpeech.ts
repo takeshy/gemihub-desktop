@@ -137,7 +137,7 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
       }
     }
   }
-  async function toggle() {
+  async function toggle(input = options.input) {
     if (active.current) {
       if (ending.current) {
         await clear();
@@ -186,7 +186,7 @@ export function useLiveSpeech(options: ChatSpeechOptions) {
       const current: ActiveLiveSpeech = {
         id,
         stream,
-        base: options.input,
+        base: input,
         partial: "",
         items: new Map<string, string>(),
       };

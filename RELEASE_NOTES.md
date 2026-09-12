@@ -1,3 +1,25 @@
+# GemiHub Desktop v1.5.1
+
+## What's new
+
+- Slash commands can activate selected Agent Skills automatically while keeping
+  the skills already active in the Chat session.
+- Markdown Raw and plain-text File Widgets now support voice input at the caret
+  or selected range, using the same transcription service, voice commands,
+  replacement rules, level meter, and end phrase as Chat.
+- Raw and plain-text editors support `Ctrl+K` and `Ctrl+U` for deleting to the
+  end or beginning of the current line while preserving standard shortcuts such
+  as `Ctrl+F` and `Ctrl+A`.
+
+## Fixes
+
+- File Widget transcription no longer cancels itself when its status rerenders,
+  and stopping after an already-transcribed segment silently discards the empty
+  trailing recording instead of reporting that no speech was detected.
+- Opening a Markdown file through the operating system now restores the saved
+  Dashboard first and opens the requested file once, preventing the previously
+  displayed Markdown file from replacing it.
+
 # GemiHub Desktop v1.5.0
 
 ## What's new

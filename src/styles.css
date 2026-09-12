@@ -11164,6 +11164,10 @@ body.resizing-modal {
   padding: 14px;
 }
 
+.widget-raw-editor:focus {
+  caret-color: var(--accent);
+}
+
 .dashboard-widget-tools {
   flex: none;
   gap: 0;
@@ -13150,6 +13154,62 @@ body.resizing-modal {
 .file-widget-content > * {
   flex: 1;
   min-height: 0;
+}
+
+.file-widget-speech-control {
+  position: absolute;
+  z-index: 8;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  max-width: min(75%, 420px);
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow-sm);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.file-widget-speech-control .widget-icon-button {
+  flex: none;
+}
+
+.file-widget-speech-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.file-widget-speech-control .speech-activity {
+  min-width: 240px;
+}
+
+.file-widget-speech-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+}
+
+.file-widget-speech-error span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-widget-speech-error button {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
 .file-widget-search-content {

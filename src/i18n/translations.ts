@@ -102,6 +102,7 @@ export interface TranslationStrings {
   "speech.transcribing": string;
   "speech.recordingAndSending": string;
   "speech.sendingWhileRecording": string;
+  "speech.endPhraseHint": string;
   "speech.replacementSpoken": string;
   "speech.replacementResult": string;
   "speech.replacementSpokenPlaceholder": string;
@@ -566,6 +567,7 @@ const en: TranslationStrings = {
   "speech.recordingAndSending": "Recording · Sending for transcription",
   "speech.sendingWhileRecording":
     "Sending the previous segment; microphone remains active.",
+  "speech.endPhraseHint": "End automatically by saying: {phrase}",
   "speech.replacementSpoken": "Spoken phrase",
   "speech.replacementResult": "Replacement",
   "speech.replacementSpokenPlaceholder": "e.g. daily note",
@@ -1044,6 +1046,7 @@ const ja: TranslationStrings = {
   "speech.transcribing": "文字起こしを解析中",
   "speech.recordingAndSending": "録音中・変換リクエスト送信中",
   "speech.sendingWhileRecording": "直前の音声を送信中です（マイクは継続）。",
+  "speech.endPhraseHint": "終了するには「{phrase}」と話します。",
   "speech.replacementSpoken": "発話",
   "speech.replacementResult": "置換後",
   "speech.replacementSpokenPlaceholder": "例：日記書いて",

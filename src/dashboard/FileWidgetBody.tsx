@@ -1,4 +1,5 @@
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   memo,
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -16,7 +17,9 @@ import {
   ExternalLink,
   FileArchive,
   FilePlus2,
+  Mic,
   Search,
+  Square,
   SquarePen,
   X,
 } from "lucide-react";
@@ -78,6 +81,10 @@ import {
   MemoTimelinePanel,
 } from "./MemoTimelinePanel";
 import type { MarkdownMode } from "../App";
+import { useChatSpeech } from "../llm/useChatSpeech";
+import { resolveSpeechSettings } from "../llm/settings";
+import { speechEditorCommand } from "../llm/speechEditor";
+import { SpeechActivity } from "../llm/SpeechActivity";
 import type { DashboardWidget } from "./types";
 import { BaseFileView } from "./BaseFileView";
 import { KanbanFileView } from "./KanbanFileView";
@@ -493,6 +500,110 @@ export function FileWidgetBody({
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const pdfRef = useRef<PdfViewerHandle | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const speechSuffixRef = useRef("");
+  const [speechInput, setSpeechInput] = useState("");
+  const [speechDiagnostic, setSpeechDiagnostic] = useState("Ready");
+  const speechEditable = kind === "text" ||
+    (kind === "markdown" && markdownMode === "raw");
+  const speechContentConfig = (content: string) => ({
+    ...widget.config,
+    fileName,
+    content,
+    ...(kind === "markdown" ? { mode: markdownMode } : {}),
+  });
+  const speechSettings = useMemo(() => resolveSpeechSettings(chatSettings), [
+    chatSettings,
+  ]);
+  const speech = useChatSpeech({
+    input: speechInput,
+    settings: speechSettings,
+    scope: `file-widget:${widget.id}:${selectionPath}`,
+    // Clicking the control also activates its widget, but React applies that
+    // parent state update after this click. Do not discard the same click just
+    // because the widget was inactive immediately beforehand.
+    disabled: !speechEditable,
+    onInput: (prefix) => {
+      setSpeechDiagnostic("Ready");
+      setSpeechInput(prefix);
+      onConfigChange(speechContentConfig(prefix + speechSuffixRef.current));
+      requestAnimationFrame(() =>
+        textareaRef.current?.setSelectionRange(prefix.length, prefix.length)
+      );
+    },
+    onSend: () => undefined,
+  });
+  useEffect(() => {
+    if (speech.error) setSpeechDiagnostic(`Error: ${speech.error}`);
+    else if (speech.status === "recording") setSpeechDiagnostic("Recording");
+    else if (speech.status !== "idle") setSpeechDiagnostic("Transcribing…");
+    if (!speech.error && speech.status === "idle") return;
+    console.info("[FileWidgetSpeech] state", {
+      widgetId: widget.id,
+      status: speech.status,
+      error: speech.error || undefined,
+    });
+  }, [speech.error, speech.status, widget.id]);
+
+  const toggleNoteSpeech = () => {
+    setSpeechDiagnostic("Click received");
+    console.info("[FileWidgetSpeech] toggle", {
+      widgetId: widget.id,
+      listening: speech.listening,
+      busy: speech.busy,
+      editable: speechEditable,
+      hasTextarea: !!textareaRef.current,
+    });
+    if (speech.listening || speech.busy) {
+      setSpeechDiagnostic("Ready");
+      speech.toggle();
+      return;
+    }
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const hadEditorFocus = document.activeElement === textarea;
+    const start = hadEditorFocus
+      ? textarea.selectionStart
+      : documentContent.length;
+    const end = hadEditorFocus ? textarea.selectionEnd : documentContent.length;
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(start, end);
+    const prefix = documentContent.slice(0, start);
+    setSpeechInput(prefix);
+    speechSuffixRef.current = documentContent.slice(end);
+    setSpeechDiagnostic("Starting…");
+    console.info("[FileWidgetSpeech] starting", {
+      widgetId: widget.id,
+      path: selectionPath,
+      provider: speechSettings.provider,
+    });
+    speech.toggle(prefix);
+  };
+  const handleSpeechEditorKeyDown = (
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (
+      event.nativeEvent.isComposing || !event.ctrlKey || event.altKey ||
+      event.metaKey
+    ) return;
+    if (event.key === " ") {
+      event.preventDefault();
+      toggleNoteSpeech();
+      return;
+    }
+    const target = event.currentTarget;
+    const change = speechEditorCommand(
+      target.value,
+      target.selectionStart,
+      target.selectionEnd,
+      event.key,
+    );
+    if (!change) return;
+    event.preventDefault();
+    onConfigChange(speechContentConfig(change.text));
+    requestAnimationFrame(() =>
+      textareaRef.current?.setSelectionRange(change.start, change.end)
+    );
+  };
   const resolvedGroupsRef = useRef<ResolvedGroup[]>([]);
   const resolvedByIdRef = useRef(
     new Map<string, { range: Range; win: Window }>(),
@@ -1881,6 +1992,7 @@ export function FileWidgetBody({
             })}
           onContextMenu={(event) =>
             selectionActionsAvailable && handleTextareaContextMenu(event)}
+          onKeyDown={handleSpeechEditorKeyDown}
           spellCheck={false}
           aria-label={tr("doc.openText")}
         />
@@ -1986,6 +2098,7 @@ export function FileWidgetBody({
           })}
         onContextMenu={(event) =>
           selectionActionsAvailable && handleTextareaContextMenu(event)}
+        onKeyDown={handleSpeechEditorKeyDown}
         spellCheck={false}
         aria-label="Raw Markdown"
       />
@@ -2069,6 +2182,79 @@ export function FileWidgetBody({
           : undefined}
         onMouseLeave={() => setHover(null)}
       >
+        {speechEditable && (
+          <div className="file-widget-speech-control">
+            <div className="file-widget-speech-row">
+              <button
+                type="button"
+                className={`widget-icon-button ${
+                  speech.listening || speech.busy ? "active" : ""
+                }`}
+                onMouseDown={(event) => {
+                  // Keep the textarea caret visible and its selection intact.
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleNoteSpeech();
+                }}
+                title={speech.listening
+                  ? tr("speech.stopListening")
+                  : speech.busy
+                  ? tr("speech.cancelHint")
+                  : `${tr("speech.title")} (Ctrl+Space)`}
+                aria-label={speech.listening || speech.busy
+                  ? tr("speech.stopLabel")
+                  : tr("speech.title")}
+                aria-pressed={speech.listening || speech.busy}
+              >
+                {speech.listening || speech.busy
+                  ? <Square size={14} />
+                  : <Mic size={15} />}
+              </button>
+              <span>
+                {speech.listening
+                  ? tr("speech.listening")
+                  : speech.busy
+                  ? tr("speech.transcribing")
+                  : speechDiagnostic}
+              </span>
+            </div>
+            {(speech.listening || speech.busy) && (
+              <SpeechActivity
+                status={speech.status}
+                stream={speech.meterStream}
+                browser={speechSettings.provider === "browser"}
+                silenceHint={speech.silenceHint}
+                backgroundTranscribing={speech.backgroundTranscribing}
+                endPhrase={speechSettings.sendPhrase}
+              />
+            )}
+            {speech.error && (
+              <div className="file-widget-speech-error">
+                <span title={speech.error}>{speech.error}</span>
+                {speech.retainedCount > 0 && (
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => void speech.retryRecording()}
+                  >
+                    {tr("speech.retry")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={speech.dismiss}
+                  aria-label={tr("common.close")}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {searchOpen && (
           <div className="file-widget-search" role="search">
             <Search size={14} />

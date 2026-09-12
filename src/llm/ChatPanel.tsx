@@ -3071,6 +3071,7 @@ export function ChatPanel({
             browser={settings.speech.provider === "browser"}
             silenceHint={speech.silenceHint}
             backgroundTranscribing={speech.backgroundTranscribing}
+            endPhrase={speechSettings.sendPhrase}
           />
         )}
         <div className="chat-input-actions">
