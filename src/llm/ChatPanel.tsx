@@ -134,7 +134,7 @@ import { type GroundingSource, groundingSourceLabel } from "./grounding";
 import type { PluginSlashCommand } from "../plugins/types";
 import { computeWorkflowLineDiff } from "../workflow/diff";
 import { proposedPendingFileContent } from "./pendingFileAction";
-import { resolveSlashCommand } from "./slashCommands";
+import { resolveSlashCommand, skillsForSlashCommand } from "./slashCommands";
 import { extractChatHtmlDocument } from "./chatHtmlPreview";
 import { sanitizePreviewDocument } from "../lib/sanitizeHtml";
 import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory";
@@ -1672,13 +1672,24 @@ export function ChatPanel({
         ),
         invokedSkill,
       ]
+      : invokedCommand
+      ? skillsForSlashCommand(
+        activeSkills,
+        skills,
+        invokedCommand.enabledSkills,
+      )
       : activeSkills;
     let skillsAtSend = skillMetadataAtSend;
     skillWorkflowsRef.current = collectSkillWorkflows(skillMetadataAtSend);
-    if (invokedSkill) {
+    if (invokedSkill || invokedCommand?.enabledSkills?.length) {
       setActiveSkillPaths((
         paths,
-      ) => [...new Set([...paths, invokedSkill.skillFilePath])]);
+      ) => [
+        ...new Set([
+          ...paths,
+          ...skillMetadataAtSend.map((skill) => skill.skillFilePath),
+        ]),
+      ]);
     }
     const fileAtSend = attachedActiveFile(activeFile?.path, attachedFiles);
     let promptText = invokedSkill

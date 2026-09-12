@@ -106,6 +106,7 @@ export interface SlashCommand {
   promptTemplate: string;
   description: string;
   enabledMcpServers?: string[] | null;
+  enabledSkills?: string[];
 }
 
 export interface DiscordIntegrationSettings {
@@ -942,6 +943,11 @@ export function loadChatSettings(
       slashCommands: Array.isArray(parsed.slashCommands)
         ? parsed.slashCommands.map((command) => ({
           ...command,
+          enabledSkills: Array.isArray(command.enabledSkills)
+            ? command.enabledSkills.filter((path): path is string =>
+              typeof path === "string"
+            )
+            : [],
           promptTemplate: command.promptTemplate.replaceAll(
             "{selection}",
             "{input}",

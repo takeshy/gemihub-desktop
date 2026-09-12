@@ -159,6 +159,7 @@ import {
   collectSkillWorkflows,
   discoverWorkspaceSkills,
   loadActiveSkillContents,
+  type WorkspaceSkill,
 } from "./skills/skills";
 import { AgentSkillsSettings } from "./skills/AgentSkillsSettings";
 import { APP_NAME } from "./appIdentity";
@@ -1099,6 +1100,7 @@ export default function App() {
     | "plugins"
   >("general");
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
+  const [commandSkills, setCommandSkills] = useState<WorkspaceSkill[]>([]);
   useEffect(() => { const update = () => setChatSettings(loadChatSettings()); window.addEventListener("mcp-approval-settings-changed", update); return () => window.removeEventListener("mcp-approval-settings-changed", update); }, []);
   const [historyEncryption, setHistoryEncryption] = useState(
     historyEncryptionPreferences,
@@ -1569,6 +1571,19 @@ export default function App() {
       }));
     }).finally(() => setDiscordBusy(false));
   }, [aiEnabled, chatSettings]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "commands") return;
+    let cancelled = false;
+    void discoverWorkspaceSkills().then((skills) => {
+      if (!cancelled) setCommandSkills(skills);
+    }).catch(() => {
+      if (!cancelled) setCommandSkills([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, settingsSection]);
 
   useEffect(() => {
     if (
@@ -4099,6 +4114,50 @@ export default function App() {
                                 }}
                               />
                             </label>
+                            {commandSkills.length > 0 && (
+                              <fieldset className="slash-command-mcp">
+                                <legend>Skills to activate</legend>
+                                {commandSkills.map((skill) => (
+                                  <label key={skill.skillFilePath}>
+                                    <input
+                                      type="checkbox"
+                                      checked={command.enabledSkills?.includes(
+                                        skill.skillFilePath,
+                                      ) || false}
+                                      onChange={(event) =>
+                                        setChatSettings((current) => ({
+                                          ...current,
+                                          slashCommands: current.slashCommands
+                                            .map((item) =>
+                                              item.id !== command.id
+                                                ? item
+                                                : {
+                                                  ...item,
+                                                  enabledSkills: event.target
+                                                      .checked
+                                                    ? [
+                                                      ...new Set([
+                                                        ...(item.enabledSkills ||
+                                                          []),
+                                                        skill.skillFilePath,
+                                                      ]),
+                                                    ]
+                                                    : (item.enabledSkills || [])
+                                                      .filter((path) =>
+                                                        path !==
+                                                          skill.skillFilePath
+                                                      ),
+                                                }
+                                            ),
+                                        }))}
+                                    />
+                                    {skill.name}{skill.builtin
+                                      ? " · built-in"
+                                      : ""}
+                                  </label>
+                                ))}
+                              </fieldset>
+                            )}
                             {chatSettings.mcpServers.length > 0 && (
                               <fieldset className="slash-command-mcp">
                                 <legend>MCP servers for this command</legend>
@@ -4197,6 +4256,7 @@ export default function App() {
                               description: "",
                               promptTemplate: "{input}",
                               enabledMcpServers: null,
+                              enabledSkills: [],
                             }],
                           }))}
                       >

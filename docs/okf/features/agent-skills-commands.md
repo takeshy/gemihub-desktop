@@ -25,7 +25,7 @@ built-in skillsはmarkdown、json-canvas、base、dashboardの4種類のみで�
 
 # 名前衝突とMCP scope
 
-Slash commandとSkillのフォルダ名が一致する場合、送信時はSkillが優先して解決されます。同名のSlash commandを作っても呼び出されないため、Skillとは異なる名前を付けてください。またSlash commandは`enabledMcpServers`を指定でき、指定した場合はそのコマンド実行中だけAIが使えるMCP serverを列挙した名前に絞れます（未指定なら通常のMCP設定に従います）。
+Slash commandとSkillのフォルダ名が一致する場合、送信時はSkillが優先して解決されます。同名のSlash commandを作っても呼び出されないため、Skillとは異なる名前を付けてください。Slash commandの設定では実行時に自動で有効化するSkillを複数選択でき、現在のactive skillへ追加されます。またSlash commandは`enabledMcpServers`を指定でき、指定した場合はそのコマンド実行中だけAIが使えるMCP serverを列挙した名前に絞れます（未指定なら通常のMCP設定に従います）。
 
 # 関連機能
 
