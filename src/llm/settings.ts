@@ -326,6 +326,9 @@ export interface ChatSettings {
   webSearchEnabled: boolean;
   selectedRagSetting: string | null;
   ragSettings: Record<string, RAGSetting>;
+  jevRagFilterEnabled: boolean;
+  jevApiKey: string;
+  jevUseOpenRouter: boolean;
   okfRoot: string;
   maxSavedChatHistories: number;
   manualChatSaveFolder: string;
@@ -476,6 +479,9 @@ export const defaultChatSettings: ChatSettings = {
   webSearchEnabled: false,
   selectedRagSetting: null,
   ragSettings: {},
+  jevRagFilterEnabled: false,
+  jevApiKey: "",
+  jevUseOpenRouter: false,
   okfRoot: "Knowledge",
   maxSavedChatHistories: 100,
   manualChatSaveFolder: "",
@@ -517,7 +523,28 @@ export const defaultRAGSetting: RAGSetting = {
   vertexLocation: "us",
   vertexOAuthClientId: "",
   vertexOAuthClientSecret: "",
+  jevRagFilterEnabled: false,
+  jevApiKey: "",
+  jevUseOpenRouter: false,
 };
+
+export function getOpenRouterAPIKey(settings: ChatSettings): string {
+  const isOpenRouter = (endpoint: string) => {
+    try {
+      return new URL(endpoint).hostname.toLowerCase() === "openrouter.ai";
+    } catch {
+      return false;
+    }
+  };
+  const profile = settings.modelProfiles.find((candidate) =>
+    candidate.enabled && isOpenRouter(candidate.endpoint) &&
+    candidate.apiKey.trim()
+  );
+  if (profile) return profile.apiKey.trim();
+  if (isOpenRouter(settings.endpoint)) return settings.apiKey.trim();
+  const legacy = settings.providerProfiles.openai;
+  return legacy && isOpenRouter(legacy.endpoint) ? legacy.apiKey.trim() : "";
+}
 
 export function providerDefaults(
   provider: ChatProvider,
@@ -777,12 +804,20 @@ export function resolveRAGSetting(
   settings: ChatSettings,
   rag: RAGSetting,
 ): RAGSetting {
+  const openRouterKey = getOpenRouterAPIKey(settings);
+  const useOpenRouter = settings.jevUseOpenRouter && !!openRouterKey;
+  const withJev = (resolved: RAGSetting): RAGSetting => ({
+    ...resolved,
+    jevRagFilterEnabled: settings.jevRagFilterEnabled,
+    jevApiKey: useOpenRouter ? openRouterKey : settings.jevApiKey,
+    jevUseOpenRouter: useOpenRouter,
+  });
   if (rag.embeddingSource === "custom") {
-    return rag;
+    return withJev(rag);
   }
   const provider = rag.embeddingProvider;
   const resolved = switchChatProvider(settings, provider);
-  return {
+  return withJev({
     ...rag,
     embeddingBaseUrl: provider === "openai" ? resolved.endpoint : "",
     embeddingApiKey: provider === "vertex" ? "" : resolved.apiKey,
@@ -794,7 +829,7 @@ export function resolveRAGSetting(
     vertexOAuthClientSecret: provider === "vertex"
       ? resolved.vertexOAuthClientSecret
       : "",
-  };
+  });
 }
 
 function profileConfigured(

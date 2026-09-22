@@ -2,6 +2,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   memo,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -17,6 +19,7 @@ import {
   ExternalLink,
   FileArchive,
   FilePlus2,
+  ListOrdered,
   Mic,
   Search,
   Square,
@@ -113,6 +116,109 @@ import { resolvedFileWidgetContent } from "./fileWidgetHydration";
 const FLASH_MS = 1000;
 const TOAST_MS = 2500;
 const VIEW_POSITION_SAVE_DELAY_MS = 350;
+
+function SearchableRawEditor({
+  value,
+  query,
+  currentMatch,
+  onChange,
+  onContextMenu,
+  onKeyDown,
+  textareaRef,
+  ariaLabel,
+}: {
+  value: string;
+  query: string;
+  currentMatch: number;
+  onChange: (value: string) => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLTextAreaElement>) => void;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  ariaLabel: string;
+}) {
+  const [showLineNumbers, setShowLineNumbers] = useState(() =>
+    localStorage.getItem("gemihub-editor-line-numbers") !== "false"
+  );
+  const mirrorRef = useRef<HTMLPreElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
+  const needle = normalizeAnchorText(query);
+  const starts = useMemo(
+    () => findTextMatchStarts(value, needle),
+    [needle, value],
+  );
+  const highlighted = useMemo(() => {
+    if (!needle || !starts.length) return value;
+    const parts: ReactNode[] = [];
+    let offset = 0;
+    starts.forEach((start, index) => {
+      parts.push(value.slice(offset, start));
+      parts.push(
+        <mark
+          key={`${start}-${index}`}
+          className={index === currentMatch ? "current" : undefined}
+        >
+          {value.slice(start, start + needle.length)}
+        </mark>,
+      );
+      offset = start + needle.length;
+    });
+    parts.push(value.slice(offset));
+    return parts;
+  }, [currentMatch, needle, starts, value]);
+  const syncScroll = useCallback((target: HTMLTextAreaElement) => {
+    if (mirrorRef.current) {
+      mirrorRef.current.scrollTop = target.scrollTop;
+      mirrorRef.current.scrollLeft = target.scrollLeft;
+    }
+    if (gutterRef.current) gutterRef.current.scrollTop = target.scrollTop;
+  }, []);
+
+  return (
+    <div
+      className={`searchable-raw-editor ${showLineNumbers ? "with-lines" : ""}`}
+    >
+      <button
+        type="button"
+        className="raw-line-number-toggle"
+        onClick={() =>
+          setShowLineNumbers((current) => {
+            localStorage.setItem(
+              "gemihub-editor-line-numbers",
+              String(!current),
+            );
+            return !current;
+          })}
+        title={showLineNumbers ? "Hide line numbers" : "Show line numbers"}
+        aria-label={showLineNumbers ? "Hide line numbers" : "Show line numbers"}
+      >
+        <ListOrdered size={14} />
+      </button>
+      {showLineNumbers && (
+        <div ref={gutterRef} className="raw-line-numbers" aria-hidden="true">
+          {Array.from(
+            { length: value.split("\n").length },
+            (_, index) => <span key={index}>{index + 1}</span>,
+          )}
+        </div>
+      )}
+      <pre ref={mirrorRef} className="raw-search-mirror" aria-hidden="true">
+        {highlighted}{"\n"}
+      </pre>
+      <textarea
+        ref={textareaRef}
+        className="raw-editor widget-raw-editor"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onContextMenu={onContextMenu}
+        onKeyDown={onKeyDown}
+        onScroll={(event) => syncScroll(event.currentTarget)}
+        spellCheck={false}
+        wrap="off"
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
+}
 
 function scrollTargetPath(root: HTMLElement, target: HTMLElement): number[] {
   const path: number[] = [];
@@ -1812,6 +1918,20 @@ export function FileWidgetBody({
     openSearch();
   }, [openSearch, searchRequest]);
 
+  // A mode switch replaces the searchable DOM. Rebuild ranges after React has
+  // mounted the preview or Slate editor instead of leaving stale highlights
+  // from the previous mode behind.
+  useEffect(() => {
+    if (!searchOpen || !searchQuery || kind !== "markdown") return;
+    const frame = requestAnimationFrame(() => {
+      void runSearch(searchQuery, searchIndex);
+    });
+    return () => cancelAnimationFrame(frame);
+    // searchIndex is deliberately omitted: navigation already calls
+    // showSearchResult and must not cause a second complete search.
+    // deno-lint-ignore react-hooks/exhaustive-deps
+  }, [kind, markdownMode, searchOpen]);
+
   const closeSearch = useCallback(() => {
     searchRunRef.current += 1;
     clearDocumentSearch();
@@ -1980,21 +2100,21 @@ export function FileWidgetBody({
 
     if (kind === "text") {
       return (
-        <textarea
-          ref={textareaRef}
-          className="raw-editor widget-raw-editor"
+        <SearchableRawEditor
+          textareaRef={textareaRef}
           value={documentContent}
-          onChange={(event) =>
+          query={searchOpen ? searchQuery : ""}
+          currentMatch={searchIndex}
+          onChange={(content) =>
             onConfigChange({
               ...widget.config,
               fileName,
-              content: event.target.value,
+              content,
             })}
           onContextMenu={(event) =>
             selectionActionsAvailable && handleTextareaContextMenu(event)}
           onKeyDown={handleSpeechEditorKeyDown}
-          spellCheck={false}
-          aria-label={tr("doc.openText")}
+          ariaLabel={tr("doc.openText")}
         />
       );
     }
@@ -2085,22 +2205,22 @@ export function FileWidgetBody({
       );
     }
     return (
-      <textarea
-        ref={textareaRef}
-        className="raw-editor widget-raw-editor"
+      <SearchableRawEditor
+        textareaRef={textareaRef}
         value={documentContent}
-        onChange={(event) =>
+        query={searchOpen ? searchQuery : ""}
+        currentMatch={searchIndex}
+        onChange={(content) =>
           onConfigChange({
             ...widget.config,
             fileName,
-            content: event.target.value,
+            content,
             mode: markdownMode,
           })}
         onContextMenu={(event) =>
           selectionActionsAvailable && handleTextareaContextMenu(event)}
         onKeyDown={handleSpeechEditorKeyDown}
-        spellCheck={false}
-        aria-label="Raw Markdown"
+        ariaLabel="Raw Markdown"
       />
     );
   };

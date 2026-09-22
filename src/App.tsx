@@ -143,6 +143,7 @@ import {
   type CLIType,
   configuredChatProviders,
   defaultRAGSetting,
+  getOpenRouterAPIKey,
   loadChatSettings,
   resolveRAGSetting,
   saveChatSettings,
@@ -1379,6 +1380,7 @@ export default function App() {
   const selectedRAG = chatSettings.selectedRagSetting
     ? chatSettings.ragSettings[chatSettings.selectedRagSetting]
     : undefined;
+  const openRouterAPIKey = getOpenRouterAPIKey(chatSettings);
   useEffect(() =>
     onRAGSyncProgress((progress) => {
       if (progress.name !== chatSettings.selectedRagSetting) return;
@@ -5080,6 +5082,75 @@ export default function App() {
                             similarity search.
                           </p>
                         </div>
+                      </section>
+                      <section className="jev-settings-card">
+                        <header>
+                          <div>
+                            <strong>Jev</strong>
+                            <small>
+                              Filter vector matches by whether they answer or
+                              materially support the query. This applies to RAG
+                              Search, Chat, Workflows, and Discord.
+                            </small>
+                          </div>
+                        </header>
+                        <label className="settings-check">
+                          <input
+                            type="checkbox"
+                            checked={chatSettings.jevRagFilterEnabled}
+                            onChange={(event) =>
+                              setChatSettings((current) => ({
+                                ...current,
+                                jevRagFilterEnabled: event.target.checked,
+                              }))}
+                          />
+                          Keep only matching RAG results
+                        </label>
+                        {chatSettings.jevRagFilterEnabled && (
+                          <>
+                            {!!openRouterAPIKey && (
+                              <label className="settings-check jev-child-setting">
+                                <input
+                                  type="checkbox"
+                                  checked={chatSettings.jevUseOpenRouter}
+                                  onChange={(event) =>
+                                    setChatSettings((current) => ({
+                                      ...current,
+                                      jevUseOpenRouter: event.target.checked,
+                                    }))}
+                                />
+                                Use the configured OpenRouter key
+                              </label>
+                            )}
+                            {(!chatSettings.jevUseOpenRouter ||
+                              !openRouterAPIKey) && (
+                              <label className="settings-field jev-child-setting">
+                                <span>Jev API key</span>
+                                <input
+                                  type="password"
+                                  value={chatSettings.jevApiKey}
+                                  placeholder="jv_live_…"
+                                  onChange={(event) =>
+                                    setChatSettings((current) => ({
+                                      ...current,
+                                      jevApiKey: event.target.value.trim(),
+                                    }))}
+                                />
+                                <small className="settings-hint">
+                                  API key from jevtypesafeai.com. Not required
+                                  when using OpenRouter.
+                                </small>
+                              </label>
+                            )}
+                            {!openRouterAPIKey &&
+                              !chatSettings.jevApiKey.trim() && (
+                              <div className="settings-status">
+                                Enter a Jev API key, or configure an OpenRouter
+                                API provider first.
+                              </div>
+                            )}
+                          </>
+                        )}
                       </section>
                       <div className="rag-setting-selector">
                         <select

@@ -5,6 +5,7 @@ import {
   defaultChatSettings,
   defaultRAGSetting,
   defaultSpeechSettings,
+  getOpenRouterAPIKey,
   loadChatSettings,
   loadSpeechSettings,
   localLLMFrameworks,
@@ -350,6 +351,29 @@ Deno.test("RAG embeddings use AI provider credentials or isolated custom credent
     url: "http://localhost:11434/v1",
     key: "custom-key",
   });
+});
+
+Deno.test("Jev RAG filtering resolves a configured OpenRouter key", () => {
+  const profile = {
+    ...newModelProfile("openai"),
+    enabled: true,
+    endpoint: "https://openrouter.ai/api/v1",
+    apiKey: " router-key ",
+  };
+  const settings = {
+    ...defaultChatSettings,
+    modelProfiles: [profile],
+    jevRagFilterEnabled: true,
+    jevApiKey: "direct-key",
+    jevUseOpenRouter: true,
+  };
+  assertEquals(getOpenRouterAPIKey(settings), "router-key");
+  const resolved = resolveRAGSetting(settings, defaultRAGSetting);
+  assertEquals({
+    enabled: resolved.jevRagFilterEnabled,
+    key: resolved.jevApiKey,
+    openRouter: resolved.jevUseOpenRouter,
+  }, { enabled: true, key: "router-key", openRouter: true });
 });
 
 Deno.test("speech service presets set OpenAI defaults and preserve legacy whisper settings", () => {

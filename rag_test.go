@@ -7,9 +7,54 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestFilterRAGResultsWithJev(t *testing.T) {
+	results := []RAGSearchResult{
+		{FilePath: "travel.md", Text: "The train arrives at 09:10.", Score: 0.8},
+		{FilePath: "recipe.md", Text: "Bake bread for 30 minutes.", Score: 0.7},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer key" {
+			t.Fatalf("unexpected authorization: %q", got)
+		}
+		var body struct {
+			Model     string                     `json:"model"`
+			Questions map[string]json.RawMessage `json:"questions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Model != openRouterJevModel || len(body.Questions) != 2 {
+			t.Fatalf("unexpected request: %#v", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"answers":{"result_0":{"type":"choice","choice":"keep"},"result_1":{"type":"choice","choice":"exclude"}}}`))
+	}))
+	defer server.Close()
+
+	filtered, err := filterRAGResultsWithJev("train arrival", results, "key", true, server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered) != 1 || filtered[0].FilePath != "travel.md" {
+		t.Fatalf("unexpected filtered results: %#v", filtered)
+	}
+}
+
+func TestFilterRAGResultsWithJevRejectsMissingDecisions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"answers":{"result_0":{"choice":"keep"}}}`))
+	}))
+	defer server.Close()
+	_, err := filterRAGResultsWithJev("query", []RAGSearchResult{{Text: "one"}, {Text: "two"}}, "key", false, server.URL)
+	if err == nil || !strings.Contains(err.Error(), "omitted result_1") {
+		t.Fatalf("expected omitted decision error, got %v", err)
+	}
+}
 
 type ragRoundTripper func(*http.Request) (*http.Response, error)
 

@@ -101,6 +101,9 @@ export interface RAGSetting {
   vertexLocation: string;
   vertexOAuthClientId: string;
   vertexOAuthClientSecret: string;
+  jevRagFilterEnabled: boolean;
+  jevApiKey: string;
+  jevUseOpenRouter: boolean;
 }
 
 export interface VertexOAuthClient {

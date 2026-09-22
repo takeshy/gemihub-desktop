@@ -27,6 +27,10 @@ const (
 	geminiEmbeddingBaseURL      = "https://generativelanguage.googleapis.com/v1beta/models"
 	embeddingBatchSize          = 32
 	maxChangedFilesPerSync      = 50
+	openRouterDecisionsURL      = "https://openrouter.ai/api/alpha/decisions"
+	typeSafeDecisionsURL        = "https://jevtypesafeai.com/api/v1/decide"
+	openRouterJevModel          = "~typesafe/jev-latest"
+	typeSafeJevModel            = "jev-latest"
 )
 
 var ragHTTPClient = &http.Client{Timeout: 3 * time.Minute}
@@ -51,6 +55,9 @@ type RAGSetting struct {
 	VertexProjectID      string   `json:"vertexProjectId"`
 	VertexLocation       string   `json:"vertexLocation"`
 	VertexAccessToken    string   `json:"-"`
+	JevRAGFilterEnabled  bool     `json:"jevRagFilterEnabled"`
+	JevAPIKey            string   `json:"jevApiKey"`
+	JevUseOpenRouter     bool     `json:"jevUseOpenRouter"`
 }
 
 type RAGSyncRequest struct {
@@ -467,7 +474,96 @@ func (a *App) SearchRAG(request RAGSearchRequest) ([]RAGSearchResult, error) {
 	if len(results) > setting.TopK {
 		results = results[:setting.TopK]
 	}
+	if setting.JevRAGFilterEnabled {
+		return filterRAGResultsWithJev(request.Query, results, setting.JevAPIKey, setting.JevUseOpenRouter, "")
+	}
 	return results, nil
+}
+
+// filterRAGResultsWithJev applies a fail-closed relevance decision after
+// vector retrieval. The optional endpoint is used only by tests; production
+// always selects one of the two fixed Decisions API endpoints below.
+func filterRAGResultsWithJev(query string, results []RAGSearchResult, apiKey string, useOpenRouter bool, endpoint string) ([]RAGSearchResult, error) {
+	if len(results) == 0 {
+		return []RAGSearchResult{}, nil
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	provider := "Jev"
+	model := typeSafeJevModel
+	if useOpenRouter {
+		provider = "OpenRouter"
+		model = openRouterJevModel
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("%s API key is required for Jev RAG filtering", provider)
+	}
+	if endpoint == "" {
+		if useOpenRouter {
+			endpoint = openRouterDecisionsURL
+		} else {
+			endpoint = typeSafeDecisionsURL
+		}
+	}
+	type jevQuestion struct {
+		Type         string            `json:"type"`
+		Instructions string            `json:"instructions"`
+		Criteria     map[string]string `json:"criteria"`
+	}
+	questions := make(map[string]jevQuestion, len(results))
+	for index, result := range results {
+		questions[fmt.Sprintf("result_%d", index)] = jevQuestion{
+			Type: "choice",
+			Instructions: strings.Join([]string{
+				"検索クエリとRAG検索結果を照合してください。",
+				"検索結果がクエリへの回答または回答を支える情報として実質的に一致するか判定します。",
+				"単語の重複だけでは一致とせず、クエリと無関係な結果は除外してください。",
+				fmt.Sprintf("検索結果: %s\n%s", result.FilePath, result.Text),
+			}, "\n"),
+			Criteria: map[string]string{
+				"keep":    "クエリに一致し、回答または回答の根拠として有用",
+				"exclude": "クエリに一致しない、または回答の根拠として有用でない",
+			},
+		}
+	}
+	body, err := json.Marshal(map[string]any{
+		"model": model, "state": "検索クエリ: " + query, "questions": questions,
+	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	response, err := ragHTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Jev RAG filtering failed: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, fmt.Errorf("Jev RAG filtering failed: HTTP %d", response.StatusCode)
+	}
+	var payload struct {
+		Answers map[string]struct {
+			Choice string `json:"choice"`
+		} `json:"answers"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&payload); err != nil || payload.Answers == nil {
+		return nil, fmt.Errorf("Jev RAG filtering returned an invalid response")
+	}
+	filtered := make([]RAGSearchResult, 0, len(results))
+	for index, result := range results {
+		choice := payload.Answers[fmt.Sprintf("result_%d", index)].Choice
+		if choice != "keep" && choice != "exclude" {
+			return nil, fmt.Errorf("Jev RAG filtering omitted result_%d", index)
+		}
+		if choice == "keep" {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered, nil
 }
 
 func (a *App) GetAdjacentRAGChunks(request RAGAdjacentRequest) ([]RAGSearchResult, error) {

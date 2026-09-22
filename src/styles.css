@@ -11168,6 +11168,118 @@ body.resizing-modal {
   caret-color: var(--accent);
 }
 
+.searchable-raw-editor {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.searchable-raw-editor.with-lines {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.searchable-raw-editor .widget-raw-editor,
+.raw-search-mirror {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  padding: 14px;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 4;
+  font: 0.95rem/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+}
+
+.searchable-raw-editor.with-lines .widget-raw-editor,
+.searchable-raw-editor.with-lines .raw-search-mirror {
+  grid-column: 2;
+}
+
+.raw-search-mirror {
+  z-index: 0;
+  pointer-events: none;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.raw-search-mirror mark {
+  border-radius: 2px;
+  background: rgb(250 204 21 / 0.48);
+  color: inherit;
+}
+
+.raw-search-mirror mark.current {
+  outline: 1px solid rgb(194 65 12 / 0.9);
+  background: rgb(249 115 22 / 0.76);
+  color: #111827;
+}
+
+.searchable-raw-editor .widget-raw-editor {
+  position: relative;
+  z-index: 1;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  -webkit-text-fill-color: transparent;
+}
+
+.searchable-raw-editor .widget-raw-editor::selection {
+  background: rgb(59 130 246 / 0.32);
+}
+
+.raw-line-numbers {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  padding: 14px 8px 14px 0;
+  background: var(--surface-raised);
+  color: var(--muted);
+  text-align: right;
+  font: 0.78rem/2.01 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+  user-select: none;
+}
+
+.raw-line-numbers span {
+  display: block;
+}
+
+.raw-line-number-toggle {
+  position: absolute;
+  z-index: 3;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+.raw-line-number-toggle:hover,
+.raw-line-number-toggle:focus-visible {
+  opacity: 1;
+}
+
 .dashboard-widget-tools {
   flex: none;
   gap: 0;
@@ -11530,6 +11642,26 @@ body.resizing-modal {
 .settings-info-card p {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.jev-settings-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.jev-settings-card > header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.jev-child-setting {
+  margin-left: 22px;
 }
 
 .encryption-settings {
