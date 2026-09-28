@@ -32,12 +32,12 @@ Supported nodes:
 - variable: required name; optional value. Omit value only for input supplied by a parent workflow, skill, hotkey, or other caller. It does not show an input dialog and becomes empty when a standalone run has no caller value.
 - set: required name and value (supports simple arithmetic; _clipboard copies the result)
 - if / while: condition using ==, !=, <, >, <=, >=, contains; required trueNext and optional falseNext
-- command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted uses the Chat-selected RAG), vaultTools (all/noSearch/readOnly/none), confirm (true by default; controls MCP approval and reviews AI file edits in a diff before they are written, and headless runs require confirm: false), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo. When using saveImageTo, model must explicitly name a configured image-generation model (for example gemini-3.1-flash-image-preview); a text model cannot create image data.
+- command: prompt, optional model, ragSetting (__websearch__/__none__/configured name; omitted means no retrieval, independent of the Chat selection), vaultTools (all/noSearch/readOnly/none), confirm (true by default; controls MCP approval and reviews AI file edits in a diff before they are written, and headless runs require confirm: false), mcpServers (comma-separated configured names), enableThinking (true by default), attachments, saveTo, saveImageTo. When using saveImageTo, model must explicitly name a configured image-generation model (for example gemini-3.1-flash-image-preview); a text model cannot create image data.
 - gemihub-command: command (encrypt, duplicate, convert-to-html, rename), path, optional text, metadata JSON, saveTo. PDF conversion is unavailable; publish/unpublish require Web.
 - http: reserved for APIs, webhooks, explicit file downloads/binary transfer, or requests that must inspect status/headers; url; method GET/POST/PUT/PATCH/DELETE; contentType json/form-data/text/binary; responseType auto/text/binary; headers JSON; body; saveTo; saveStatus; throwOnError. Binary input/output uses FileExplorerData. Do not use http to read an ordinary public webpage for summarization, translation, extraction, or infographic generation; use command with __websearch__ instead.
 - json: source (bare variable name), saveTo
 - note: path, content, mode (overwrite/append/create), confirm (true by default), history
-- note-read: path, saveTo
+- note-read: path, saveTo. For a .pdf path: optional startPage and endPage (1-based, inclusive; endPage past the last page is clamped), format text (default; "[Page N]"-labelled text layer, empty for scanned pages) or pdf (FileExplorerData excerpt for command attachments), savePageCountTo, and saveEndPageTo (the last page actually read after clamping). With only savePageCountTo (no saveTo) it just counts pages, which is the cheap way to size a page loop before it starts. Use it to process a long PDF a few pages at a time in a while loop.
 - note-search: query, searchContent, limit, saveTo
 - note-list: folder, recursive, tags, tagMatch (any/all), createdWithin, modifiedWithin, sortBy, sortOrder, limit, saveTo
 - folder-list: folder, saveTo
@@ -216,7 +216,8 @@ const workflowNodeDocumentation: Record<WorkflowNodeType, string> = {
     "- json: source is the bare variable name containing JSON; saveTo is required.",
   note:
     "- note: path and content; optional mode overwrite/append/create, confirm (true by default), history.",
-  "note-read": "- note-read: path and saveTo are required.",
+  "note-read":
+    "- note-read: path and saveTo are required. For a .pdf path: optional startPage, endPage (clamped to the last page), format text/pdf (pdf returns FileExplorerData for attachments), savePageCountTo, saveEndPageTo (last page read after clamping). Only savePageCountTo counts pages without reading.",
   "note-search":
     "- note-search: query and saveTo; optional searchContent and limit.",
   "note-list":

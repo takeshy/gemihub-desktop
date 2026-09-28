@@ -10,6 +10,8 @@ import {
   listWorkspaceTree,
   onChatStream,
   onChatToolRequest,
+  countWorkflowPDFPages,
+  readWorkflowPDFPages,
   readWorkspaceFile,
   resolveChatTool,
   searchRAG,
@@ -401,6 +403,69 @@ function save(
   );
 }
 
+function pageProperty(
+  node: WorkflowNode,
+  key: string,
+  variables: WorkflowVariables,
+): number {
+  const value = property(node, key, variables).trim();
+  if (!value) return 0;
+  const page = Number(value);
+  if (!Number.isInteger(page) || page < 1) {
+    throw new Error(`${node.type} ${key} must be a positive integer: ${value}`);
+  }
+  return page;
+}
+
+// note-read on a PDF returns a page range as its text layer ("[Page N]" labelled)
+// or, with format: pdf, as FileExplorerData for command attachments.
+async function readWorkflowPDF(
+  node: WorkflowNode,
+  path: string,
+  variables: WorkflowVariables,
+): Promise<{ output: unknown }> {
+  requireSaveTarget(node, "saveTo", "savePageCountTo", "saveEndPageTo");
+  // Only the page count was asked for: count pages instead of extracting text.
+  if (!node.properties.saveTo && !node.properties.saveEndPageTo) {
+    const totalPages = await countWorkflowPDFPages(path);
+    save(variables, node.properties.savePageCountTo, totalPages);
+    return { output: { path, totalPages } };
+  }
+  const format = property(node, "format", variables) || "text";
+  if (format !== "text" && format !== "pdf") {
+    throw new Error(`note-read format must be text or pdf: ${format}`);
+  }
+  const result = await readWorkflowPDFPages(
+    path,
+    pageProperty(node, "startPage", variables),
+    pageProperty(node, "endPage", variables),
+    format,
+  );
+  const range = {
+    path,
+    totalPages: result.totalPages,
+    startPage: result.startPage,
+    endPage: result.endPage,
+  };
+  save(variables, node.properties.savePageCountTo, result.totalPages);
+  save(variables, node.properties.saveEndPageTo, result.endPage);
+  if (format === "text") {
+    save(variables, node.properties.saveTo, result.text ?? "");
+    return { output: { ...range, text: result.text ?? "" } };
+  }
+  save(variables, node.properties.saveTo, {
+    path,
+    basename: result.fileName,
+    name: result.fileName.replace(/\.[^.]+$/, ""),
+    extension: "pdf",
+    mimeType: "application/pdf",
+    contentType: "binary",
+    data: result.data ?? "",
+  });
+  // The excerpt stays out of the run log, which would otherwise hold every chunk.
+  return { output: { ...range, fileName: result.fileName } };
+}
+
 function requireSaveTarget(node: WorkflowNode, ...keys: string[]): void {
   if (!keys.some((key) => !!node.properties[key])) {
     throw new Error(
@@ -772,9 +837,12 @@ async function executeNode(
       return { output: duration };
     }
     case "note-read": {
-      requireSaveTarget(node, "saveTo");
       let path = property(node, "path", variables);
       if (!path) throw new Error("note-read node is missing path.");
+      if (/\.pdf$/i.test(path)) {
+        return await readWorkflowPDF(node, path, variables);
+      }
+      requireSaveTarget(node, "saveTo");
       if (!path.endsWith(".md") && !path.endsWith(".encrypted")) path += ".md";
       let result = await readWorkflowWorkspaceFile(
         path,
@@ -1274,12 +1342,10 @@ async function executeNode(
         }
       }
       let commandPrompt = prompt;
-      const configuredRag = node.properties.ragSetting;
-      const ragName = configuredRag === undefined
-        ? settings.selectedRagSetting ?? undefined
-        : configuredRag;
-      const webSearchEnabled = configuredRag === "__websearch__" ||
-        (configuredRag === undefined && settings.webSearchEnabled);
+      // Retrieval is opt-in per node: following the Chat selection would make a
+      // run's output depend on whatever RAG or web search Chat last used.
+      const ragName = node.properties.ragSetting;
+      const webSearchEnabled = ragName === "__websearch__";
       if (ragName && ragName !== "__none__" && ragName !== "__websearch__") {
         const rag = settings.ragSettings[ragName];
         if (!rag) throw new Error(`RAG setting not found: ${ragName}`);

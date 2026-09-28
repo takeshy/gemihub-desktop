@@ -773,6 +773,105 @@ func (a *App) ReadWorkspacePDFPages(path, pageLabel string) (*LocalFileResult, e
 	return &LocalFileResult{Path: target, FileName: fileName, Content: "data:application/pdf;base64," + base64.StdEncoding.EncodeToString(pages[pageNumber-1])}, nil
 }
 
+// WorkflowPDFPages is a page range of a Workspace PDF read by the note-read node:
+// its text layer labelled by page, or, for format "pdf", an excerpt PDF as base64.
+type WorkflowPDFPages struct {
+	FileName   string `json:"fileName"`
+	TotalPages int    `json:"totalPages"`
+	StartPage  int    `json:"startPage"`
+	EndPage    int    `json:"endPage"`
+	Text       string `json:"text,omitempty"`
+	Data       string `json:"data,omitempty"`
+}
+
+// CountWorkflowPDFPages returns the page count of a Workspace PDF without extracting
+// any text, so a workflow can size its page loop before reading.
+func (a *App) CountWorkflowPDFPages(path string) (int, error) {
+	target, err := a.workspacePath(path, false)
+	if err != nil {
+		return 0, err
+	}
+	if strings.ToLower(filepath.Ext(target)) != ".pdf" {
+		return 0, fmt.Errorf("file is not a PDF")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return 0, err
+	}
+	count, err := pdfsplit.PageCount(data)
+	if err != nil {
+		return 0, fmt.Errorf("read the pages of %q: %w", path, err)
+	}
+	return count, nil
+}
+
+// ReadWorkflowPDFPages reads pages startPage..endPage of a Workspace PDF. Zero means
+// the first or last page, and an endPage past the last page is clamped, so a
+// workflow can loop over fixed-size chunks without knowing the page count first.
+// Pages without a text layer come back empty instead of failing the run.
+func (a *App) ReadWorkflowPDFPages(path string, startPage, endPage int, format string) (*WorkflowPDFPages, error) {
+	target, err := a.workspacePath(path, false)
+	if err != nil {
+		return nil, err
+	}
+	if strings.ToLower(filepath.Ext(target)) != ".pdf" {
+		return nil, fmt.Errorf("file is not a PDF")
+	}
+	if startPage < 0 || endPage < 0 {
+		return nil, fmt.Errorf("startPage and endPage must be positive integers")
+	}
+	if startPage > 0 && endPage > 0 && startPage > endPage {
+		return nil, fmt.Errorf("startPage must be less than or equal to endPage")
+	}
+	pages := pdfPageRange{Start: startPage, End: endPage}
+	result := &WorkflowPDFPages{FileName: filepath.Base(target)}
+	switch format {
+	case "", "text":
+		extracted, err := pdfsplit.ExtractTextFile(target)
+		if err != nil {
+			return nil, fmt.Errorf("extract text from %q: %w", path, err)
+		}
+		from, to, err := pages.resolve(len(extracted), path)
+		if err != nil {
+			return nil, err
+		}
+		texts := make([]string, 0, to-from+1)
+		for _, page := range extracted {
+			if page.Number < from || page.Number > to {
+				continue
+			}
+			if value := strings.TrimSpace(page.Text); value != "" {
+				texts = append(texts, fmt.Sprintf("[Page %d]\n%s", page.Number, value))
+			}
+		}
+		result.TotalPages, result.StartPage, result.EndPage = len(extracted), from, to
+		result.Text = strings.Join(texts, "\n\n")
+	case "pdf":
+		data, err := os.ReadFile(target)
+		if err != nil {
+			return nil, err
+		}
+		totalPages, err := pdfsplit.PageCount(data)
+		if err != nil {
+			return nil, fmt.Errorf("read the pages of %q: %w", path, err)
+		}
+		from, to, err := pages.resolve(totalPages, path)
+		if err != nil {
+			return nil, err
+		}
+		excerpt, err := pdfsplit.ExtractPages(data, from, to)
+		if err != nil {
+			return nil, fmt.Errorf("extract pages %d-%d of %q: %w", from, to, path, err)
+		}
+		result.TotalPages, result.StartPage, result.EndPage = totalPages, from, to
+		result.FileName = pdfPagesAttachmentName(result.FileName, from, to)
+		result.Data = base64.StdEncoding.EncodeToString(excerpt)
+	default:
+		return nil, fmt.Errorf("unsupported PDF format %q (use text or pdf)", format)
+	}
+	return result, nil
+}
+
 func ragPDFPageNumber(pageLabel string) int {
 	match := regexp.MustCompile(`(?i)^page(?:s)?\s+(\d+)`).FindStringSubmatch(strings.TrimSpace(pageLabel))
 	if len(match) != 2 {

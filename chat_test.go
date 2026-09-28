@@ -342,6 +342,9 @@ func TestAIReadFileExtractsPdfTextWithoutDocumentPart(t *testing.T) {
 	if !strings.Contains(result.Content, "quarterly revenue summary") {
 		t.Fatalf("extracted text is missing the page body: %q", result.Content)
 	}
+	if !strings.HasPrefix(result.Content, "[Pages 1-1 of 1]\n\n") {
+		t.Fatalf("extracted text is missing its page range header: %q", result.Content)
+	}
 	if !strings.Contains(result.Content, "[Page 1]") {
 		t.Fatalf("extracted text is missing its page label: %q", result.Content)
 	}
@@ -366,7 +369,7 @@ func TestAIReadFilePageRange(t *testing.T) {
 		t.Fatalf("ranged text extraction failed: %v", err)
 	}
 	content := value.(*LocalFileResult).Content
-	for _, want := range []string{"[Page 2]\npage two", "[Page 3]\npage three"} {
+	for _, want := range []string{"[Pages 2-3 of 4]", "[Page 2]\npage two", "[Page 3]\npage three"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("ranged text is missing %q: %q", want, content)
 		}
@@ -384,7 +387,7 @@ func TestAIReadFilePageRange(t *testing.T) {
 	}
 	// endPage past the last page is clamped rather than rejected.
 	value, _, err = app.executeFileTool("read_file", `{"path":"book.pdf","startPage":3,"endPage":99}`, pdfExtractText)
-	if err != nil || !strings.Contains(value.(*LocalFileResult).Content, "page four") {
+	if err != nil || !strings.Contains(value.(*LocalFileResult).Content, "page four") || !strings.HasPrefix(value.(*LocalFileResult).Content, "[Pages 3-4 of 4]") {
 		t.Fatalf("clamped endPage regressed: %#v, %v", value, err)
 	}
 

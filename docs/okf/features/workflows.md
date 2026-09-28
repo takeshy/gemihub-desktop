@@ -18,6 +18,14 @@ Workflow panelではnodeを一覧表示し、追加、property編集、削除、
 
 変数設定、`if`/`while`による条件分岐・繰り返し、`command`、`http`、`json`、noteの読書き・検索・一覧・削除、folder list、dialog、ユーザー入力（prompt-value/prompt-file/prompt-selection）、file explorer/save、別Workflowの呼び出し、RAG sync、MCP、sleep、script、shellを組み合わせられます。
 
+# commandノードのRAGとWeb検索
+
+`command` nodeはRAG検索もWeb検索も、`ragSetting` で明示したときだけ使います。省略した場合はChatで選択中の設定に関係なくどちらも使わないため、同じ入力なら実行ごとに参照内容が変わりません。RAGを使う場合は設定名を、Web検索を使う場合は `__websearch__` を指定してください。
+
+# PDFをページ単位で読む
+
+`note-read` にPDFを指定すると、`startPage`/`endPage` で指定したページ範囲だけを読み込めます。既定の `format: text` はテキスト層を `[Page N]` 見出し付きで返し、`format: pdf` はそのページだけを切り出したPDFを `command` の `attachments` に渡せる形式で返します。`savePageCountTo` で総ページ数を、`saveEndPageTo` で実際に読んだ最終ページ（丸め後）を取得できます。`saveTo` を付けず `savePageCountTo` だけを指定すると、テキストを読まずに総ページ数だけを取得するので、ループの前に使えます。`endPage` が最終ページを超える場合は最終ページまでに丸められるため、`while` で数ページずつ翻訳・要約するWorkflowを組めます。スキャンPDFなどテキスト層のないページは空になるので、その場合は `format: pdf` を使ってください。
+
 # scriptとshellの実行環境
 
 `script` nodeは隔離されたWeb Worker内でJavaScriptを実行します。`fetch`、`WebSocket`、`importScripts`は無効化され、`window`/`document`/`localStorage`などhost側の値にはアクセスできません。渡した変数は読み取り専用（freeze）で、既定timeoutは10秒です。外部APIを呼びたい場合は`script`ではなく専用の`http` nodeを使ってください。`shell` nodeは実際のOSプロセスを起動し、既定timeoutは60秒、既定では非ゼロの終了コードでWorkflowが失敗します（`throwOnError`で変更可能）。

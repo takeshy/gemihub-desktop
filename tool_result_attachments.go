@@ -225,8 +225,9 @@ func openAIFileContentPart(attachment ChatAttachment) map[string]any {
 }
 
 // extractPdfToolText reads a PDF's text layer, labelled by page so the model can cite
-// one. A page range keeps only those pages. A scan has no text layer, so the error
-// says to attach the file instead.
+// one. A page range keeps only those pages, and a "[Pages a-b of n]" header tells the
+// model whether there is more to read. A scan has no text layer, so the error says to
+// attach the file instead.
 func extractPdfToolText(target, workspacePath string, pages pdfPageRange) (string, error) {
 	extracted, err := pdfsplit.ExtractTextFile(target)
 	if err != nil {
@@ -253,5 +254,5 @@ func extractPdfToolText(target, workspacePath string, pages pdfPageRange) (strin
 		}
 		return "", fmt.Errorf("%q has no extractable text layer (it is probably a scan). Ask the user to attach it to the message so the model can see the pages", workspacePath)
 	}
-	return strings.Join(texts, "\n\n"), nil
+	return fmt.Sprintf("[Pages %d-%d of %d]\n\n%s", from, to, len(extracted), strings.Join(texts, "\n\n")), nil
 }

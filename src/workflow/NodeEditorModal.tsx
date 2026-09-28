@@ -36,7 +36,15 @@ const suggestedProperties: Partial<Record<WorkflowNodeType, string[]>> = {
   ],
   json: ["source", "saveTo"],
   note: ["path", "content", "mode", "confirm", "history"],
-  "note-read": ["path", "saveTo"],
+  "note-read": [
+    "path",
+    "saveTo",
+    "startPage",
+    "endPage",
+    "format",
+    "savePageCountTo",
+    "saveEndPageTo",
+  ],
   "note-search": ["query", "searchContent", "limit", "saveTo"],
   "note-list": [
     "folder",

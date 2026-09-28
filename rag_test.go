@@ -2,14 +2,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	pdfsplit "github.com/takeshy/minipdfsplit"
 )
 
 func TestFilterRAGResultsWithJev(t *testing.T) {
@@ -295,5 +300,66 @@ func TestVertexGlobalEndpoint(t *testing.T) {
 	want := "https://aiplatform.googleapis.com/v1/projects/sample-project/locations/global/publishers/google/models/gemini-embedding-2:embedContent"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+// The note-read node reads a PDF a range at a time: an endPage past the last page is
+// clamped so a fixed-size loop needs no page count, and format "pdf" returns an
+// excerpt PDF holding just that range.
+func TestReadWorkflowPDFPages(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "book.pdf"), buildTextPDF(t, "page one", "page two", "page three", "page four"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.workspaceState = testWorkspaceState(t, workspace)
+
+	if count, err := app.CountWorkflowPDFPages("book.pdf"); err != nil || count != 4 {
+		t.Fatalf("page count = %d, %v; want 4", count, err)
+	}
+
+	result, err := app.ReadWorkflowPDFPages("book.pdf", 2, 3, "text")
+	if err != nil {
+		t.Fatalf("ranged text read failed: %v", err)
+	}
+	if result.TotalPages != 4 || result.StartPage != 2 || result.EndPage != 3 || result.Data != "" {
+		t.Fatalf("unexpected range metadata: %#v", result)
+	}
+	if result.Text != "[Page 2]\npage two\n\n[Page 3]\npage three" {
+		t.Fatalf("unexpected ranged text: %q", result.Text)
+	}
+
+	result, err = app.ReadWorkflowPDFPages("book.pdf", 3, 99, "")
+	if err != nil || result.EndPage != 4 || !strings.Contains(result.Text, "page four") {
+		t.Fatalf("endPage past the last page must be clamped: %#v, %v", result, err)
+	}
+	result, err = app.ReadWorkflowPDFPages("book.pdf", 0, 0, "text")
+	if err != nil || result.StartPage != 1 || result.EndPage != 4 {
+		t.Fatalf("an unset range must cover the whole PDF: %#v, %v", result, err)
+	}
+
+	result, err = app.ReadWorkflowPDFPages("book.pdf", 2, 3, "pdf")
+	if err != nil {
+		t.Fatalf("ranged PDF read failed: %v", err)
+	}
+	if result.FileName != "book (pages 2-3).pdf" || result.Text != "" {
+		t.Fatalf("unexpected excerpt metadata: %#v", result)
+	}
+	excerpt, err := base64.StdEncoding.DecodeString(result.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	excerptPages, err := pdfsplit.ExtractText(excerpt)
+	if err != nil || len(excerptPages) != 2 || !strings.Contains(excerptPages[0].Text, "page two") || !strings.Contains(excerptPages[1].Text, "page three") {
+		t.Fatalf("excerpt does not hold pages 2-3 in order: %#v, %v", excerptPages, err)
+	}
+
+	for _, tc := range []struct {
+		start, end int
+		format     string
+	}{{5, 0, "text"}, {5, 0, "pdf"}, {3, 2, "text"}, {-1, 0, "text"}, {1, 1, "markdown"}} {
+		if _, err := app.ReadWorkflowPDFPages("book.pdf", tc.start, tc.end, tc.format); err == nil {
+			t.Fatalf("invalid read %#v was accepted", tc)
+		}
 	}
 }

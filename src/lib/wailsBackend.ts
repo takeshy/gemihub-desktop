@@ -4,6 +4,15 @@ export interface LocalFileResult {
   content: string;
 }
 
+export interface WorkflowPDFPages {
+  fileName: string;
+  totalPages: number;
+  startPage: number;
+  endPage: number;
+  text?: string;
+  data?: string;
+}
+
 export interface LocalPathInfo {
   path: string;
   name: string;
@@ -527,6 +536,13 @@ interface WailsAppApi {
     path: string,
     pageLabel: string,
   ) => Promise<LocalFileResult>;
+  CountWorkflowPDFPages: (path: string) => Promise<number>;
+  ReadWorkflowPDFPages: (
+    path: string,
+    startPage: number,
+    endPage: number,
+    format: string,
+  ) => Promise<WorkflowPDFPages>;
   SearchRAG: (
     request: { name: string; query: string; setting: RAGSetting },
   ) => Promise<RAGSearchResult[]>;
@@ -1170,6 +1186,23 @@ export async function readWorkspacePDFPages(
   pageLabel: string,
 ): Promise<LocalFileResult | null> {
   return await appApi()?.ReadWorkspacePDFPages(path, pageLabel) ?? null;
+}
+
+export async function countWorkflowPDFPages(path: string): Promise<number> {
+  const api = appApi();
+  if (!api) throw new Error("Reading PDF pages requires the desktop backend.");
+  return await api.CountWorkflowPDFPages(path);
+}
+
+export async function readWorkflowPDFPages(
+  path: string,
+  startPage: number,
+  endPage: number,
+  format: "text" | "pdf",
+): Promise<WorkflowPDFPages> {
+  const api = appApi();
+  if (!api) throw new Error("Reading PDF pages requires the desktop backend.");
+  return await api.ReadWorkflowPDFPages(path, startPage, endPage, format);
 }
 
 export async function searchRAG(
