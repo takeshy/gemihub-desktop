@@ -1,3 +1,20 @@
+# GemiHub Desktop v1.7.0
+
+## What's new
+
+- Workflow `note-read` can read a page range of a PDF with `startPage` and
+  `endPage`, as its text layer or, with `format: pdf`, as an excerpt PDF for
+  `command` attachments. `savePageCountTo` and `saveEndPageTo` return the page
+  count and the last page read, so long PDFs can be translated or summarized a
+  few pages at a time in a `while` loop.
+- Chat `read_file` / `read_note` text results for PDFs start with a
+  `[Pages a-b of n]` header so the model knows whether more pages remain.
+
+## Changes
+
+- Workflow `command` nodes use RAG or web search only when `ragSetting` is set,
+  instead of following the Chat selection, so runs are reproducible.
+
 # GemiHub Desktop v1.5.1
 
 ## What's new
