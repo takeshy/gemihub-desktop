@@ -1,3 +1,17 @@
+# GemiHub Desktop v1.8.0
+
+## What's new
+
+- Apple Silicon macOS releases now include a `GemiHub Desktop.app` archive
+  with an app icon, ready to place in Applications.
+- Added a macOS installer that verifies the release archive's SHA-256 digest,
+  installs into `~/Applications`, and backs up an existing installation.
+- Added `wails3 task darwin:package ARCH=arm64` for local app packaging and
+  documented installation in English and Japanese.
+
+The macOS app is ad-hoc signed; Developer ID signing and notarization are not
+included.
+
 # GemiHub Desktop v1.7.0
 
 ## What's new

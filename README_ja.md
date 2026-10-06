@@ -189,7 +189,7 @@ Deno や Go は必要ありません。
 
 - `gemihub-desktop-linux-amd64`（WebKitGTK 4.1）
 - `gemihub-desktop-linux-arm64`（WebKitGTK 4.1）
-- `gemihub-desktop-darwin-arm64`
+- `gemihub-desktop-darwin-arm64.app.zip`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
 - `gemihub-desktop-windows-amd64.msix`（Microsoft Storeと同じpackage。直接installも可能）
@@ -205,16 +205,38 @@ sudo apt install libwebkit2gtk-4.1-0
 各リリースには `THIRD_PARTY_NOTICES.md` も含まれます。同じ内容をアプリ内の
 **Settings → General → Third-party notices** から確認できます。
 
-Linux と macOS では、ダウンロードしたファイルに実行権限を付けます。
+Linux では、ダウンロードしたファイルに実行権限を付けます。
 
 ```bash
 chmod +x gemihub-desktop-linux-amd64
 ```
 
-macOS 版は現在未署名のため、初回起動前に quarantine 属性を削除してください。
+macOS 12以降のApple Silicon Macでは、次のinstallerで `~/Applications` に
+アプリを配置できます。Go、Deno、管理者権限は不要です。
 
 ```bash
-xattr -d com.apple.quarantine gemihub-desktop-darwin-arm64
+curl -fsSL https://raw.githubusercontent.com/takeshy/gemihub-desktop/main/scripts/install_macos.sh -o /tmp/gemihub-install.sh
+sh /tmp/gemihub-install.sh
+```
+
+installerは配布archiveのSHA-256を検証してからinstallします。
+`.app.zip` を含むreleaseのtag（例: `v1.8.0`）を引数に渡すとversionを指定できます。
+配置先は環境変数 `GEMIHUB_INSTALL_DIR` で変更できます。既存アプリはbackupされます。
+Finderから **GemiHub Desktop** を起動してください。
+
+手動の場合はGitHub Releasesの `gemihub-desktop-darwin-arm64.app.zip` を展開し、
+**GemiHub Desktop.app** をApplicationsへ移動してください。アプリはad-hoc署名で、
+Developer ID署名・公証はありません。信頼できるdownloadについて、起動前に
+quarantine属性を削除してください。
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/GemiHub Desktop.app"
+```
+
+Mac上でapp archiveをbuildするには、次を実行します。
+
+```bash
+wails3 task darwin:package ARCH=arm64
 ```
 
 ## クイックスタート

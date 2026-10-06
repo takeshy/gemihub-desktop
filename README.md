@@ -237,7 +237,7 @@ Available release artifacts:
 
 - `gemihub-desktop-linux-amd64` (WebKitGTK 4.1)
 - `gemihub-desktop-linux-arm64` (WebKitGTK 4.1)
-- `gemihub-desktop-darwin-arm64`
+- `gemihub-desktop-darwin-arm64.app.zip`
 - `gemihub-desktop-windows-amd64.exe`
 - `gemihub-desktop-windows-arm64.exe`
 - `gemihub-desktop-windows-amd64.msix` (the Microsoft Store package, also
@@ -256,17 +256,38 @@ sudo apt install libwebkit2gtk-4.1-0
 Each release also includes `THIRD_PARTY_NOTICES.md`. The same notices are
 available in the app under **Settings → General → Third-party notices**.
 
-On Linux and macOS, make the downloaded file executable:
+On Linux, make the downloaded file executable:
 
 ```bash
 chmod +x gemihub-desktop-linux-amd64
 ```
 
-The macOS binary is currently unsigned, so clear its quarantine attribute before
-first launch:
+On Apple Silicon Macs running macOS 12 or newer, install the app into
+`~/Applications` with the installer (no Go, Deno, or administrator access needed):
 
 ```bash
-xattr -d com.apple.quarantine gemihub-desktop-darwin-arm64
+curl -fsSL https://raw.githubusercontent.com/takeshy/gemihub-desktop/main/scripts/install_macos.sh -o /tmp/gemihub-install.sh
+sh /tmp/gemihub-install.sh
+```
+
+The installer verifies the release archive's SHA-256 digest before installation.
+Pass a release tag, such as `v1.8.0`, to choose a version that includes the
+`.app.zip` asset. Set `GEMIHUB_INSTALL_DIR` to choose another installation folder.
+Existing installations are backed up. Launch **GemiHub Desktop** from Finder.
+
+Alternatively, extract `gemihub-desktop-darwin-arm64.app.zip` from GitHub Releases
+and drag **GemiHub Desktop.app** into Applications. The app is ad-hoc signed,
+without Developer ID signing or notarization. For a trusted download, remove
+its quarantine attribute before opening:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/GemiHub Desktop.app"
+```
+
+To build the app archive locally on a Mac:
+
+```bash
+wails3 task darwin:package ARCH=arm64
 ```
 
 ## Quick start

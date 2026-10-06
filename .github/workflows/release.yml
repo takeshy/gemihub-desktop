@@ -131,6 +131,9 @@ jobs:
           else
             cp bin/gemihub-desktop bin/${{ matrix.artifact }}
           fi
+          if [ "${{ matrix.target }}" = "darwin" ]; then
+            sh scripts/package_macos.sh ${{ matrix.arch }}
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -139,6 +142,7 @@ jobs:
           path: |
             bin/${{ matrix.artifact }}
             bin/gemihub-desktop-windows-*.msix
+            bin/gemihub-desktop-darwin-*.app.zip
           if-no-files-found: error
 
   release:
