@@ -1,3 +1,15 @@
+# GemiHub Desktop v1.8.2
+
+## Fixes
+
+- macOS file associations now handle native open-document events, including
+  requests received before the frontend is ready and while the app is running.
+  The requested file opens in the `single` Dashboard.
+- Closing the macOS window keeps it available to reopen from the Dock or Finder.
+- Fixed duplicate Dashboard toolbars and broken file display when opening
+  associated files repeatedly.
+- Pending file edits are saved before switching to the associated file's folder.
+
 # GemiHub Desktop v1.8.1
 
 ## Changes

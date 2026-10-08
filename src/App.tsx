@@ -5,6 +5,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -52,6 +53,7 @@ import { MemoListModal } from "./components/MemoListModal";
 import { OkfSettingsCard } from "./okf/OkfSettingsCard";
 import { FileTree } from "./components/FileTree";
 import { PluginHost } from "./plugins/PluginHost";
+import { createFileOpenHandler, fileOpenDirectory } from "./lib/fileOpenRequests";
 import { DashboardView } from "./dashboard/DashboardView";
 import { DashboardToolbar } from "./dashboard/DashboardToolbar";
 import { carrySingleFile, dashboardSessionKeys, initialDashboardSession, SINGLE_DASHBOARD, singleDashboard } from "./dashboard/dashboardSession";
@@ -111,6 +113,10 @@ import {
   setWorkspaceDirectory,
   startDiscordBot,
   startupFilePaths,
+  acknowledgeFileOpenRequest,
+  onFileOpenRequest,
+  pendingFileOpenRequest,
+  type FileOpenRequest,
   stopDiscordBot,
   syncRAG,
   verifyDiscordToken,
@@ -1269,6 +1275,8 @@ export default function App() {
   const [startupPaths, setStartupPaths] = useState<string[] | null>(null);
   const startupDashboardInitializedRef = useRef(false);
   const [dashboardStartupPaths, setDashboardStartupPaths] = useState<string[]>([]);
+  const [nativeFileOpenRequest, setNativeFileOpenRequest] = useState<FileOpenRequest | null>(null);
+  const [nativeFileOpenVersion, setNativeFileOpenVersion] = useState(0);
   const [workspaceContextLoaded, setWorkspaceContextLoaded] = useState(false);
   const [dashboardContextReady, setDashboardContextReady] = useState(false);
   const [aiEnabled, setAIEnabled] = useState(() =>
@@ -1381,6 +1389,12 @@ export default function App() {
   const projectsLoadedRef = useRef(false);
   const lastCheckpointHashRef = useRef<string>("");
   const latestStateRef = useRef({ fileName, content, dashboard });
+  const dashboardFileFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const registerDashboardFileFlush = useCallback((flush: (() => Promise<void>) | null) => {
+    dashboardFileFlushRef.current = flush;
+  }, []);
+  const dashboardSnapshotRef = useRef({ path: activeDashboardPath, dashboard, rawMode: dashboardRawMode, raw: dashboardRaw });
+  dashboardSnapshotRef.current = { path: activeDashboardPath, dashboard, rawMode: dashboardRawMode, raw: dashboardRaw };
   const selectedRAG = chatSettings.selectedRagSetting
     ? chatSettings.ragSettings[chatSettings.selectedRagSetting]
     : undefined;
@@ -1445,6 +1459,62 @@ export default function App() {
       loadingDashboardRef.current = false;
     }, 0);
   }, []);
+
+  const handleNativeFileOpen = useMemo(() => createFileOpenHandler({
+    prepare: async (request) => {
+      await dashboardFileFlushRef.current?.();
+      const current = dashboardSnapshotRef.current;
+      if (current.path && current.path !== SINGLE_DASHBOARD) {
+        if (current.rawMode) await writeWorkspaceFile(current.path, current.raw);
+        else await saveDashboard(current.path, persistenceDashboard(current.dashboard));
+      }
+      const directory = fileOpenDirectory(request.path);
+      if (directory) await setDirectoryBase(directory);
+    },
+    apply: (request) => {
+      setDirectoryBaseState(fileOpenDirectory(request.path));
+      setExternalTreeFocusPath(request.path);
+      setFileTreeOpen(false);
+      setChatViewOpen(false);
+      setActiveChatFile(null);
+      replaceDashboard(singleDashboard(), SINGLE_DASHBOARD);
+      setDashboardStartupPaths([request.path]);
+      // The new DashboardView must not replay commands from the previous view.
+      setAddWidgetRequest((current) => ({ ...current, id: 0 }));
+      setEqualizeLayoutRequest((current) => ({ ...current, id: 0 }));
+      setSplitWidgetRequest((current) => ({ ...current, id: 0 }));
+      setOpenPathRequest((current) => ({ ...current, id: 0, file: null }));
+      setOpenFilePickerRequest(0);
+      setPluginWidgetRequest({ id: 0, type: "", config: {} });
+      setDashboardChoiceRequest(0);
+      // A new webview component resets startup/hydration refs even when the
+      // same file is reopened in the existing single Dashboard.
+      setNativeFileOpenVersion(request.id);
+    },
+    acknowledge: acknowledgeFileOpenRequest,
+    onError: (error) => setDashboardError(error instanceof Error ? error.message : String(error)),
+  }), [replaceDashboard]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const receive = (request: FileOpenRequest) => {
+      if (cancelled) return;
+      setNativeFileOpenRequest((current) =>
+        current && current.id >= request.id ? current : request
+      );
+    };
+    const unsubscribe = onFileOpenRequest(receive);
+    // Recover a Finder event delivered before the frontend listener existed.
+    void pendingFileOpenRequest().then((request) => {
+      if (request) receive(request);
+    }).catch((error) => console.warn("Could not read pending file open request.", error));
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!dashboardContextReady || !directoryContextLoaded || !workspaceContextLoaded || !nativeFileOpenRequest) return;
+    void handleNativeFileOpen(nativeFileOpenRequest);
+  }, [dashboardContextReady, directoryContextLoaded, workspaceContextLoaded, nativeFileOpenRequest, handleNativeFileOpen]);
 
   const refreshDashboardFiles = useCallback(async () => {
     const files = await listDashboardFiles();
@@ -2463,6 +2533,7 @@ export default function App() {
           )}
           <section className="editor-frame">
             <DashboardToolbar
+              key={`toolbar:${nativeFileOpenVersion}`}
               files={dashboardFiles}
               singleMode={activeDashboardPath === SINGLE_DASHBOARD}
               dashboardChoiceRequest={dashboardChoiceRequest}
@@ -2624,9 +2695,11 @@ export default function App() {
               )
               : (
                 dashboardContextReady && <DashboardView
+                  key={`view:${nativeFileOpenVersion}`}
                   data={dashboard}
                   onChange={updateDashboard}
                   onRequireDashboard={() => setDashboardChoiceRequest((value) => value + 1)}
+                  onRegisterFileFlush={registerDashboardFileFlush}
                   onStartupFilesHandled={() => setDashboardStartupPaths([])}
                   documentMarkdown={content}
                   onDocumentMarkdownChange={setContent}

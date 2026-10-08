@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -47,6 +48,30 @@ func main() {
 		EnableFileDrop:   true,
 		URL:              "/",
 	})
+	showMainWindow := func() {
+		window.Show()
+		window.UnMinimise()
+		window.Focus()
+	}
+	wailsApp.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(event *application.ApplicationEvent) {
+		request := app.fileOpenRequests.open(event.Context().Filename())
+		if request == nil {
+			return
+		}
+		showMainWindow()
+		wailsApp.Event.Emit("app:file-open", request)
+	})
+	if runtime.GOOS == "darwin" {
+		// Closing the last macOS window does not quit the application. Keep its
+		// webview alive so Dock/Finder reopening can show it again.
+		window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+			event.Cancel()
+			window.Hide()
+		})
+		wailsApp.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(_ *application.ApplicationEvent) {
+			showMainWindow()
+		})
+	}
 	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		details := event.Context().DropTargetDetails()
 		x, y := 0, 0

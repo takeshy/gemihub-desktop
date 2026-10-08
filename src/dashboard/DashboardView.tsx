@@ -633,6 +633,7 @@ export function DashboardView({
   startupPaths,
   onStartupFilesHandled,
   onRequireDashboard,
+  onRegisterFileFlush,
   pluginWidgetRequest,
   onExternalPathOpened,
 }: {
@@ -695,6 +696,7 @@ export function DashboardView({
   startupPaths: string[] | null;
   onStartupFilesHandled: () => void;
   onRequireDashboard: () => void;
+  onRegisterFileFlush: (flush: (() => Promise<void>) | null) => void;
   pluginWidgetRequest: {
     id: number;
     type: string;
@@ -767,6 +769,11 @@ export function DashboardView({
   );
   const previousWorkspaceBaseRef = useRef(workspaceBase);
   const handledStartupFilesRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const navigationHistoryRef = useRef(
     new Map<string, WidgetNavigationHistory>(),
   );
@@ -774,6 +781,7 @@ export function DashboardView({
   const pendingFileWritesRef = useRef(
     new Map<string, PendingFileWrite>(),
   );
+  const inFlightFileWritesRef = useRef(new Set<Promise<void>>());
   const latestWidgetsRef = useRef(data.widgets);
   latestWidgetsRef.current = data.widgets;
   const [navigationVersion, setNavigationVersion] = useState(0);
@@ -991,22 +999,43 @@ export function DashboardView({
         const timer = window.setTimeout(() => {
           fileSaveTimersRef.current.delete(widgetId);
           pendingFileWritesRef.current.delete(widgetId);
-          void persistFileWidgetWrite(pendingWrite).then(() => {
+          const writing = persistFileWidgetWrite(pendingWrite).then(() => {
             window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
             window.dispatchEvent(
               new CustomEvent("llm-hub:dashboard-data-changed", {
                 detail: { path: nextFilePath },
               }),
             );
-          }).catch((error) =>
+          });
+          inFlightFileWritesRef.current.add(writing);
+          void writing.catch((error) =>
             console.warn("Dashboard file widget save failed", error)
-          );
+          ).finally(() => inFlightFileWritesRef.current.delete(writing));
         }, 450);
         fileSaveTimersRef.current.set(widgetId, timer);
       }
     },
     [recordRecentFile, updateWidget],
   );
+
+  const flushFileWrites = useCallback(async () => {
+    // Native file opens can change the backend's Files directory. Complete
+    // writes against the old directory before changing it or replacing widgets.
+    do {
+      for (const timer of fileSaveTimersRef.current.values()) window.clearTimeout(timer);
+      fileSaveTimersRef.current.clear();
+      const writes = [...pendingFileWritesRef.current.entries()].map(async ([id, pending]) => {
+        await persistFileWidgetWrite(pending);
+        if (pendingFileWritesRef.current.get(id) === pending) pendingFileWritesRef.current.delete(id);
+      });
+      await Promise.all([...inFlightFileWritesRef.current, ...writes]);
+    } while (pendingFileWritesRef.current.size || inFlightFileWritesRef.current.size);
+  }, []);
+
+  useEffect(() => {
+    onRegisterFileFlush(flushFileWrites);
+    return () => onRegisterFileFlush(null);
+  }, [flushFileWrites, onRegisterFileFlush]);
 
   useEffect(() => () => {
     for (const timer of fileSaveTimersRef.current.values()) {
@@ -1991,7 +2020,7 @@ export function DashboardView({
   );
 
   const openKnownPathInLastActiveWidget = useCallback(
-    async (path: string, associatedLaunch = false) => {
+    async (path: string, associatedLaunch = false, isCurrent: () => boolean = () => true) => {
       const dashboardTarget = workspaceDashboardPath(path);
       if (dashboardTarget && !associatedLaunch) {
         await onOpenDashboard(dashboardTarget);
@@ -2003,11 +2032,12 @@ export function DashboardView({
         return openDirectoryPathInLastActiveWidget(path);
       }
       const result = await readKnownPath(path);
-      if (!result) return undefined;
+      if (!result || !isCurrent()) return undefined;
       const content = await prepareOpenedContent(
         result.fileName,
         result.content,
       );
+      if (!isCurrent()) return undefined;
       const targetId = lastActiveFileWidgetIdRef.current;
       const target =
         data.widgets.find((widget) =>
@@ -2311,7 +2341,7 @@ export function DashboardView({
       for (const [index, path] of paths.entries()) {
         try {
           if (index === 0) {
-            const widgetId = await openKnownPathInLastActiveWidget(path, true);
+            const widgetId = await openKnownPathInLastActiveWidget(path, true, () => mountedRef.current);
             if (widgetId) {
               setActiveWidgetId(widgetId);
               setMaximizedWidgetId(widgetId);

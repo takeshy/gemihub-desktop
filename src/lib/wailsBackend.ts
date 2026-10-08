@@ -4,6 +4,11 @@ export interface LocalFileResult {
   content: string;
 }
 
+export interface FileOpenRequest {
+  id: number;
+  path: string;
+}
+
 export interface WorkflowPDFPages {
   fileName: string;
   totalPages: number;
@@ -651,6 +656,8 @@ interface WailsAppApi {
   AppendMemoFile: (path: string, content: string) => Promise<void>;
   WriteMemoFileAtomic: (path: string, content: string) => Promise<void>;
   StartupFilePaths: () => Promise<string[]>;
+  PendingFileOpenRequest: () => Promise<FileOpenRequest | null>;
+  AcknowledgeFileOpenRequest: (id: number) => Promise<void>;
   OpenExternalEditor: (editorPath: string, filePath: string) => Promise<void>;
 }
 
@@ -1586,6 +1593,18 @@ export async function inspectLocalPath(
 
 export async function startupFilePaths(): Promise<string[]> {
   return await appApi()?.StartupFilePaths() ?? [];
+}
+
+export async function pendingFileOpenRequest(): Promise<FileOpenRequest | null> {
+  return await appApi()?.PendingFileOpenRequest() ?? null;
+}
+
+export async function acknowledgeFileOpenRequest(id: number): Promise<void> {
+  await appApi()?.AcknowledgeFileOpenRequest(id);
+}
+
+export function onFileOpenRequest(callback: (request: FileOpenRequest) => void): () => void {
+  return window.runtime?.EventsOn?.("app:file-open", callback as (event: never) => void) ?? (() => undefined);
 }
 
 export async function openExternalEditor(

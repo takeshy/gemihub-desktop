@@ -19,6 +19,7 @@ import (
 type App struct {
 	ctx                context.Context
 	application        *application.App
+	fileOpenRequests   fileOpenRequests
 	directoryMu        sync.RWMutex
 	directoryBase      string
 	fileWriteMu        sync.Mutex
@@ -178,6 +179,14 @@ func (a *App) InspectLocalPath(path string) (*LocalPathInfo, error) {
 
 func (a *App) StartupFilePaths() []string {
 	return startupFilePaths()
+}
+
+func (a *App) PendingFileOpenRequest() *FileOpenRequest {
+	return a.fileOpenRequests.current()
+}
+
+func (a *App) AcknowledgeFileOpenRequest(id uint64) {
+	a.fileOpenRequests.acknowledge(id)
 }
 
 func startupFilePaths() []string {
