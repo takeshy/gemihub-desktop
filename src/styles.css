@@ -5827,15 +5827,6 @@ body.resizing-side-pane * {
   border-bottom: 1px solid var(--border);
   padding: 5px 7px;
 }
-.file-tree-title {
-  display: inline-flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  padding: 5px;
-  font-size: 0.76rem;
-}
 .file-tree-mode-bar button {
   display: inline-flex;
   align-items: center;
@@ -5867,6 +5858,9 @@ body.resizing-side-pane * {
 .file-tree-mode-bar .workspace-directory-open:hover {
   background: var(--panel-subtle);
   color: var(--text);
+}
+.file-tree-mode-bar .file-tree-refresh {
+  margin-left: auto;
 }
 
 .file-tree-project {
@@ -7085,6 +7079,27 @@ body.resizing-side-pane * {
   color: var(--danger);
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+.dashboard-choice-dialog > div {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.dashboard-choice-dialog > div p {
+  margin: 0 0 7px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dashboard-choice-dialog > div button {
+  text-align: left;
+  overflow-wrap: anywhere;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.dashboard-choice-dialog > div button:hover {
+  border-color: var(--accent);
 }
 .dashboard-name-dialog input {
   width: 100%;

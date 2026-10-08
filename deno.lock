@@ -20,7 +20,7 @@
     "npm:remark-gfm@^4.0.1": "4.0.1",
     "npm:typescript@^6.0.3": "6.0.3",
     "npm:vite@^7.1.7": "7.3.6",
-    "npm:wysimark-lite@~0.27.14": "0.27.14_react@19.2.7_react-dom@19.2.7__react@19.2.7_@types+react@19.2.17"
+    "npm:wysimark-lite@^1.0.2": "1.0.2_react@19.2.7_react-dom@19.2.7_@types+react@19.2.17"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -151,8 +151,8 @@
         "@babel/helper-plugin-utils"
       ]
     },
-    "@babel/runtime@7.29.7": {
-      "integrity": "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="
+    "@babel/runtime@7.29.10": {
+      "integrity": "sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA=="
     },
     "@babel/template@7.29.7": {
       "integrity": "sha512-puq+Gf35oI24FeN11LkoUQFqv9uwNeWpxXZi/Ji3rRIoKAzKnxRaZ+Gkj0vKS9ZCiTESfng1N9LyOyXvo+m+Gg==",
@@ -255,7 +255,7 @@
     "@emotion/sheet@1.4.0": {
       "integrity": "sha512-fTBW9/8r2w3dXWYM4HCB1Rdp8NLibOw2+XELH5m5+AkWiL/KqYX6dc0kKYlaYyKjrQ6ds33MCdMPEwgs2z1rqg=="
     },
-    "@emotion/styled@11.14.1_@emotion+react@11.14.0__react@19.2.7_react@19.2.7": {
+    "@emotion/styled@11.14.1_@emotion+react@11.14.0_react@19.2.7": {
       "integrity": "sha512-qEEJt42DuToa3gurlH4Qqc1kVpNq8wO8cJtDzU46TjlzWjDlsVyevtYCRijVq3SrHsROS+gVQ8Fnea108GnKzw==",
       "dependencies": [
         "@babel/runtime",
@@ -2429,8 +2429,8 @@
     "resolve-from@4.0.0": {
       "integrity": "sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g=="
     },
-    "resolve@1.22.12": {
-      "integrity": "sha512-TyeJ1zif53BPfHootBGwPRYT1RUt6oGWsaQr8UyZW/eAm9bKoijtvruSDEmZHm92CwS9nj7/fWttqPCgzep8CA==",
+    "resolve@1.22.13": {
+      "integrity": "sha512-Dj/cW9zBV2aRj6XzCxuGIs3ESZKv02jixne3q6jFZYZ3/Tg09gHHviSMDL4kObh9pqSahdRHEnDoaP2gn8YLhA==",
       "dependencies": [
         "es-errors",
         "is-core-module",
@@ -2531,7 +2531,7 @@
         "slate"
       ]
     },
-    "slate-react@0.120.0_react@19.2.7_react-dom@19.2.7__react@19.2.7_slate@0.120.0_slate-dom@0.119.0__slate@0.120.0": {
+    "slate-react@0.120.0_react@19.2.7_react-dom@19.2.7_slate@0.120.0_slate-dom@0.119.0": {
       "integrity": "sha512-CMEJzozriddBjVmbxNvc2erCkXUuEkgdXIdM+jEMvxWMb51z0zhIVzgoxbGprVpzwBXY8Kv7aZOUDVMomzWH/g==",
       "dependencies": [
         "@juggle/resize-observer",
@@ -2777,8 +2777,8 @@
       ],
       "bin": true
     },
-    "wysimark-lite@0.27.14_react@19.2.7_react-dom@19.2.7__react@19.2.7_@types+react@19.2.17": {
-      "integrity": "sha512-aUutIn/UtJA2nK+c2oTKeopa4X+Ky0L6FIaiGHHc4gFRKyr5gSprbvioHcok+oqlqVUHZKe0h1K/Gx5wVhJvUw==",
+    "wysimark-lite@1.0.2_react@19.2.7_react-dom@19.2.7_@types+react@19.2.17": {
+      "integrity": "sha512-iToI0CVHRmF2wkKmvin14MMgJuK8Y26WS+PIzNH8phAUjSamx6M+o81w/0pApxolz72K95OEmfoDG1c6jSHbPA==",
       "dependencies": [
         "@emotion/core",
         "@emotion/react",
@@ -2846,7 +2846,7 @@
         "npm:remark-gfm@^4.0.1",
         "npm:typescript@^6.0.3",
         "npm:vite@^7.1.7",
-        "npm:wysimark-lite@~0.27.14"
+        "npm:wysimark-lite@^1.0.2"
       ]
     }
   }

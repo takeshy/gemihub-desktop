@@ -136,6 +136,8 @@ Markdown、PDF、EPUBの文章を選択し、ドキュメントの横で引用�
 
 PDF、HTMLの調査ノート、Markdown、各種ツールを行・列に配置し、Dashboardを可搬なYAMLファイルとして保存できます。
 
+ExplorerやFinderから関連付けられたファイルを開くと、特殊な `single` Dashboardでそのファイルだけを表示します。分割やウィジェット追加を選ぶと、既存のDashboardを選択するか新規作成でき、開いていたファイルを引き継ぎます。ファイルを指定せずに起動すると、`single` を含む前回のDashboardを復元します。
+
 ![GemiHubの行レイアウト](docs/images/row.png)
 
 ### 知識を見失わない

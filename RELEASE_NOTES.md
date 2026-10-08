@@ -1,3 +1,13 @@
+# GemiHub Desktop v1.8.1
+
+## Changes
+
+- Associated files open alone in a special `single` Dashboard. Splitting or adding
+  a widget lets you choose an existing Dashboard or create one while carrying
+  the open file over. Normal launches restore the last Dashboard, including `single`.
+- Removed the redundant Workspace label from the FileTree toolbar.
+- Updated wysimark-lite to 1.0.2 and Wails to v3.0.0-beta.28.
+
 # GemiHub Desktop v1.8.0
 
 ## What's new

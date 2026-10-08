@@ -54,6 +54,7 @@ import { FileTree } from "./components/FileTree";
 import { PluginHost } from "./plugins/PluginHost";
 import { DashboardView } from "./dashboard/DashboardView";
 import { DashboardToolbar } from "./dashboard/DashboardToolbar";
+import { carrySingleFile, dashboardSessionKeys, initialDashboardSession, SINGLE_DASHBOARD, singleDashboard } from "./dashboard/dashboardSession";
 import {
   KanbanDashboardWidget,
   SecretManagerDashboardWidget,
@@ -1063,6 +1064,7 @@ export default function App() {
   );
   const [activeDashboardPath, setActiveDashboardPath] = useState("");
   const [homeDashboardPath, setHomeDashboardPath] = useState("");
+  const [dashboardChoiceRequest, setDashboardChoiceRequest] = useState(0);
   const [dashboardRawMode, setDashboardRawMode] = useState(false);
   const [dashboardRaw, setDashboardRaw] = useState(() =>
     serializeDashboard(readDashboard())
@@ -1265,6 +1267,8 @@ export default function App() {
   const appMenuRef = useRef<HTMLDivElement>(null);
   const [directoryContextLoaded, setDirectoryContextLoaded] = useState(false);
   const [startupPaths, setStartupPaths] = useState<string[] | null>(null);
+  const startupDashboardInitializedRef = useRef(false);
+  const [dashboardStartupPaths, setDashboardStartupPaths] = useState<string[]>([]);
   const [workspaceContextLoaded, setWorkspaceContextLoaded] = useState(false);
   const [dashboardContextReady, setDashboardContextReady] = useState(false);
   const [aiEnabled, setAIEnabled] = useState(() =>
@@ -1404,6 +1408,10 @@ export default function App() {
     (action: SetStateAction<DashboardData>) => {
       setDashboard((current) => {
         const next = typeof action === "function" ? action(current) : action;
+        if (activeDashboardPath === SINGLE_DASHBOARD && next.widgets.length > 1) {
+          setDashboardChoiceRequest((value) => value + 1);
+          return current;
+        }
         if (JSON.stringify(next) === JSON.stringify(current)) return current;
         const now = Date.now();
         const removedWidget = next.widgets.length < current.widgets.length;
@@ -1419,7 +1427,7 @@ export default function App() {
         return next;
       });
     },
-    [],
+    [activeDashboardPath],
   );
 
   const replaceDashboard = useCallback((next: DashboardData, path = "") => {
@@ -1445,21 +1453,16 @@ export default function App() {
   }, []);
 
   const openDashboardFile = useCallback(async (path: string) => {
-    const dashboardPath = path;
-    const loaded = await loadDashboard(path);
+    const keys = dashboardSessionKeys(workspaceState.activeWorkspaceId);
+    const loaded = path === SINGLE_DASHBOARD
+      ? singleDashboard(parseDashboard(localStorage.getItem(keys.single) || "") ?? defaultDashboard())
+      : await loadDashboard(path);
     if (!loaded) {
-      setDashboardError(`Cannot parse dashboard: ${dashboardPath}`);
+      setDashboardError(`Cannot parse dashboard: ${path}`);
       return false;
     }
-    replaceDashboard(loaded, dashboardPath);
-    if (workspaceState.activeWorkspaceId) {
-      localStorage.setItem(
-        `gemihub-desktop:last-dashboard:${
-          encodeURIComponent(workspaceState.activeWorkspaceId)
-        }`,
-        dashboardPath,
-      );
-    }
+    replaceDashboard(loaded, path);
+    localStorage.setItem(keys.last, path);
     return true;
   }, [workspaceState.activeWorkspaceId, replaceDashboard]);
 
@@ -1791,105 +1794,60 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     if (!directoryContextLoaded || startupPaths === null) return;
-    if (startupPaths.length > 0) {
-      // Restore the persisted Dashboard first, then let DashboardView open the
-      // associated file exactly once. Opening it in the default Dashboard first
-      // races restoration and can leave the previously persisted file visible.
-      if (!workspaceContextLoaded) return;
-      if (!workspaceState.activeWorkspaceId) {
-        setDashboardContextReady(true);
-        return;
+    if (!workspaceContextLoaded) return;
+    setDashboardContextReady(false);
+    setDashboardFiles([]);
+    setHomeDashboardPath("");
+    setActiveChatFile(null);
+    void (async () => {
+      const keys = dashboardSessionKeys(workspaceState.activeWorkspaceId);
+      const { associatedLaunch, restoreSingle } = initialDashboardSession(
+        startupPaths, localStorage.getItem(keys.last), startupDashboardInitializedRef.current,
+      );
+      setDashboardStartupPaths(associatedLaunch ? startupPaths.slice(0, 1) : []);
+      // Publish a clean single dashboard before mounting widgets. Never hydrate
+      // the previous dashboard when an associated file is being opened.
+      if (associatedLaunch) {
+        replaceDashboard(singleDashboard(), SINGLE_DASHBOARD);
+        localStorage.setItem(keys.single, serializeDashboard(singleDashboard()));
+      } else if (restoreSingle) {
+        await openDashboardFile(SINGLE_DASHBOARD);
+      } else {
+        replaceDashboard(workspaceState.activeWorkspaceId ? defaultDashboard() : readDashboard(), "");
       }
-      setDashboardContextReady(false);
-      void (async () => {
+      if (workspaceState.activeWorkspaceId) {
         const files = await listDashboardFiles();
         if (cancelled) return;
         setDashboardFiles(files);
-        const homeKey = `gemihub-desktop:home-dashboard:${
-          encodeURIComponent(workspaceState.activeWorkspaceId)
-        }`;
-        const lastKey = `gemihub-desktop:last-dashboard:${
-          encodeURIComponent(workspaceState.activeWorkspaceId)
-        }`;
-        const preferred = localStorage.getItem(lastKey) ||
-          localStorage.getItem(homeKey);
-        const target = files.find((file) => file.path === preferred)?.path ||
-          files[0]?.path;
-        setHomeDashboardPath(target || "");
-        if (target) await openDashboardFile(target);
-        else {
-          const path = "Dashboards/home.dashboard";
-          const data = defaultDashboard();
-          await saveDashboard(path, data);
-          if (cancelled) return;
-          setDashboardFiles(await listDashboardFiles());
-          replaceDashboard(data, path);
-          localStorage.setItem(homeKey, path);
-          setHomeDashboardPath(path);
+        const home = localStorage.getItem(keys.home) || "";
+        setHomeDashboardPath(files.find((file) => file.path === home)?.path || "");
+        if (!associatedLaunch && !restoreSingle) {
+          const preferred = localStorage.getItem(keys.last) || home;
+          const target = files.find((file) => file.path === preferred)?.path || files[0]?.path;
+          if (target) await openDashboardFile(target);
+          else {
+            const path = "Dashboards/home.dashboard";
+            const data = defaultDashboard();
+            await saveDashboard(path, data);
+            if (cancelled) return;
+            setDashboardFiles(await listDashboardFiles());
+            replaceDashboard(data, path);
+            localStorage.setItem(keys.home, path);
+            setHomeDashboardPath(path);
+          }
         }
-        if (!cancelled) setDashboardContextReady(true);
-      })().catch((error) => {
-        if (!cancelled) {
-          setDashboardError(
-            error instanceof Error ? error.message : String(error),
-          );
-          setDashboardContextReady(true);
-        }
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-    if (!workspaceContextLoaded) return;
-    setDashboardContextReady(false);
-    setActiveDashboardPath("");
-    setHomeDashboardPath("");
-    setDashboardFiles([]);
-    setActiveChatFile(null);
-    setDashboardRawMode(false);
-    replaceDashboard(defaultDashboard(), "");
-    if (!workspaceState.activeWorkspaceId) {
-      setDashboardContextReady(true);
-      return;
-    }
-    void (async () => {
-      const files = await listDashboardFiles();
-      if (cancelled) return;
-      setDashboardFiles(files);
-      const homeKey = `gemihub-desktop:home-dashboard:${
-        encodeURIComponent(workspaceState.activeWorkspaceId)
-      }`;
-      const lastKey = `gemihub-desktop:last-dashboard:${
-        encodeURIComponent(workspaceState.activeWorkspaceId)
-      }`;
-      const preferred = localStorage.getItem(lastKey) ||
-        localStorage.getItem(homeKey);
-      const target = files.find((file) => file.path === preferred)?.path ||
-        files[0]?.path;
-      setHomeDashboardPath(target || "");
-      if (target) await openDashboardFile(target);
-      else {
-        const path = "Dashboards/home.dashboard";
-        const data = defaultDashboard();
-        await saveDashboard(path, data);
-        if (cancelled) return;
-        setDashboardFiles(await listDashboardFiles());
-        replaceDashboard(data, path);
-        localStorage.setItem(homeKey, path);
-        setHomeDashboardPath(path);
       }
-      if (!cancelled) setDashboardContextReady(true);
+      if (!cancelled) {
+        startupDashboardInitializedRef.current = true;
+        setDashboardContextReady(true);
+      }
     })().catch((error) => {
       if (!cancelled) {
-        setDashboardError(
-          error instanceof Error ? error.message : String(error),
-        );
+        setDashboardError(error instanceof Error ? error.message : String(error));
         setDashboardContextReady(true);
       }
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [
     workspacePath,
     directoryContextLoaded,
@@ -1901,8 +1859,17 @@ export default function App() {
   ]);
 
   useEffect(() => {
+    if (!dashboardContextReady) return;
+    const keys = dashboardSessionKeys(workspaceState.activeWorkspaceId);
+    localStorage.setItem(keys.last, activeDashboardPath);
+    if (activeDashboardPath === SINGLE_DASHBOARD) {
+      localStorage.setItem(keys.single, serializeDashboard(persistenceDashboard(singleDashboard(dashboard))));
+    }
+  }, [dashboardContextReady, workspaceState.activeWorkspaceId, activeDashboardPath, dashboard]);
+
+  useEffect(() => {
     if (
-      !activeDashboardPath || loadingDashboardRef.current || dashboardRawMode
+      !activeDashboardPath || activeDashboardPath === SINGLE_DASHBOARD || loadingDashboardRef.current || dashboardRawMode
     ) return;
     const id = window.setTimeout(() => {
       void saveDashboard(activeDashboardPath, persistenceDashboard(dashboard))
@@ -1929,7 +1896,7 @@ export default function App() {
   }, [activeDashboardPath, dashboard, dashboardRawMode]);
 
   useEffect(() => {
-    if (!dashboardRawMode || !activeDashboardPath) return;
+    if (!dashboardRawMode || !activeDashboardPath || activeDashboardPath === SINGLE_DASHBOARD) return;
     const id = window.setTimeout(() => {
       const parsed = parseDashboard(dashboardRaw);
       if (!parsed) {
@@ -2497,6 +2464,18 @@ export default function App() {
           <section className="editor-frame">
             <DashboardToolbar
               files={dashboardFiles}
+              singleMode={activeDashboardPath === SINGLE_DASHBOARD}
+              dashboardChoiceRequest={dashboardChoiceRequest}
+              onChooseDashboard={async (path) => {
+                const target = await loadDashboard(path);
+                if (!target) throw new Error(`Cannot parse dashboard: ${path}`);
+                if (target.widgets.length >= 100) throw new Error("This Dashboard is full. Choose another Dashboard or create one.");
+                const next = carrySingleFile(target, dashboard);
+                await saveDashboard(path, persistenceDashboard(next));
+                replaceDashboard(next, path);
+                setEqualizeLayoutRequest((value) => ({ id: value.id + 1, direction: activeLayoutDirectionRef.current }));
+                setAddWidgetRequest((value) => ({ id: value.id + 1, direction: activeLayoutDirectionRef.current, type: "palette" }));
+              }}
               activePath={activeDashboardPath}
               homePath={homeDashboardPath}
               rawMode={dashboardRawMode}
@@ -2510,7 +2489,13 @@ export default function App() {
                 try {
                   const created = await createDashboard(name);
                   await refreshDashboardFiles();
-                  replaceDashboard(created.data, created.path);
+                  const next = activeDashboardPath === SINGLE_DASHBOARD
+                    ? carrySingleFile(created.data, dashboard) : created.data;
+                  await saveDashboard(created.path, persistenceDashboard(next));
+                  replaceDashboard(next, created.path);
+                  if (activeDashboardPath === SINGLE_DASHBOARD) {
+                    setAddWidgetRequest((value) => ({ id: value.id + 1, direction: activeLayoutDirectionRef.current, type: "palette" }));
+                  }
                 } catch (error) {
                   setDashboardError(
                     error instanceof Error ? error.message : String(error),
@@ -2572,6 +2557,12 @@ export default function App() {
               onUndo={undoDashboard}
               onRedo={redoDashboard}
               onLayoutDirection={(direction) => {
+                if (activeDashboardPath === SINGLE_DASHBOARD) {
+                  activeLayoutDirectionRef.current = direction;
+                  setActiveLayoutDirection(direction);
+                  setDashboardChoiceRequest((value) => value + 1);
+                  return;
+                }
                 if (direction !== activeLayoutDirectionRef.current) {
                   activeLayoutDirectionRef.current = direction;
                   setActiveLayoutDirection(direction);
@@ -2582,12 +2573,17 @@ export default function App() {
                   direction,
                 }));
               }}
-              onAddWidget={() =>
+              onAddWidget={() => {
+                if (activeDashboardPath === SINGLE_DASHBOARD) {
+                  setDashboardChoiceRequest((value) => value + 1);
+                  return;
+                }
                 setAddWidgetRequest((value) => ({
                   id: value.id + 1,
                   direction: activeLayoutDirectionRef.current,
                   type: "palette",
-                }))}
+                }));
+              }}
               onToggleRaw={() => {
                 if (!dashboardRawMode) {
                   setDashboardRaw(
@@ -2627,9 +2623,11 @@ export default function App() {
                 </div>
               )
               : (
-                <DashboardView
+                dashboardContextReady && <DashboardView
                   data={dashboard}
                   onChange={updateDashboard}
+                  onRequireDashboard={() => setDashboardChoiceRequest((value) => value + 1)}
+                  onStartupFilesHandled={() => setDashboardStartupPaths([])}
                   documentMarkdown={content}
                   onDocumentMarkdownChange={setContent}
                   markdownMode={markdownMode}
@@ -2695,7 +2693,7 @@ export default function App() {
                   directoryBase={workspacePath}
                   workspaceBase={directoryBase}
                   dashboardPath={activeDashboardPath}
-                  startupPaths={dashboardContextReady ? startupPaths : null}
+                  startupPaths={dashboardStartupPaths}
                   pluginWidgetRequest={pluginWidgetRequest}
                   onExternalPathOpened={handleExternalPathOpened}
                 />

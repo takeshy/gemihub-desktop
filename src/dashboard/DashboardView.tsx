@@ -54,6 +54,7 @@ import {
   writeFile,
 } from "../lib/wailsBackend";
 import type { EqualizeLayoutDirection, MarkdownMode } from "../App";
+import { SINGLE_DASHBOARD } from "./dashboardSession";
 import type { DashboardData, DashboardWidget, LayoutPos } from "./types";
 import { type ChatSettings, configuredChatProviders } from "../llm/settings";
 import type { ActiveSelection } from "../llm/selection";
@@ -630,6 +631,8 @@ export function DashboardView({
   workspaceBase,
   dashboardPath,
   startupPaths,
+  onStartupFilesHandled,
+  onRequireDashboard,
   pluginWidgetRequest,
   onExternalPathOpened,
 }: {
@@ -690,6 +693,8 @@ export function DashboardView({
   workspaceBase: string;
   dashboardPath?: string;
   startupPaths: string[] | null;
+  onStartupFilesHandled: () => void;
+  onRequireDashboard: () => void;
   pluginWidgetRequest: {
     id: number;
     type: string;
@@ -1394,6 +1399,10 @@ export function DashboardView({
   const openOrUpdatePluginWidget = useCallback(
     (type: string, config: Record<string, unknown>): string | undefined => {
       const existing = data.widgets.find((widget) => widget.type === type);
+      if (!existing && dashboardPath === SINGLE_DASHBOARD && data.widgets.length > 0) {
+        onRequireDashboard();
+        return undefined;
+      }
       if (!existing && data.widgets.length >= MAX_WIDGETS) return undefined;
       const next = existing
         ? null
@@ -1434,7 +1443,7 @@ export function DashboardView({
       setMaximizedWidgetId(targetId);
       return targetId;
     },
-    [activeLayoutDirection, buildAddedWidgets, cols, data.widgets, onChange],
+    [activeLayoutDirection, buildAddedWidgets, cols, dashboardPath, data.widgets, onChange, onRequireDashboard],
   );
 
   const openPluginWidgetForPath = useCallback(
@@ -1478,6 +1487,10 @@ export function DashboardView({
       filePath?: string,
       extraConfig: Record<string, unknown> = {},
     ) => {
+      if (dashboardPath === SINGLE_DASHBOARD && data.widgets.length > 0) {
+        onRequireDashboard();
+        return undefined;
+      }
       const nextWidgetId = crypto.randomUUID();
       onChange((current) => {
         if (current.widgets.length >= MAX_WIDGETS) return current;
@@ -1505,6 +1518,9 @@ export function DashboardView({
     [
       buildAddedWidgets,
       cols,
+      dashboardPath,
+      data.widgets.length,
+      onRequireDashboard,
       onChange,
       recordRecentFile,
       revealGenericFileWidget,
@@ -1799,8 +1815,10 @@ export function DashboardView({
           filePickerCreateDirection,
           filePath,
         );
-        setActiveWidgetId(widgetId);
-        setMaximizedWidgetId(widgetId);
+        if (widgetId) {
+          setActiveWidgetId(widgetId);
+          setMaximizedWidgetId(widgetId);
+        }
       } else if (filePickerTargetId) {
         openFileInWidget(filePickerTargetId, fileName, content, mode, filePath);
         setActiveWidgetId(filePickerTargetId);
@@ -1973,9 +1991,9 @@ export function DashboardView({
   );
 
   const openKnownPathInLastActiveWidget = useCallback(
-    async (path: string) => {
+    async (path: string, associatedLaunch = false) => {
       const dashboardTarget = workspaceDashboardPath(path);
-      if (dashboardTarget) {
+      if (dashboardTarget && !associatedLaunch) {
         await onOpenDashboard(dashboardTarget);
         return undefined;
       }
@@ -2122,7 +2140,8 @@ export function DashboardView({
   }, [openKnownPathInLastActiveWidget, tr]);
 
   const openMemoSourceMaximized = useCallback(async (path: string) => {
-    const maximize = (widgetId: string) => {
+    const maximize = (widgetId: string | undefined) => {
+      if (!widgetId) return undefined;
       lastActiveFileWidgetIdRef.current = widgetId;
       setActiveWidgetId(widgetId);
       setMaximizedWidgetId(widgetId);
@@ -2286,12 +2305,13 @@ export function DashboardView({
     void (async () => {
       const paths = startupPaths;
       if (!paths.length) return;
+      onStartupFilesHandled();
       onExternalPathOpened(paths[0]);
 
       for (const [index, path] of paths.entries()) {
         try {
           if (index === 0) {
-            const widgetId = await openKnownPathInLastActiveWidget(path);
+            const widgetId = await openKnownPathInLastActiveWidget(path, true);
             if (widgetId) {
               setActiveWidgetId(widgetId);
               setMaximizedWidgetId(widgetId);
@@ -2310,6 +2330,7 @@ export function DashboardView({
     onExternalPathOpened,
     openKnownPathInLastActiveWidget,
     openPathAsWidget,
+    onStartupFilesHandled,
     startupPaths,
   ]);
 
@@ -2349,6 +2370,10 @@ export function DashboardView({
     type: DashboardWidget["type"],
     direction: EqualizeLayoutDirection,
   ) => {
+    if (dashboardPath === SINGLE_DASHBOARD) {
+      onRequireDashboard();
+      return;
+    }
     if (data.widgets.length >= MAX_WIDGETS) return;
     if (type === "palette") {
       setPaletteOpen(true);
@@ -2366,6 +2391,13 @@ export function DashboardView({
       setPendingNewWidgetId(nextWidget.id);
     }
   };
+
+  useEffect(() => {
+    if (dashboardPath !== SINGLE_DASHBOARD) return;
+    const id = data.widgets[0]?.id ?? null;
+    setActiveWidgetId(id);
+    setMaximizedWidgetId(id);
+  }, [dashboardPath, data.widgets]);
 
   const closeWidgetSettings = useCallback(() => {
     const id = settingsWidgetId;
@@ -2419,6 +2451,10 @@ export function DashboardView({
   useEffect(() => {
     if (splitWidgetRequest.id <= handledSplitWidgetRequestRef.current) return;
     handledSplitWidgetRequestRef.current = splitWidgetRequest.id;
+    if (dashboardPath === SINGLE_DASHBOARD) {
+      onRequireDashboard();
+      return;
+    }
     if (!activeWidgetId) return;
     onChange({
       ...data,
@@ -2432,6 +2468,8 @@ export function DashboardView({
     activeWidgetId,
     buildSplitWidgets,
     data.widgets,
+    dashboardPath,
+    onRequireDashboard,
     onChange,
     splitWidgetRequest,
   ]);

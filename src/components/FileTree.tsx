@@ -1325,9 +1325,6 @@ export function FileTree({
         >
           <FolderOpen size={16} />
         </button>
-        <strong className="file-tree-title" title={workspacePath}>
-          Workspace
-        </strong>
         {workspacePath && (
           <>
             <button

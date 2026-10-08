@@ -178,6 +178,11 @@ source.
 Arrange PDFs, HTML research notes, Markdown documents, and tools in rows or
 columns, then save dashboards as portable YAML files.
 
+Opening an associated file from Explorer or Finder opens only that file in the
+special `single` dashboard. Splitting the view or adding a widget lets you choose
+an existing dashboard or create one, carrying the open file into it. Launching
+without a file restores the last dashboard, including `single`.
+
 ![GemiHub row layout](docs/images/row.png)
 
 ### Knowledge remains discoverable
