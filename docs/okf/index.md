@@ -62,3 +62,4 @@ DashboardやWorkflow、pluginなどのアプリ資産を置く場所がWorkspace
 * [OKF知識ソース](/features/okf-knowledge.md) - curated knowledge bundleをChatへ追加する機能。
 * [Plugins](/features/plugins.md) - 権限宣言付き拡張機能の配置、インストール、更新。
 * [Discord bot](/features/discord-bot.md) - 設定済みAIをDiscordから利用する機能。
+* [Kakeratta連携](/features/kakeratta.md) - Kakerattaの外部エージェントとして依頼に回答し、Timelineを同期する機能。

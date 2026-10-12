@@ -19,7 +19,7 @@ Open Knowledge Format（OKF）は、1ファイルを1概念として整理する
 
 active bundleについては、**bundle内の`index.md`の内容だけ**が毎回system promptへ追加されます。個々のconceptファイルの本文は最初から注入されるわけではなく、AIが`read_okf_document`というtoolを呼び出して、bundleIdと`index.md`に書かれているpathを指定したときだけ、その1文書の全文を取得します。これはAgent SkillのWorkflowを`run_skill_workflow`で必要な時だけ実行する仕組みと同じ考え方で、常時の送信量を抑えつつ、必要な詳細だけを都度取りに行かせる設計です。
 
-`GemiHub Desktop Help` built-in bundleの文書はアプリと一緒にレビュー済みのため、`read_okf_document`で取得する本文は全文です。外部bundleの本文は1ファイルあたり最大20,000文字までに制限されます。`log.md`はどちらの場合もpathで直接指定しても取得できません。1bundleの文書数上限（built-in bundleは24）は、あくまでbundle内に置ける文書ファイル数の上限であり、system promptへ注入される量とは別の話です。
+`GemiHub Desktop Help` built-in bundleの文書はアプリと一緒にレビュー済みのため、`read_okf_document`で取得する本文は全文です。外部bundleの本文は1ファイルあたり最大20,000文字までに制限されます。`log.md`はどちらの場合もpathで直接指定しても取得できません。1bundleの文書数上限（built-in bundleは25）は、あくまでbundle内に置ける文書ファイル数の上限であり、system promptへ注入される量とは別の話です。
 
 OKFはcurated knowledge向けです。全文検索が必要な大量資料には[Local RAG](/features/local-rag.md)を使います。
 

@@ -6,7 +6,8 @@ Deno.test("generated built-in OKF gzip asset contains all product help", async (
     new URL("../generated/builtin-okf.json.gz", import.meta.url),
   );
   const documents = decodeBuiltinOkfDocuments(compressed);
-  assertEquals(documents.length, 24);
+  assertEquals(documents.length, 25);
+  assert(documents.some((document) => document.path === "features/kakeratta.md"));
   const index = documents.find((document) => document.path === "index.md");
   assert(index);
   assertStringIncludes(index.body, "重要なファイルは履歴に加えて別媒体にもバックアップしてください");

@@ -40,9 +40,19 @@ dateを今日として扱います。
 
 投稿は`Dashboards/Timeline/<Timeline名>/`配下にMarkdownとして保存され、[引用付きメモ](/features/document-memos.md)と同じ投稿ファイル形式を共有しています。本文中に書いた`#タグ`は自動的に抽出され、絞り込み用のタグ一覧に使われます（frontmatterのtagsではなく本文中の記法です）。長い投稿は行数・文字数のしきい値を超えると折りたたまれ、「もっと見る」で展開します。
 
-# AIによる文章の見直し
+# 返信とスレッド
 
-投稿の作成時・既存投稿の編集時に、AIへ文章の改善を依頼できます（既定の指示は「意味を保ったまま明確さを改善する」）。誤字調整や言い回しの整理をその場で依頼したいときに使えます。
+投稿には返信できます。返信への返信も可能で、`root-id`・`reply-to`・`author-name`などのメタデータとして同じMarkdownファイルに保存されます。会話は日付ごとのファイルをまたいでまとまり、返信数を展開するとスレッドを表示します。検索・日付・タグ・ピン留めの絞り込みは、一致した投稿を含む会話全体を表示します。編集とピン留めでは作者・スレッド・同期用のメタデータが保持されます。Kakeratta連携で同期済みの投稿を削除すると、削除の記録（`deleted: true`）が残り、削除がKakerattaへ伝わります。
+
+# @aiによる返信
+
+投稿に`@ai`を含めると、AIがそのスレッド全体を文脈として返信を投稿します。`教えて@ai`のように日本語へ続けて書けますが、メールアドレスや`@aiden`のような長いハンドルには反応しません。`@ai`を含む投稿を編集して保存すると、もう一度AIへ質問します。投稿フォームの設定ボタンで、回答モデル・Workspaceファイルの読み取り専用参照・Web検索を選べます（設定はこのPCに保存されます）。AIの返信は端末内のみで、Kakerattaには同期されません。
+
+以前の「AIによる文章の見直し」（Edit with AI）は廃止され、`@ai`を含む投稿で質問する方式に置き換わりました。
+
+# Kakerattaとの同期
+
+[Kakeratta連携](/features/kakeratta.md)の設定で、名前を指定したTimelineをKakerattaと同期できます。
 
 # rename時の注意
 
@@ -51,4 +61,4 @@ widgetの名前を変更すると、参照するfolderが変わるため、既�
 
 # 関連機能
 
-[Dashboard](/features/dashboards.md)、[引用付きメモ](/features/document-memos.md)、[AI Chat](/features/ai-chat.md)
+[Dashboard](/features/dashboards.md)、[Kakeratta連携](/features/kakeratta.md)、[引用付きメモ](/features/document-memos.md)、[AI Chat](/features/ai-chat.md)

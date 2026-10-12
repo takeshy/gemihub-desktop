@@ -80,6 +80,8 @@ import {
 } from "./dashboard/dashboardFile";
 import type { DashboardFileEntry } from "./dashboard/types";
 import { I18nProvider, useI18n } from "./i18n/context";
+import { KakerattaSettingsPanel } from "./kakeratta/KakerattaSettingsPanel";
+import { useKakeratta } from "./kakeratta/useKakeratta";
 import {
   type LanguageSetting,
   resolveLanguage,
@@ -1106,6 +1108,7 @@ export default function App() {
     | "skills"
     | "mcp"
     | "discord"
+    | "kakeratta"
     | "plugins"
   >("general");
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
@@ -1622,6 +1625,15 @@ export default function App() {
   useEffect(() => {
     saveChatSettings(chatSettings);
   }, [chatSettings]);
+
+  const kakerattaSettings = aiEnabled ? chatSettings : {
+    ...chatSettings,
+    kakeratta: { ...chatSettings.kakeratta, enabled: false },
+  };
+  const { status: kakerattaStatus, runNow: checkKakerattaNow } = useKakeratta(
+    kakerattaSettings,
+    language,
+  );
 
   useEffect(() => {
     if (!aiEnabled) return;
@@ -3226,6 +3238,15 @@ export default function App() {
                         onClick={() => setSettingsSection("discord")}
                       >
                         <Bot size={16} /> Discord
+                      </button>
+                      <button
+                        type="button"
+                        className={settingsSection === "kakeratta"
+                          ? "active"
+                          : ""}
+                        onClick={() => setSettingsSection("kakeratta")}
+                      >
+                        <Bot size={16} /> Kakeratta
                       </button>
                     </>
                   )}
@@ -6062,6 +6083,15 @@ export default function App() {
                         </>
                       )}
                     </>
+                  )}
+                  {settingsSection === "kakeratta" && (
+                    <KakerattaSettingsPanel
+                      settings={chatSettings}
+                      status={kakerattaStatus}
+                      onChange={(kakeratta) =>
+                        setChatSettings((current) => ({ ...current, kakeratta }))}
+                      onCheckNow={() => void checkKakerattaNow()}
+                    />
                   )}
                   {settingsSection === "discord" && (
                     <>

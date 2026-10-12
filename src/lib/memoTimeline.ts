@@ -4,6 +4,7 @@
 // generic `key: value` metadata (anchor, quote-prefix, quote-suffix).
 
 export interface MemoEntry {
+  metadata?: Record<string, string>;
   id: string;
   createdAt: string;
   pinned: boolean;
@@ -104,6 +105,7 @@ export function parseEntryBlock(raw: string, index: number): MemoEntry {
     anchor !== null,
   );
   return {
+    metadata: Object.fromEntries(meta),
     id,
     createdAt: lines[0].trim(),
     pinned: meta.get("pinned")?.toLowerCase() === "true",
@@ -152,6 +154,7 @@ export function summarizeMemoContent(
 }
 
 export interface MemoEntryFields {
+  metadata?: Record<string, string>;
   createdAt: string;
   id: string;
   pinned?: boolean;
@@ -178,6 +181,12 @@ export function buildEntryBlock(fields: MemoEntryFields): string {
   if (fields.quoteSuffix) {
     lines.push(`quote-suffix: ${normalizeMetaValue(fields.quoteSuffix)}`);
   }
+  for (const [key, value] of Object.entries(fields.metadata ?? {})) {
+    if (
+      !["id", "pinned", "anchor", "quote-prefix", "quote-suffix"].includes(key) &&
+      /^[a-z][a-z0-9-]*$/.test(key)
+    ) lines.push(`${key}: ${normalizeMetaValue(value)}`);
+  }
 
   const sections = [lines.join("\n")];
   if (fields.quote?.trim()) {
@@ -192,6 +201,7 @@ export function buildEntryBlock(fields: MemoEntryFields): string {
 function entryToBlock(entry: MemoEntry): string {
   if (!entry.parsed) return entry.raw;
   return buildEntryBlock({
+    metadata: entry.metadata,
     createdAt: entry.createdAt,
     id: entry.id,
     pinned: entry.pinned,

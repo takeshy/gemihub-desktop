@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clipboard,
   Code,
   Database,
@@ -30,12 +31,14 @@ import {
   Link,
   Loader2,
   Lock,
+  MessageSquare,
   Paperclip,
   PenLine,
   Plus,
   Puzzle,
   RefreshCw,
   Search,
+  Settings2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -54,6 +57,23 @@ import {
   wikiTargetToPath,
 } from "../lib/wikiLinks";
 import { encryptWorkspaceFile } from "../lib/fileEncryption";
+import { generateHeadlessText } from "../llm/headlessChat";
+import { configuredModelOptions } from "../llm/settings";
+import {
+  buildTimelineAiPrompt,
+  hasAiMention,
+  loadTimelineAiSettings,
+  saveTimelineAiSettings,
+  TIMELINE_ANSWER_INSTRUCTION,
+  type TimelineAiSettings,
+} from "../lib/timelineAi";
+import {
+  changeTimelineEntry,
+  parseTimeline,
+  type TimelineEntry,
+  timelineThreads,
+} from "../lib/timelineFormat";
+import { withTimelineFileLock } from "../lib/timelineLocalLock";
 import {
   appendEntryBlock,
   buildEntryBlock,
@@ -433,6 +453,27 @@ interface TimelineItem {
   createdAt: string;
   body: string;
   pinned: boolean;
+  rootId: string;
+  replyTo: string;
+  speaker: string;
+  authorName: string;
+  metadata: Record<string, string>;
+}
+
+function timelineItem(entry: TimelineEntry): TimelineItem {
+  return {
+    path: entry.sourcePath,
+    id: entry.id,
+    index: entry.index,
+    createdAt: entry.createdAt,
+    body: entry.content,
+    pinned: entry.pinned,
+    rootId: entry.rootId,
+    replyTo: entry.replyTo,
+    speaker: entry.speaker,
+    authorName: entry.authorName,
+    metadata: entry.metadata,
+  };
 }
 function timelineTags(body: string): string[] {
   return [
@@ -639,12 +680,13 @@ export function TimelineDashboardWidget(
   const pageSize = Math.max(1, Number(config.latestCount) || 20),
     collapseLines = Math.max(1, Number(config.collapseLineLimit) || 8),
     collapseChars = Math.max(80, Number(config.collapseCharLimit) || 520);
-  const [items, setItems] = useState<TimelineItem[] | null>(null),
+  const [entries, setEntries] = useState<TimelineEntry[] | null>(null),
     [visibleCount, setVisibleCount] = useState(pageSize),
     [draft, setDraft] = useState(""),
     [attachments, setAttachments] = useState<File[]>([]),
-    [aiBusy, setAIBusy] = useState(false),
+    [aiBusyId, setAIBusyId] = useState<string | null>(null),
     [error, setError] = useState("");
+  const aiBusyRef = useRef(false);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false),
     [word, setWord] = useState(""),
@@ -655,46 +697,40 @@ export function TimelineDashboardWidget(
   const [composerOpen, setComposerOpen] = useState(initialComposerOpen),
     [editing, setEditing] = useState<TimelineItem | null>(null),
     [expandedPosts, setExpandedPosts] = useState<Set<string>>(() => new Set()),
+    [openThreads, setOpenThreads] = useState<Set<string>>(() => new Set()),
+    [replyTarget, setReplyTarget] = useState<TimelineItem | null>(null),
     [editDraft, setEditDraft] = useState(""),
-    [aiTarget, setAITarget] = useState<"draft" | "edit" | null>(null),
-    [previewPath, setPreviewPath] = useState(""),
-    [aiInstruction, setAIInstruction] = useState(
-      "Improve clarity while preserving meaning.",
+    [aiPanelOpen, setAIPanelOpen] = useState(false),
+    [aiSettings, setAISettings] = useState(loadTimelineAiSettings),
+    [previewPath, setPreviewPath] = useState("");
+  const updateAISettings = (patch: Partial<TimelineAiSettings>) =>
+    setAISettings((current) => {
+      const next = { ...current, ...patch };
+      saveTimelineAiSettings(next);
+      return next;
+    });
+  const readAllEntries = useCallback(async () => {
+    const paths = (await listWorkspaceDirectoryFiles(folder)).filter((path) =>
+      /\/\d{4}-\d{2}-\d{2}\.md$/i.test(path)
     );
+    const loaded = await Promise.all(
+      paths.map(async (path) => ({
+        path,
+        file: await readWorkspaceFile(path),
+      })),
+    );
+    return loaded.flatMap(({ path, file }) =>
+      file ? parseTimeline(file.content, path) : []
+    );
+  }, [folder]);
   const load = useCallback(async () => {
     try {
-      const paths = (await listWorkspaceDirectoryFiles(folder)).filter((path) =>
-        /\/\d{4}-\d{2}-\d{2}\.md$/i.test(path)
-      );
-      const loaded = await Promise.all(
-        paths.map(async (path) => ({
-          path,
-          file: await readWorkspaceFile(path),
-        })),
-      );
-      const next = loaded.flatMap(({ path, file }) =>
-        file
-          ? parseMemoFile(file.content).entries.map((entry, index) => ({
-            path,
-            id: entry.id,
-            index,
-            createdAt: entry.createdAt,
-            body: entry.body || entry.quote,
-            pinned: entry.pinned,
-          }))
-          : []
-      );
-      setItems(
-        next.sort((a, b) => {
-          const byTime = Date.parse(b.createdAt) - Date.parse(a.createdAt);
-          return byTime || b.index - a.index;
-        }),
-      );
+      setEntries(await readAllEntries());
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     }
-  }, [folder]);
+  }, [readAllEntries]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -720,12 +756,82 @@ export function TimelineDashboardWidget(
     to,
     pinnedOnly,
   ]);
+  /** Read the whole thread and save the AI's answer as a local reply. */
+  const answerPost = async (question: TimelineItem) => {
+    if (aiBusyRef.current) return;
+    aiBusyRef.current = true;
+    setAIBusyId(question.id);
+    setOpenThreads((current) => new Set(current).add(question.rootId));
+    try {
+      const thread = timelineThreads(await readAllEntries()).find((candidate) =>
+        [candidate.root, ...candidate.replies].some((entry) =>
+          entry.id === question.id && !entry.deleted
+        )
+      );
+      const questionEntry = thread &&
+        [thread.root, ...thread.replies].find((entry) =>
+          entry.id === question.id
+        );
+      if (!thread || !questionEntry) throw new Error("The question was deleted");
+      const answer = await generateHeadlessText(settings, {
+        model: aiSettings.model,
+        systemPrompt: TIMELINE_ANSWER_INSTRUCTION,
+        messages: [{
+          role: "user",
+          content: buildTimelineAiPrompt(
+            [thread.root, ...thread.replies],
+            questionEntry,
+          ),
+        }],
+        readFiles: aiSettings.fileRead,
+        webSearch: aiSettings.webSearch,
+      });
+      const now = new Date(),
+        path = `${folder}/${now.toISOString().slice(0, 10)}.md`;
+      await withTimelineFileLock(path, async () => {
+        const current = (await readWorkspaceFile(path))?.content || "";
+        // AI replies stay local: Kakeratta only synchronizes user posts.
+        await writeWorkspaceFile(
+          path,
+          appendEntryBlock(
+            current,
+            `timeline:${name}`,
+            buildEntryBlock({
+              createdAt: now.toISOString(),
+              id: uniqueEntryId(current, now),
+              metadata: {
+                speaker: "ai",
+                "author-name": "AI",
+                "root-id": thread.root.id,
+                "reply-to": question.id,
+                "local-only": "true",
+              },
+              body: answer,
+            }),
+          ),
+        );
+      });
+      window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
+      await load();
+    } catch (caught) {
+      setError(
+        `AI reply failed: ${
+          caught instanceof Error ? caught.message : String(caught)
+        }`,
+      );
+    } finally {
+      aiBusyRef.current = false;
+      setAIBusyId(null);
+    }
+  };
   const post = async () => {
-    if (!draft.trim()) return;
+    if (!draft.trim() && attachments.length === 0) return;
+    const askAI = hasAiMention(draft);
+    if (askAI && aiBusyRef.current) return;
     const now = new Date(),
-      path = `${folder}/${now.toISOString().slice(0, 10)}.md`,
-      current = (await readWorkspaceFile(path))?.content || "",
-      id = uniqueEntryId(current, now);
+      path = `${folder}/${now.toISOString().slice(0, 10)}.md`;
+    const probe = (await readWorkspaceFile(path))?.content || "",
+      id = uniqueEntryId(probe, now);
     const embeds: string[] = [];
     for (const [index, file] of attachments.entries()) {
       const extension =
@@ -739,100 +845,132 @@ export function TimelineDashboardWidget(
       await writeWorkspaceBinaryFile(target, btoa(binary));
       embeds.push(`![[${target}]]`);
     }
-    await writeWorkspaceFile(
+    const body = `${draft}${embeds.length ? `\n\n${embeds.join("\n")}` : ""}`;
+    const metadata: Record<string, string> = { speaker: "user" };
+    if (replyTarget) {
+      metadata["root-id"] = replyTarget.rootId;
+      metadata["reply-to"] = replyTarget.id;
+      if (replyTarget.metadata["local-only"] === "true") {
+        metadata["local-only"] = "true";
+      }
+    }
+    // Re-read inside the lock so a concurrent sync or reply is never lost.
+    let createdId = "";
+    await withTimelineFileLock(path, async () => {
+      const current = (await readWorkspaceFile(path))?.content || "";
+      createdId = uniqueEntryId(current, now);
+      await writeWorkspaceFile(
+        path,
+        appendEntryBlock(
+          current,
+          `timeline:${name}`,
+          buildEntryBlock({
+            createdAt: now.toISOString(),
+            id: createdId,
+            metadata,
+            body,
+          }),
+        ),
+      );
+    });
+    const created: TimelineItem = {
       path,
-      appendEntryBlock(
-        current,
-        `timeline:${name}`,
-        buildEntryBlock({
-          createdAt: now.toISOString(),
-          id,
-          body: `${draft}${embeds.length ? `\n\n${embeds.join("\n")}` : ""}`,
-        }),
-      ),
-    );
+      id: createdId,
+      index: 0,
+      createdAt: now.toISOString(),
+      body,
+      pinned: false,
+      rootId: replyTarget?.rootId ?? createdId,
+      replyTo: replyTarget?.id ?? "",
+      speaker: "user",
+      authorName: "",
+      metadata,
+    };
     setDraft("");
     setAttachments([]);
+    setReplyTarget(null);
     setComposerOpen(false);
     window.dispatchEvent(new Event("llm-hub:file-tree-refresh"));
     await load();
+    if (askAI) await answerPost(created);
   };
   const mutate = async (item: TimelineItem, kind: "pin" | "delete") => {
-    const file = await readWorkspaceFile(item.path);
-    if (!file) return;
     if (kind === "delete" && !confirm("Delete this timeline post?")) return;
-    const next = kind === "pin"
-      ? setEntryPinned(file.content, item.id, !item.pinned)
-      : deleteEntry(file.content, item.id);
-    if (next !== null) {
-      await writeWorkspaceFile(item.path, next);
-      await load();
-    }
+    await withTimelineFileLock(item.path, async () => {
+      const file = await readWorkspaceFile(item.path);
+      if (!file) return;
+      // Keep a tombstone even before the first sync so an in-flight upload
+      // cannot restore a post deleted while waiting for its response.
+      const next = kind === "pin"
+        ? setEntryPinned(file.content, item.id, !item.pinned)
+        : changeTimelineEntry(
+          file.content,
+          item.path,
+          item.id,
+          (entry) => ({
+            ...entry,
+            deleted: true,
+            metadata: { ...entry.metadata, deleted: "true" },
+          }),
+        );
+      if (next !== null) await writeWorkspaceFile(item.path, next);
+    });
+    await load();
   };
   const saveEdit = async () => {
     if (!editing || !editDraft.trim()) return;
-    const file = await readWorkspaceFile(editing.path);
-    if (!file) return;
-    const next = replaceEntryBody(file.content, editing.id, editDraft);
-    if (next !== null) {
-      await writeWorkspaceFile(editing.path, next);
-      setEditing(null);
-      await load();
-    }
+    // Saving an @ai post asks the AI again, so wait for a running answer.
+    const askAI = editing.speaker === "user" && hasAiMention(editDraft);
+    if (askAI && aiBusyRef.current) return;
+    let saved = false;
+    await withTimelineFileLock(editing.path, async () => {
+      const file = await readWorkspaceFile(editing.path);
+      if (!file) return;
+      const next = replaceEntryBody(file.content, editing.id, editDraft);
+      if (next !== null) {
+        await writeWorkspaceFile(editing.path, next);
+        saved = true;
+      }
+    });
+    if (!saved) return;
+    const target = { ...editing, body: editDraft.trim() };
+    setEditing(null);
+    await load();
+    if (askAI) await answerPost(target);
   };
-  const rewrite = async (event: FormEvent) => {
-    event.preventDefault();
-    const source = aiTarget === "edit" ? editDraft : draft;
-    if (!aiInstruction.trim() || !source.trim()) return;
-    setAIBusy(true);
-    try {
-      const result = await chat({
-        provider: settings.provider,
-        endpoint: settings.endpoint,
-        apiKey: settings.apiKey,
-        localFramework: settings.localFramework,
-        localUsername: settings.localUsername,
-        localPassword: settings.localPassword,
-        streamIdleTimeoutSeconds: settings.streamIdleTimeoutSeconds,
-        model: settings.model,
-        vertexProjectId: settings.vertexProjectId,
-        vertexLocation: settings.vertexLocation,
-        systemPrompt:
-          "Rewrite a short Markdown timeline post. Return only the rewritten Markdown.",
-        messages: [{ role: "user", content: `${aiInstruction}\n\n${source}` }],
-        enableFileTools: false,
-        fileToolMode: "none",
-        cliType: settings.cliType,
-        cliPath: settings.cliPaths[settings.cliType],
-        cliSessionId: "",
-      });
-      if (aiTarget === "edit") setEditDraft(result.content.trim());
-      else setDraft(result.content.trim());
-      setAITarget(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setAIBusy(false);
-    }
-  };
-  const allItems = items || [],
-    allTags = [...new Set(allItems.flatMap((item) => timelineTags(item.body)))]
-      .sort();
-  const filtered = allItems.filter((item) => {
-    const day = item.createdAt.slice(0, 10),
+  const allEntries = entries || [],
+    allTags = [
+      ...new Set(allEntries.filter((entry) => !entry.deleted).flatMap((entry) =>
+        timelineTags(entry.content)
+      )),
+    ].sort();
+  const matches = (entry: TimelineEntry) => {
+    const day = entry.createdAt.slice(0, 10),
       needle = word.trim().toLocaleLowerCase();
-    return (!needle || item.body.toLocaleLowerCase().includes(needle)) &&
+    return (!needle || entry.content.toLocaleLowerCase().includes(needle)) &&
       (!tag ||
-        timelineTags(item.body).some((value) =>
+        timelineTags(entry.content).some((value) =>
           value.toLocaleLowerCase() === tag.toLocaleLowerCase()
         )) &&
       (!from || day >= from) && (!to || day <= to) &&
-      (!pinnedOnly || item.pinned);
-  });
-  const visible = filtered.slice(0, visibleCount).sort((a, b) => {
-    const byTime = Date.parse(a.createdAt) - Date.parse(b.createdAt);
-    return byTime || a.index - b.index;
-  });
+      (!pinnedOnly || entry.pinned);
+  };
+  const hasFilters = !!(word || tag || from || to || pinnedOnly);
+  // A matching post keeps its whole conversation together.
+  const threads = timelineThreads(allEntries).filter((thread) =>
+    !hasFilters || [thread.root, ...thread.replies].some(matches)
+  );
+  const activity = (thread: (typeof threads)[number]) =>
+    Math.max(
+      ...[thread.root, ...thread.replies].map((entry) =>
+        Date.parse(entry.createdAt) || 0
+      ),
+    );
+  threads.sort((a, b) =>
+    activity(b) - activity(a) || b.root.id.localeCompare(a.root.id)
+  );
+  const visibleThreads = threads.slice(0, visibleCount).reverse();
+  const authorsById = new Map(allEntries.map((entry) => [entry.id, entry]));
   const clearFilters = () => {
     setWord("");
     setTag("");
@@ -840,7 +978,6 @@ export function TimelineDashboardWidget(
     setTo("");
     setPinnedOnly(false);
   };
-  const hasFilters = !!(word || tag || from || to || pinnedOnly);
   const handleTimelineLinkClick = useCallback(
     (
       href: string,
@@ -874,6 +1011,166 @@ export function TimelineDashboardWidget(
     },
     [folder, onExternalPathOpened],
   );
+  const renderPost = (item: TimelineItem, isReply: boolean) => {
+            const tags = timelineTags(item.body),
+              displayBody = withoutTimelineTags(item.body),
+              hasMarkdownEmbed =
+                /!\[\[[^\]\n]+?\.(?:md|markdown)(?:[|#][^\]\n]*)?\]\]/i
+                  .test(displayBody),
+              collapsed = hasMarkdownEmbed ||
+                displayBody.length > collapseChars ||
+                displayBody.split(/\r?\n/).length > collapseLines,
+              postKey = `${item.path}:${item.id}`,
+              expanded = expandedPosts.has(postKey),
+              visibleBody = collapsed && !expanded
+                ? collapsedTimelineBody(
+                  displayBody,
+                  collapseLines,
+                  collapseChars,
+                )
+                : displayBody,
+              isEditing = editing?.id === item.id && editing.path === item.path;
+            return (
+              <article
+                key={`${item.path}:${item.id}`}
+                className={`${item.pinned ? "pinned" : ""}${
+                  isReply ? " timeline-reply" : ""
+                }`}
+              >
+                <header>
+                  <time>
+                    {item.createdAt
+                      ? new Date(item.createdAt).toLocaleString()
+                      : ""}
+                  </time>
+                  {item.authorName && (
+                    <strong className="timeline-author">
+                      {item.authorName}
+                    </strong>
+                  )}
+                  {item.replyTo && (
+                    <span className="timeline-reply-to">
+                      ↪ {authorsById.get(item.replyTo)?.authorName ||
+                        "Original post"}
+                    </span>
+                  )}
+                  {aiBusyId === item.id && (
+                    <span className="timeline-ai-answering">
+                      <Loader2 size={11} className="spin" /> AI is answering…
+                    </span>
+                  )}
+                  <code>{item.id}</code>
+                  {!isEditing && (
+                    <div>
+                      <button
+                        type="button"
+                        title="Reply"
+                        onClick={() => {
+                          setReplyTarget(item);
+                          setComposerOpen(true);
+                          setOpenThreads((current) =>
+                            new Set(current).add(item.rootId)
+                          );
+                        }}
+                      >
+                        <MessageSquare size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className={item.pinned ? "active" : ""}
+                        onClick={() => void mutate(item, "pin")}
+                      >
+                        {item.pinned ? "Unpin" : "Pin"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(item);
+                          setEditDraft(item.body);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void mutate(item, "delete")}
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  )}
+                </header>
+                {isEditing
+                  ? (
+                    <div className="timeline-inline-editor">
+                      <textarea
+                        value={editDraft}
+                        onChange={(event) => setEditDraft(event.target.value)}
+                      />
+                      <div>
+                        <span>
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => void saveEdit()}
+                            disabled={!editDraft.trim()}
+                          >
+                            Save
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  )
+                  : (
+                    <>
+                      <TimelinePostMarkdown
+                        body={visibleBody}
+                        sourcePath={item.path}
+                        isDark={isDark}
+                        onLinkClick={handleTimelineLinkClick}
+                      />
+                      {tags.length > 0 && (
+                        <div className="timeline-tags">
+                          {tags.map((value) => (
+                            <button
+                              type="button"
+                              key={value}
+                              onClick={() => {
+                                setTag(value);
+                                setFiltersOpen(true);
+                              }}
+                            >
+                              #{value}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {collapsed && (
+                        <button
+                          type="button"
+                          className="timeline-post-toggle"
+                          onClick={() =>
+                            setExpandedPosts((current) => {
+                              const next = new Set(current);
+                              if (next.has(postKey)) next.delete(postKey);
+                              else next.add(postKey);
+                              return next;
+                            })}
+                        >
+                          {expanded ? "Show less" : "Show more"}
+                        </button>
+                      )}
+                    </>
+                  )}
+              </article>
+            );
+  };
   if (!name) {
     return (
       <div className="dashboard-widget-empty centered">
@@ -942,7 +1239,7 @@ export function TimelineDashboardWidget(
       )}
       {error && <div className="dashboard-widget-error">{error}</div>}
       <div ref={feedRef} className="timeline-feed">
-        {visibleCount < filtered.length && (
+        {visibleCount < threads.length && (
           <button
             type="button"
             className="timeline-load-more"
@@ -962,153 +1259,49 @@ export function TimelineDashboardWidget(
             Load older
           </button>
         )}
-        {items === null
+        {entries === null
           ? (
             <div className="dashboard-widget-loading">
               <Loader2 size={18} className="spin" />
             </div>
           )
-          : visible.length === 0
+          : visibleThreads.length === 0
           ? (
             <div className="dashboard-widget-empty centered">
               No timeline posts.
             </div>
           )
-          : visible.map((item) => {
-            const tags = timelineTags(item.body),
-              displayBody = withoutTimelineTags(item.body),
-              hasMarkdownEmbed =
-                /!\[\[[^\]\n]+?\.(?:md|markdown)(?:[|#][^\]\n]*)?\]\]/i
-                  .test(displayBody),
-              collapsed = hasMarkdownEmbed ||
-                displayBody.length > collapseChars ||
-                displayBody.split(/\r?\n/).length > collapseLines,
-              postKey = `${item.path}:${item.id}`,
-              expanded = expandedPosts.has(postKey),
-              visibleBody = collapsed && !expanded
-                ? collapsedTimelineBody(
-                  displayBody,
-                  collapseLines,
-                  collapseChars,
-                )
-                : displayBody,
-              isEditing = editing?.id === item.id && editing.path === item.path;
+          : visibleThreads.map((thread) => {
+            const open = openThreads.has(thread.root.id) || hasFilters;
             return (
-              <article
-                key={`${item.path}:${item.id}`}
-                className={item.pinned ? "pinned" : ""}
+              <div
+                key={thread.root.id}
+                className="timeline-thread"
               >
-                <header>
-                  <time>
-                    {item.createdAt
-                      ? new Date(item.createdAt).toLocaleString()
-                      : ""}
-                  </time>
-                  <code>{item.id}</code>
-                  {!isEditing && (
-                    <div>
-                      <button
-                        type="button"
-                        className={item.pinned ? "active" : ""}
-                        onClick={() => void mutate(item, "pin")}
-                      >
-                        {item.pinned ? "Unpin" : "Pin"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(item);
-                          setEditDraft(item.body);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void mutate(item, "delete")}
-                      >
-                        <X size={11} />
-                      </button>
-                    </div>
-                  )}
-                </header>
-                {isEditing
-                  ? (
-                    <div className="timeline-inline-editor">
-                      <textarea
-                        value={editDraft}
-                        onChange={(event) => setEditDraft(event.target.value)}
-                      />
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setAITarget("edit")}
-                          disabled={!editDraft.trim()}
-                          title="Edit with AI"
-                        >
-                          <Sparkles size={13} />
-                        </button>
-                        <span>
-                          <button
-                            type="button"
-                            onClick={() => setEditing(null)}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="primary"
-                            onClick={() => void saveEdit()}
-                            disabled={!editDraft.trim()}
-                          >
-                            Save
-                          </button>
-                        </span>
-                      </div>
-                    </div>
-                  )
-                  : (
-                    <>
-                      <TimelinePostMarkdown
-                        body={visibleBody}
-                        sourcePath={item.path}
-                        isDark={isDark}
-                        onLinkClick={handleTimelineLinkClick}
-                      />
-                      {tags.length > 0 && (
-                        <div className="timeline-tags">
-                          {tags.map((value) => (
-                            <button
-                              type="button"
-                              key={value}
-                              onClick={() => {
-                                setTag(value);
-                                setFiltersOpen(true);
-                              }}
-                            >
-                              #{value}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {collapsed && (
-                        <button
-                          type="button"
-                          className="timeline-post-toggle"
-                          onClick={() =>
-                            setExpandedPosts((current) => {
-                              const next = new Set(current);
-                              if (next.has(postKey)) next.delete(postKey);
-                              else next.add(postKey);
-                              return next;
-                            })}
-                        >
-                          {expanded ? "Show less" : "Show more"}
-                        </button>
-                      )}
-                    </>
-                  )}
-              </article>
+                {renderPost(timelineItem(thread.root), false)}
+                {thread.replies.length > 0 && (
+                  <button
+                    type="button"
+                    className="timeline-post-toggle timeline-replies-toggle"
+                    onClick={() =>
+                      setOpenThreads((current) => {
+                        const next = new Set(current);
+                        if (next.has(thread.root.id)) {
+                          next.delete(thread.root.id);
+                        } else next.add(thread.root.id);
+                        return next;
+                      })}
+                  >
+                    {thread.replies.length} {thread.replies.length === 1
+                      ? "reply"
+                      : "replies"}
+                    {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                )}
+                {open && thread.replies.map((reply) =>
+                  renderPost(timelineItem(reply), true)
+                )}
+              </div>
             );
           })}
       </div>
@@ -1127,6 +1320,61 @@ export function TimelineDashboardWidget(
           )
           : (
             <div className="timeline-composer">
+              {replyTarget && (
+                <div className="timeline-reply-banner">
+                  <span>
+                    Reply: {replyTarget.authorName || "You"} — {replyTarget.body}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReplyTarget(null)}
+                    aria-label="Cancel reply"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {aiPanelOpen && (
+                <div className="timeline-ai-panel">
+                  <p>
+                    Mention @ai in a post to get an AI reply in its thread. The
+                    whole thread is used as context.
+                  </p>
+                  <label>
+                    Model
+                    <select
+                      value={aiSettings.model}
+                      onChange={(event) =>
+                        updateAISettings({ model: event.target.value })}
+                    >
+                      <option value="">Current Chat model</option>
+                      {configuredModelOptions(settings).map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.fileRead}
+                      onChange={(event) =>
+                        updateAISettings({ fileRead: event.target.checked })}
+                    />
+                    Read Workspace files
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.webSearch}
+                      onChange={(event) =>
+                        updateAISettings({ webSearch: event.target.checked })}
+                    />
+                    Web Search
+                  </label>
+                </div>
+              )}
               <div className="timeline-composer-mode">
                 <span>
                   <Code size={11} />
@@ -1187,11 +1435,11 @@ export function TimelineDashboardWidget(
                   </label>
                   <button
                     type="button"
-                    disabled={aiBusy || !draft.trim()}
-                    onClick={() => setAITarget("draft")}
-                    title="Edit with AI"
+                    className={aiPanelOpen ? "active" : ""}
+                    onClick={() => setAIPanelOpen((value) => !value)}
+                    title="@ai reply settings"
                   >
-                    <Sparkles size={14} />
+                    <Settings2 size={14} />
                   </button>
                 </span>
                 <span>
@@ -1199,6 +1447,7 @@ export function TimelineDashboardWidget(
                     type="button"
                     onClick={() => {
                       setComposerOpen(false);
+                      setReplyTarget(null);
                       setDraft("");
                       setAttachments([]);
                     }}
@@ -1208,7 +1457,8 @@ export function TimelineDashboardWidget(
                   <button
                     type="button"
                     className="primary"
-                    disabled={!draft.trim() && attachments.length === 0}
+                    disabled={(!draft.trim() && attachments.length === 0) ||
+                      (hasAiMention(draft) && aiBusyId !== null)}
                     onClick={() => void post()}
                   >
                     Post
@@ -1218,44 +1468,6 @@ export function TimelineDashboardWidget(
             </div>
           )}
       </div>
-      {aiTarget && (
-        <WidgetDialog
-          title="Edit with AI"
-          onClose={() => setAITarget(null)}
-          className="timeline-ai-dialog"
-        >
-          <form className="timeline-ai-form" onSubmit={rewrite}>
-            <label>
-              Instructions<textarea
-                autoFocus
-                rows={5}
-                value={aiInstruction}
-                onChange={(event) => setAIInstruction(event.target.value)}
-              />
-            </label>
-            <label>
-              Preview<textarea
-                readOnly
-                rows={8}
-                value={aiTarget === "edit" ? editDraft : draft}
-              />
-            </label>
-            {error && <p className="dashboard-widget-error">{error}</p>}
-            <footer>
-              <button type="button" onClick={() => setAITarget(null)}>
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="primary"
-                disabled={aiBusy || !aiInstruction.trim()}
-              >
-                {aiBusy ? "Rewriting…" : "Apply"}
-              </button>
-            </footer>
-          </form>
-        </WidgetDialog>
-      )}
       {previewPath && (
         <KanbanCardModal
           file={fileRef("workspace", previewPath)}

@@ -11,7 +11,7 @@ const OUTPUT_FILE = path.join(
   "generated",
   "builtin-okf.json.gz",
 );
-const MAX_DOCUMENTS = 24;
+const MAX_DOCUMENTS = 25;
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
 function normalizePath(filePath) {

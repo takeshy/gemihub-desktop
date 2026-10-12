@@ -111,7 +111,9 @@ export function parseTimelineCalendarPosts(
     /^<!--\s*timeline-post:\s*[^>]+?\s*-->\s*\r?\n/gm,
     "",
   );
-  return parseMemoFile(normalized).entries.map((entry) => {
+  return parseMemoFile(normalized).entries.filter((entry) =>
+    entry.metadata?.deleted !== "true"
+  ).map((entry) => {
     const body = entry.body || entry.quote;
     const event = body.match(EVENT_MARKER_RE);
     const eventFields = calendarEventFields(body);

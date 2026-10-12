@@ -1,4 +1,9 @@
 import type { RAGSetting } from "../lib/wailsBackend";
+import {
+  defaultKakerattaSettings,
+  type KakerattaSettings,
+  normalizeKakerattaSettings,
+} from "../lib/kakerattaSettings";
 import { validSpeechShortcut } from "./speechShortcut";
 
 export type ChatProvider = "openai" | "gemini" | "vertex" | "anthropic" | "cli";
@@ -333,6 +338,7 @@ export interface ChatSettings {
   maxSavedChatHistories: number;
   manualChatSaveFolder: string;
   discord: DiscordIntegrationSettings;
+  kakeratta: KakerattaSettings;
 }
 
 // Resolve AI credentials and the Vertex project at use time so changes follow
@@ -485,6 +491,7 @@ export const defaultChatSettings: ChatSettings = {
   okfRoot: "Knowledge",
   maxSavedChatHistories: 100,
   manualChatSaveFolder: "",
+  kakeratta: defaultKakerattaSettings(),
   discord: {
     enabled: false,
     botToken: "",
@@ -1047,6 +1054,7 @@ export function loadChatSettings(
         })
         : [],
       discord: { ...defaultChatSettings.discord, ...(parsed.discord ?? {}) },
+      kakeratta: normalizeKakerattaSettings(parsed.kakeratta),
       ragSettings: parsed.ragSettings && typeof parsed.ragSettings === "object"
         ? Object.fromEntries(
           Object.entries(parsed.ragSettings).map(([name, setting]) => {
