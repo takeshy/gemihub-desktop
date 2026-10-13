@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   absoluteFilesPath,
   canMoveWorkspacePath,
@@ -18,7 +19,7 @@ const node = (name: string, isDir = true): FileTreeNode => ({
   modTime: 0,
 });
 
-Deno.test("outside Workspace drag paths are pinned to their absolute Files path", () => {
+test("outside Workspace drag paths are pinned to their absolute Files path", () => {
   assertEquals(
     absoluteFilesPath("C:\\Users\\takes\\Documents", "projects/Research"),
     "C:\\Users\\takes\\Documents/projects/Research",
@@ -29,7 +30,7 @@ Deno.test("outside Workspace drag paths are pinned to their absolute Files path"
   );
 });
 
-Deno.test("outside Workspace can reveal one selected file and climb its parents", () => {
+test("outside Workspace can reveal one selected file and climb its parents", () => {
   const files = [node("one.md", false), node("two.md", false)];
   assertEquals(
     focusedExternalTree(
@@ -48,14 +49,14 @@ Deno.test("outside Workspace can reveal one selected file and climb its parents"
   assertEquals(filesystemParentPath("/"), "");
 });
 
-Deno.test("only managed workspace roots are protected", () => {
+test("only managed workspace roots are protected", () => {
   assertEquals(isProtectedWorkspaceRoot(node("skills"), 0), true);
   assertEquals(isProtectedWorkspaceRoot(node("notes"), 0), false);
   assertEquals(isProtectedWorkspaceRoot(node("loose.md", false), 0), false);
   assertEquals(isProtectedWorkspaceRoot(node("skills"), 1), false);
 });
 
-Deno.test("workspace files retain their filesystem scope", () => {
+test("workspace files retain their filesystem scope", () => {
   assertEquals(
     scopedTreeRef("workspace", "readme.md"),
     { scope: "workspace", path: "readme.md" },
@@ -74,7 +75,7 @@ Deno.test("workspace files retain their filesystem scope", () => {
   });
 });
 
-Deno.test("workspace drag targets preserve the item name", () => {
+test("workspace drag targets preserve the item name", () => {
   assertEquals(
     workspaceMoveTarget("notes/today.md", "archive"),
     "archive/today.md",
@@ -82,7 +83,7 @@ Deno.test("workspace drag targets preserve the item name", () => {
   assertEquals(workspaceMoveTarget("notes/today.md", ""), "today.md");
 });
 
-Deno.test("workspace drag rejects no-op and recursive directory moves", () => {
+test("workspace drag rejects no-op and recursive directory moves", () => {
   assertEquals(canMoveWorkspacePath("notes/today.md", false, "archive"), true);
   assertEquals(canMoveWorkspacePath("notes/today.md", false, "notes"), false);
   assertEquals(canMoveWorkspacePath("notes", true, "notes/old"), false);

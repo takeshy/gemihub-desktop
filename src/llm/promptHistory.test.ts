@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   appendPromptHistory,
   isCaretOnFirstLine,
@@ -8,7 +9,7 @@ import {
   promptHistoryStorageKey,
 } from "./promptHistory.ts";
 
-Deno.test("prompt history is scoped per workspace", () => {
+test("prompt history is scoped per workspace", () => {
   assertEquals(
     promptHistoryStorageKey(""),
     "gemihub-desktop:chat-prompt-history:default",
@@ -19,7 +20,7 @@ Deno.test("prompt history is scoped per workspace", () => {
   );
 });
 
-Deno.test("prompt history survives damaged storage", () => {
+test("prompt history survives damaged storage", () => {
   assertEquals(parsePromptHistory(null), []);
   assertEquals(parsePromptHistory("{oops"), []);
   assertEquals(parsePromptHistory('{"a":1}'), []);
@@ -29,7 +30,7 @@ Deno.test("prompt history survives damaged storage", () => {
   ]);
 });
 
-Deno.test("prompt history keeps the newest entries only", () => {
+test("prompt history keeps the newest entries only", () => {
   let history: string[] = [];
   for (let i = 0; i < MAX_PROMPT_HISTORY + 5; i++) {
     history = appendPromptHistory(history, `prompt ${i}`);
@@ -39,7 +40,7 @@ Deno.test("prompt history keeps the newest entries only", () => {
   assertEquals(appendPromptHistory(history, "   "), history);
 });
 
-Deno.test("caret checks keep multi-line editing intact", () => {
+test("caret checks keep multi-line editing intact", () => {
   assertEquals(isCaretOnFirstLine("one\ntwo", 2), true);
   assertEquals(isCaretOnFirstLine("one\ntwo", 5), false);
   assertEquals(isCaretOnLastLine("one\ntwo", 5), true);

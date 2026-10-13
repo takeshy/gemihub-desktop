@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   assetsInclude: ["**/*.json.gz"],
@@ -9,6 +9,9 @@ export default defineConfig({
     },
   },
   plugins: [react()],
+  test: {
+    include: ["src/**/*.test.{ts,tsx}"],
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,

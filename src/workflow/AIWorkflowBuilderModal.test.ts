@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   buildWorkflowPlanSystemPrompt,
   buildWorkflowRefinementPrompt,
@@ -11,7 +12,7 @@ import {
 } from "./AIWorkflowBuilderModal.tsx";
 import { defaultChatSettings, defaultRAGSetting } from "../llm/settings.ts";
 
-Deno.test("artifact output paths follow their names", () => {
+test("artifact output paths follow their names", () => {
   assertEquals(
     outputPathForArtifactName("skill", "Code Review"),
     "skills/code-review",
@@ -27,7 +28,7 @@ Deno.test("artifact output paths follow their names", () => {
   assertEquals(outputPathForArtifactName("skill", "  "), "skills/new-skill");
 });
 
-Deno.test("workflow builder lists every verified CLI", () => {
+test("workflow builder lists every verified CLI", () => {
   const settings = {
     ...defaultChatSettings,
     verifiedCliTypes: ["codex" as const, "antigravity" as const],
@@ -38,7 +39,7 @@ Deno.test("workflow builder lists every verified CLI", () => {
   ]);
 });
 
-Deno.test("workflow generation receives only configured runtime names", () => {
+test("workflow generation receives only configured runtime names", () => {
   const context = workflowGenerationContext({
     ...defaultChatSettings,
     model: "settings-model",
@@ -89,7 +90,7 @@ Deno.test("workflow generation receives only configured runtime names", () => {
   assertEquals(context.mcpServers, ["Browser"]);
 });
 
-Deno.test("workflow review and refinement prompts enforce common failure checks", () => {
+test("workflow review and refinement prompts enforce common failure checks", () => {
   const reviewPrompt = buildWorkflowReviewSystemPrompt("desktop spec");
   assertEquals(reviewPrompt.includes("json.source"), true);
   assertEquals(reviewPrompt.includes("throwOnError"), true);
@@ -136,20 +137,20 @@ Deno.test("workflow review and refinement prompts enforce common failure checks"
   assertEquals(refinement.includes("Keep the output name"), true);
 });
 
-Deno.test("workflow planning does not invent requirements", () => {
+test("workflow planning does not invent requirements", () => {
   const prompt = buildWorkflowPlanSystemPrompt();
   assertEquals(prompt.includes("shortest practical Workspace workflow"), true);
   assertEquals(prompt.includes("Do not invent validation stages"), true);
   assertEquals(prompt.includes("Runtime failures may surface directly"), true);
 });
 
-Deno.test("an unparseable workflow review is a blocking failure", () => {
+test("an unparseable workflow review is a blocking failure", () => {
   const review = invalidWorkflowReview();
   assertEquals(review.verdict, "fail");
   assertEquals(review.issues[0].severity, "high");
 });
 
-Deno.test("external workflow response accepts YAML fences with surrounding prose", () => {
+test("external workflow response accepts YAML fences with surrounding prose", () => {
   const parsed = parseExternalWorkflowResponse(
     "Here is the result:\n```yaml\nname: Example\nnodes: []\n```",
     "workflow",
@@ -158,7 +159,7 @@ Deno.test("external workflow response accepts YAML fences with surrounding prose
   assertEquals(parsed.block?.error, undefined);
 });
 
-Deno.test("external skill response accepts the documented two-block format", () => {
+test("external skill response accepts the documented two-block format", () => {
   const parsed = parseExternalWorkflowResponse(
     "```skill-instructions\nUse the workflow when asked.\n```\n\n```hub-workflow\nname: Example\nnodes: []\n```",
     "skill",

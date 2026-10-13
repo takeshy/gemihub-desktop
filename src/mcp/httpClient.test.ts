@@ -1,12 +1,13 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { discoverMcpHttpTools, MCP_PROTOCOL_VERSION, McpHttpClient, McpHttpError, type McpHttpServerConfig } from "./httpClient.ts";
 
-Deno.test("MCP HTTP server config remains JSON serializable", () => {
+test("MCP HTTP server config remains JSON serializable", () => {
   const config: McpHttpServerConfig = { name: "Local Tools", transport: "http", url: "http://127.0.0.1:3000/mcp", headers: { Authorization: "Bearer token" }, enabled: true };
   assertEquals(JSON.parse(JSON.stringify(config)), config);
 });
 
-Deno.test("MCP discovery isolates unavailable servers", async () => {
+test("MCP discovery isolates unavailable servers", async () => {
   const result = await discoverMcpHttpTools([
     { name: "one", transport: "http", url: "https://one.invalid/mcp", enabled: true },
     { name: "two", transport: "http", url: "https://two.invalid/mcp", enabled: true },
@@ -16,7 +17,7 @@ Deno.test("MCP discovery isolates unavailable servers", async () => {
   assertEquals(result.errors.length, 2);
 });
 
-Deno.test("MCP HTTP errors retain the status needed for OAuth discovery", async () => {
+test("MCP HTTP errors retain the status needed for OAuth discovery", async () => {
   const original = (globalThis as unknown as { window?: unknown }).window;
   (globalThis as unknown as { window: unknown }).window = { go: { main: { App: { WorkflowHTTPRequest: () => Promise.resolve({ status: 401, headers: { "www-authenticate": "Bearer" }, body: "", bodyBase64: "" }) } } } };
   try {
@@ -30,7 +31,7 @@ Deno.test("MCP HTTP errors retain the status needed for OAuth discovery", async 
   }
 });
 
-Deno.test("MCP HTTP negotiates the 2026 stateless transport and paginates tools", async () => {
+test("MCP HTTP negotiates the 2026 stateless transport and paginates tools", async () => {
   const original = (globalThis as unknown as { window?: unknown }).window;
   const requests: Array<
     {
@@ -111,7 +112,7 @@ Deno.test("MCP HTTP negotiates the 2026 stateless transport and paginates tools"
   }
 });
 
-Deno.test("MCP HTTP falls back to a negotiated legacy session", async () => {
+test("MCP HTTP falls back to a negotiated legacy session", async () => {
   const original = (globalThis as unknown as { window?: unknown }).window;
   const requests: Array<
     {

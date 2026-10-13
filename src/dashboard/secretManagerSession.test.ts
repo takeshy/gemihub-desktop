@@ -1,10 +1,11 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   getSecretManagerSessionPassword,
   setSecretManagerSessionPassword,
 } from "./secretManagerSession.ts";
 
-Deno.test("secret manager passwords are isolated per manager for the session", () => {
+test("secret manager passwords are isolated per manager for the session", () => {
   setSecretManagerSessionPassword("manager-a", "password-a");
   setSecretManagerSessionPassword("manager-b", "password-b");
 

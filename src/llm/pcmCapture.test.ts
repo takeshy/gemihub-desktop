@@ -1,6 +1,7 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { createPCMCapture, resamplePCM16 } from "./pcmCapture.ts";
-Deno.test("live PCM capture resamples and clamps audio", () => {
+test("live PCM capture resamples and clamps audio", () => {
   assertEquals([...resamplePCM16(new Float32Array([-2, 0, 2, 0]), 4, 2)], [
     -32768,
     32767,
@@ -34,7 +35,7 @@ class FakeContext {
   }
 }
 
-Deno.test("live PCM capture converts a frame before the send is awaited", async () => {
+test("live PCM capture converts a frame before the send is awaited", async () => {
   const context = new FakeContext();
   const globals = globalThis as { AudioContext?: unknown };
   const original = globals.AudioContext;

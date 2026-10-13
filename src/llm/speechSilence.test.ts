@@ -1,8 +1,9 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { createSilenceDetector } from "./speechSilence.ts";
 import { loadSpeechSettings } from "./settings.ts";
 
-Deno.test("silence timeout does not stop before speech or after a brief click", () => {
+test("silence timeout does not stop before speech or after a brief click", () => {
   const sample = createSilenceDetector(3);
   assertEquals(sample(0, 0), false);
   assertEquals(sample(0, 10000), false);
@@ -11,7 +12,7 @@ Deno.test("silence timeout does not stop before speech or after a brief click", 
   assertEquals(sample(0, 20000), false);
 });
 
-Deno.test("sustained voice followed by configured silence stops exactly once", () => {
+test("sustained voice followed by configured silence stops exactly once", () => {
   const sample = createSilenceDetector(3);
   assertEquals(sample(0.1, 0), false);
   assertEquals(sample(0.1, 300), false);
@@ -20,7 +21,7 @@ Deno.test("sustained voice followed by configured silence stops exactly once", (
   assertEquals(sample(0.001, 5000), false);
 });
 
-Deno.test("resumed speech resets the silence window", () => {
+test("resumed speech resets the silence window", () => {
   const sample = createSilenceDetector(2);
   sample(0.1, 0);
   sample(0.1, 300);
@@ -31,14 +32,14 @@ Deno.test("resumed speech resets the silence window", () => {
   assertEquals(sample(0, 4350), true);
 });
 
-Deno.test("disabled silence detection never stops recording", () => {
+test("disabled silence detection never stops recording", () => {
   const sample = createSilenceDetector(0);
   sample(0.1, 0);
   sample(0.1, 300);
   assertEquals(sample(0, 60000), false);
 });
 
-Deno.test("silence settings preserve off and valid delays while validating stored values", () => {
+test("silence settings preserve off and valid delays while validating stored values", () => {
   assertEquals(loadSpeechSettings().silenceSeconds, 3);
   for (const seconds of [0, 1, 5, 10]) {
     assertEquals(

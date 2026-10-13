@@ -1,7 +1,8 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import { closestSide, parseCanvas, serializeCanvas } from "./model.ts";
 
-Deno.test("JSON Canvasを解析して不明な接続を除外する", () => {
+test("JSON Canvasを解析して不明な接続を除外する", () => {
   const result = parseCanvas(JSON.stringify({
     nodes: [{
       id: "a",
@@ -24,12 +25,12 @@ Deno.test("JSON Canvasを解析して不明な接続を除外する", () => {
   assertStringIncludes(serializeCanvas(result.data), '"nodes"');
 });
 
-Deno.test("不正なCanvas JSONはエラーになる", () => {
+test("不正なCanvas JSONはエラーになる", () => {
   assertStringIncludes(parseCanvas("{").error, "Could not parse");
   assertStringIncludes(parseCanvas("{}").error, "nodes and edges");
 });
 
-Deno.test("ノード間の主要方向を選ぶ", () => {
+test("ノード間の主要方向を選ぶ", () => {
   const a = {
     id: "a",
     type: "text" as const,

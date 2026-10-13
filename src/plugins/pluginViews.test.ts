@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   normalizeDesktopPluginView,
   pluginViewForPath,
@@ -8,14 +9,14 @@ import type { PluginAPI, PluginView } from "./types.ts";
 
 const component = () => null;
 
-Deno.test("legacy extension sidebar views become Dashboard main views", () => {
+test("legacy extension sidebar views become Dashboard main views", () => {
   const legacy: PluginView = { id: "accounting:main", pluginId: "accounting", name: "Accounting", location: "sidebar", extensions: [".bean"], component };
   assertEquals(normalizeDesktopPluginView(legacy).location, "main");
   const sidebar: PluginView = { id: "accounting:panel", pluginId: "accounting", name: "Accounting", location: "sidebar", component };
   assertEquals(normalizeDesktopPluginView(sidebar).location, "sidebar");
 });
 
-Deno.test("plugin main views match registered file extensions", () => {
+test("plugin main views match registered file extensions", () => {
   const views: PluginView[] = [
     { id: "audio:panel", pluginId: "audio", name: "Audio", location: "sidebar", component },
     { id: "audio:main", pluginId: "audio", name: "Audio", location: "main", extensions: [".audioscore", ".mid", "midi"], component },
@@ -25,7 +26,7 @@ Deno.test("plugin main views match registered file extensions", () => {
   assertEquals(pluginViewForPath(views, "workspace/readme.md"), undefined);
 });
 
-Deno.test("plugin file reads preserve scope while passing relative paths", async () => {
+test("plugin file reads preserve scope while passing relative paths", async () => {
   const calls: string[] = [];
   const api = {
     workspaceFiles: {

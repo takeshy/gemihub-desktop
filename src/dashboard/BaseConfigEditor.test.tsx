@@ -1,8 +1,9 @@
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assert, assertEquals, assertStringIncludes } from "../testing/assert";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BaseConfigEditor } from "./BaseConfigEditor.tsx";
 
-Deno.test("Base settings use the GemiHub view editor layout", () => {
+test("Base settings use the GemiHub view editor layout", () => {
   const html = renderToStaticMarkup(
     <BaseConfigEditor
       content={`formulas:\n  excerpt: description.slice(0, 50)\nviews:\n  - type: table\n    name: Table\n    filters:\n      and:\n        - file.inFolder("cooking")\n        - image != null\n    order:\n      - file.name\n      - formula.excerpt\n    sort:\n      - property: file.mtime\n        direction: DESC\n    limit: 50\n`}
@@ -20,7 +21,7 @@ Deno.test("Base settings use the GemiHub view editor layout", () => {
   assert(!html.includes("Custom summaries"));
 });
 
-Deno.test("Base date filters use a date picker and readable comparisons", () => {
+test("Base date filters use a date picker and readable comparisons", () => {
   const html = renderToStaticMarkup(
     <BaseConfigEditor
       content={`views:\n  - type: table\n    name: Recent creations\n    filters: 'file.ctime >= date("2026-07-01")'\n`}
@@ -34,7 +35,7 @@ Deno.test("Base date filters use a date picker and readable comparisons", () => 
   assertStringIncludes(html, 'value="2026-07-01"');
 });
 
-Deno.test("Base date equality compares the calendar day instead of the timestamp", () => {
+test("Base date equality compares the calendar day instead of the timestamp", () => {
   let changed = "";
   const html = renderToStaticMarkup(
     <BaseConfigEditor

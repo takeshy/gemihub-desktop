@@ -1,10 +1,11 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   createFileOpenHandler,
   fileOpenDirectory,
 } from "./fileOpenRequests.ts";
 
-Deno.test("a queued cold-launch request and its event open the file only once", async () => {
+test("a queued cold-launch request and its event open the file only once", async () => {
   const opened: string[] = [];
   const acknowledged: number[] = [];
   const handle = createFileOpenHandler({
@@ -29,7 +30,7 @@ Deno.test("a queued cold-launch request and its event open the file only once", 
   assertEquals(opened, ["/notes/new.md", "/notes/new.md"]);
 });
 
-Deno.test("a newer Finder request supersedes an in-flight open after preparation", async () => {
+test("a newer Finder request supersedes an in-flight open after preparation", async () => {
   let release!: () => void;
   let started!: () => void;
   const waiting = new Promise<void>((resolve) => {
@@ -66,7 +67,7 @@ Deno.test("a newer Finder request supersedes an in-flight open after preparation
   assertEquals(order, ["prepare:1", "prepare:2", "apply:2", "ack:2"]);
 });
 
-Deno.test("a failed save prevents switching directories and does not block later opens", async () => {
+test("a failed save prevents switching directories and does not block later opens", async () => {
   const opened: number[] = [];
   const errors: unknown[] = [];
   const handle = createFileOpenHandler({
@@ -86,7 +87,7 @@ Deno.test("a failed save prevents switching directories and does not block later
   assertEquals(errors, ["save failed"]);
 });
 
-Deno.test("associated file parent handles root directories and Windows paths", () => {
+test("associated file parent handles root directories and Windows paths", () => {
   assertEquals(fileOpenDirectory("/file.md"), "/");
   assertEquals(fileOpenDirectory("/notes/new.md"), "/notes");
   assertEquals(fileOpenDirectory("C:\\notes\\new.md"), "C:\\notes");

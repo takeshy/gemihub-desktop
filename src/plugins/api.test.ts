@@ -1,4 +1,5 @@
-import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertRejects, assertThrows } from "../testing/assert";
 import { createPluginAPI, unregisterPluginAPIFileActions } from "./api.ts";
 import type { PluginSlashCommand } from "./types.ts";
 import { dashboardWidgetDefinition } from "../dashboard/widgetRegistry.ts";
@@ -7,7 +8,7 @@ import {
   unregisterPluginFileActions,
 } from "./fileActions.ts";
 
-Deno.test("plugin API registers slash commands and exposes the LLM compatibility alias", async () => {
+test("plugin API registers slash commands and exposes the LLM compatibility alias", async () => {
   let registered: PluginSlashCommand | undefined;
   let receivedModelId = "";
   const api = createPluginAPI("example", "en", ["llm"], {
@@ -55,7 +56,7 @@ Deno.test("plugin API registers slash commands and exposes the LLM compatibility
   }]);
 });
 
-Deno.test("plugin API exposes the Web registerWidget contract", () => {
+test("plugin API exposes the Web registerWidget contract", () => {
   const api = createPluginAPI("example", "en", [], {
     onRegisterView: () => undefined,
     onRegisterSettingsTab: () => undefined,
@@ -73,7 +74,7 @@ Deno.test("plugin API exposes the Web registerWidget contract", () => {
   assertEquals(dashboardWidgetDefinition("example:summary"), null);
 });
 
-Deno.test("plugin file APIs expose explicit Workspace and Files roots", () => {
+test("plugin file APIs expose explicit Workspace and Files roots", () => {
   const api = createPluginAPI("example", "en", ["files"], {
     onRegisterView: () => undefined,
     onRegisterSettingsTab: () => undefined,
@@ -84,7 +85,7 @@ Deno.test("plugin file APIs expose explicit Workspace and Files roots", () => {
   assertEquals("projectFiles" in api, false);
 });
 
-Deno.test("plugin API exposes file notifications and FileTree decorations", async () => {
+test("plugin API exposes file notifications and FileTree decorations", async () => {
   const api = createPluginAPI("example", "en", ["files"], {
     onRegisterView: () => undefined,
     onRegisterSettingsTab: () => undefined,
@@ -104,7 +105,7 @@ Deno.test("plugin API exposes file notifications and FileTree decorations", asyn
   removeDecoration();
 });
 
-Deno.test("unloaded plugin APIs cannot leave or add file actions", () => {
+test("unloaded plugin APIs cannot leave or add file actions", () => {
   unregisterPluginFileActions();
   const api = createPluginAPI("example", "en", ["files"], {
     onRegisterView: () => undefined,
@@ -131,7 +132,7 @@ Deno.test("unloaded plugin APIs cannot leave or add file actions", () => {
   assertEquals(fileViewerActionsFor(target), []);
 });
 
-Deno.test("plugin file APIs deny access to protected application files", async () => {
+test("plugin file APIs deny access to protected application files", async () => {
   const api = createPluginAPI("example", "en", ["files"], {
     onRegisterView: () => undefined,
     onRegisterSettingsTab: () => undefined,

@@ -1,11 +1,12 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   fileTreeDecorationFor,
   registerFileTreeDecorationProvider,
   unregisterFileTreeDecorationProviders,
 } from "./fileTreeExtensions.ts";
 
-Deno.test("FileTree decorations resolve plugin state and unregister cleanly", async () => {
+test("FileTree decorations resolve plugin state and unregister cleanly", async () => {
   unregisterFileTreeDecorationProviders();
   const dispose = registerFileTreeDecorationProvider(
     "sync",

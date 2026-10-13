@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   appendEntryBlock,
   buildEntryBlock,
@@ -31,14 +32,14 @@ function fileWithEntries(): string {
   return content;
 }
 
-Deno.test("frontmatter is not parsed as an entry", () => {
+test("frontmatter is not parsed as an entry", () => {
   const { source, entries } = parseMemoFile(fileWithEntries());
   assertEquals(source, SOURCE);
   assertEquals(entries.length, 2);
   assertEquals(entries.every((entry) => !entry.body.includes("source:")), true);
 });
 
-Deno.test("round-trips anchored entry fields", () => {
+test("round-trips anchored entry fields", () => {
   const { entries } = parseMemoFile(fileWithEntries());
   const [anchored, plain] = entries;
   assertEquals(anchored.id, "20260702-191500-000");
@@ -52,7 +53,7 @@ Deno.test("round-trips anchored entry fields", () => {
   assertEquals(plain.body, "アンカーなしの通常メモ");
 });
 
-Deno.test("code block containing --- does not split an entry", () => {
+test("code block containing --- does not split an entry", () => {
   const body = "コード:\n\n```yaml\n---\nkey: value\n---\n```\n\n終わり";
   const content = appendEntryBlock("", SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T10:15:00.000Z",
@@ -64,7 +65,7 @@ Deno.test("code block containing --- does not split an entry", () => {
   assertEquals(entries[0].body.includes("```yaml"), true);
 });
 
-Deno.test("leading blockquote without anchor stays in the body", () => {
+test("leading blockquote without anchor stays in the body", () => {
   const content = appendEntryBlock("", SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T10:15:00.000Z",
     id: "20260702-191500-000",
@@ -75,7 +76,7 @@ Deno.test("leading blockquote without anchor stays in the body", () => {
   assertEquals(entries[0].body.startsWith(">"), true);
 });
 
-Deno.test("malformed blocks degrade to body-only entries", () => {
+test("malformed blocks degrade to body-only entries", () => {
   const content = `---\nsource: ${SOURCE}\n---\n\nただのテキスト\n\n---\n\n2026-07-02T10:15:00.000Z\nid: 20260702-191500-000\n\n正常なエントリ\n`;
   const { entries } = parseMemoFile(content);
   assertEquals(entries.length, 2);
@@ -84,7 +85,7 @@ Deno.test("malformed blocks degrade to body-only entries", () => {
   assertEquals(entries[1].parsed, true);
 });
 
-Deno.test("multiline quotes round-trip via blockquote lines", () => {
+test("multiline quotes round-trip via blockquote lines", () => {
   const content = appendEntryBlock("", SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T10:15:00.000Z",
     id: "20260702-191500-000",
@@ -97,7 +98,7 @@ Deno.test("multiline quotes round-trip via blockquote lines", () => {
   assertEquals(entries[0].body, "本文");
 });
 
-Deno.test("quote prefix/suffix values are normalized to a single line", () => {
+test("quote prefix/suffix values are normalized to a single line", () => {
   const block = buildEntryBlock({
     createdAt: "2026-07-02T10:15:00.000Z",
     id: "20260702-191500-000",
@@ -108,14 +109,14 @@ Deno.test("quote prefix/suffix values are normalized to a single line", () => {
   assertEquals(block.includes("quote-prefix: 改行 を含む 値"), true);
 });
 
-Deno.test("unique id gets suffixed on collision", () => {
+test("unique id gets suffixed on collision", () => {
   const content = fileWithEntries();
   const date = new Date(2026, 6, 2, 19, 15, 0, 0); // local 19:15:00.000
   assertEquals(uniqueEntryId(content, date), "20260702-191500-000-2");
   assertEquals(uniqueEntryId("", date), "20260702-191500-000");
 });
 
-Deno.test("replaceEntryBody rewrites only the target entry", () => {
+test("replaceEntryBody rewrites only the target entry", () => {
   const next = replaceEntryBody(fileWithEntries(), "20260702-200000-000", "編集後の本文");
   if (!next) throw new Error("entry not found");
   const { entries } = parseMemoFile(next);
@@ -125,7 +126,7 @@ Deno.test("replaceEntryBody rewrites only the target entry", () => {
   assertEquals(replaceEntryBody(fileWithEntries(), "missing", "x"), null);
 });
 
-Deno.test("setEntryPinned toggles and survives round-trip", () => {
+test("setEntryPinned toggles and survives round-trip", () => {
   const pinned = setEntryPinned(fileWithEntries(), "20260702-191500-000", true);
   if (!pinned) throw new Error("entry not found");
   assertEquals(parseMemoFile(pinned).entries[0].pinned, true);
@@ -134,7 +135,7 @@ Deno.test("setEntryPinned toggles and survives round-trip", () => {
   assertEquals(parseMemoFile(unpinned).entries[0].pinned, false);
 });
 
-Deno.test("deleteEntry removes the target and keeps frontmatter", () => {
+test("deleteEntry removes the target and keeps frontmatter", () => {
   const next = deleteEntry(fileWithEntries(), "20260702-191500-000");
   if (!next) throw new Error("entry not found");
   const { source, entries } = parseMemoFile(next);
@@ -144,7 +145,7 @@ Deno.test("deleteEntry removes the target and keeps frontmatter", () => {
   assertEquals(deleteEntry(next, "missing"), null);
 });
 
-Deno.test("summarizeMemoContent reports count and newest entry text", () => {
+test("summarizeMemoContent reports count and newest entry text", () => {
   const content = appendEntryBlock(fileWithEntries(), SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T12:00:00.000Z",
     id: "20260702-210000-000",
@@ -153,7 +154,7 @@ Deno.test("summarizeMemoContent reports count and newest entry text", () => {
   assertEquals(summarizeMemoContent(content), { count: 3, lastText: "読了" });
 });
 
-Deno.test("summarizeMemoContent truncates and collapses newlines", () => {
+test("summarizeMemoContent truncates and collapses newlines", () => {
   const content = appendEntryBlock("", SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T12:00:00.000Z",
     id: "20260702-210000-000",
@@ -162,7 +163,7 @@ Deno.test("summarizeMemoContent truncates and collapses newlines", () => {
   assertEquals(summarizeMemoContent(content), { count: 1, lastText: "一二三四五 六七八九…" });
 });
 
-Deno.test("summarizeMemoContent falls back to the quote and handles empty files", () => {
+test("summarizeMemoContent falls back to the quote and handles empty files", () => {
   const content = appendEntryBlock("", SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T12:00:00.000Z",
     id: "20260702-210000-000",
@@ -173,7 +174,7 @@ Deno.test("summarizeMemoContent falls back to the quote and handles empty files"
   assertEquals(summarizeMemoContent(""), { count: 0, lastText: "" });
 });
 
-Deno.test("append preserves existing bytes and file stays parseable", () => {
+test("append preserves existing bytes and file stays parseable", () => {
   const first = fileWithEntries();
   const appended = appendEntryBlock(first, SOURCE, buildEntryBlock({
     createdAt: "2026-07-02T12:00:00.000Z",

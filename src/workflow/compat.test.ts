@@ -1,4 +1,5 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertThrows } from "../testing/assert";
 import {
   expandMultipartFields,
   runWorkflowChatWithAutoApply,
@@ -7,7 +8,7 @@ import {
 } from "./compat.ts";
 import type { ChatRequest } from "../lib/wailsBackend.ts";
 
-Deno.test("workflow compatibility helpers preserve source runtime semantics", () => {
+test("workflow compatibility helpers preserve source runtime semantics", () => {
   assertEquals(
     workflowNameFromPath(undefined, "workflows/daily-note.yaml"),
     "daily-note",
@@ -36,7 +37,7 @@ Deno.test("workflow compatibility helpers preserve source runtime semantics", ()
   assertThrows(() => expandMultipartFields("[]", (value) => value));
 });
 
-Deno.test("workflow chat applies file tools and continues to a final response", async () => {
+test("workflow chat applies file tools and continues to a final response", async () => {
   const request = {
     messages: [{ role: "user", content: "edit it" }],
     cliSessionId: "",
@@ -86,7 +87,7 @@ Deno.test("workflow chat applies file tools and continues to a final response", 
   );
 });
 
-Deno.test("workflow chat reports a rejected file edit back to the model", async () => {
+test("workflow chat reports a rejected file edit back to the model", async () => {
   const request = {
     messages: [{ role: "user", content: "edit it" }],
     cliSessionId: "",

@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { docKindFor, isFileWidgetFileName } from "./documentKind.ts";
 import { memoChatDraft, memoEntryChatDraft } from "./memoChat.ts";
 import {
@@ -9,7 +10,7 @@ import {
   resolvedFileWidgetContent,
 } from "./fileWidgetHydration.ts";
 
-Deno.test("opening Markdown clears stale external-document state", () => {
+test("opening Markdown clears stale external-document state", () => {
   assertEquals(fileWidgetViewerState({ file: { scope: "workspace", path: "note.md" } }), {
     externalOnly: false,
     file: { scope: "workspace", path: "note.md" },
@@ -19,12 +20,12 @@ Deno.test("opening Markdown clears stale external-document state", () => {
   });
 });
 
-Deno.test("Markdown document kind is authoritative over stale viewer state", () => {
+test("Markdown document kind is authoritative over stale viewer state", () => {
   assertEquals(docKindFor("メモ.md"), "markdown");
   assertEquals(docKindFor("report.docx"), "external");
 });
 
-Deno.test("restored file widgets wait for their backend path context", () => {
+test("restored file widgets wait for their backend path context", () => {
   assertEquals(fileWidgetHydrationReady("files", "", "Workspace"), false);
   assertEquals(fileWidgetHydrationReady(undefined, "", "Workspace"), false);
   assertEquals(fileWidgetHydrationReady("files", "/Files", ""), true);
@@ -35,7 +36,7 @@ Deno.test("restored file widgets wait for their backend path context", () => {
   );
 });
 
-Deno.test("Chat file changes match the open file widget path", () => {
+test("Chat file changes match the open file widget path", () => {
   assertEquals(
     fileChangeMatchesWidget(
       ["Notes/Current.md", "workspace://Notes/Current.md"],
@@ -49,7 +50,7 @@ Deno.test("Chat file changes match the open file widget path", () => {
   );
 });
 
-Deno.test("file-backed widgets do not show the local document while hydration is pending", () => {
+test("file-backed widgets do not show the local document while hydration is pending", () => {
   assertEquals(
     resolvedFileWidgetContent(undefined, "Books/example.epub", "# Default"),
     "",
@@ -60,7 +61,7 @@ Deno.test("file-backed widgets do not show the local document while hydration is
   );
 });
 
-Deno.test("switching dashboards clears file hydration state", () => {
+test("switching dashboards clears file hydration state", () => {
   const hydrated = new Set(["widget-1:Books/example.epub"]);
   let previous = resetFileHydrationForDashboard(
     hydrated,
@@ -79,33 +80,33 @@ Deno.test("switching dashboards clears file hydration state", () => {
   assertEquals(hydrated.size, 0);
 });
 
-Deno.test("File widgets route .base files to the Base editor", () => {
+test("File widgets route .base files to the Base editor", () => {
   assertEquals(docKindFor("Dashboards/Bases/Projects.base"), "base");
   assertEquals(docKindFor("NOTES.BASE"), "base");
 });
 
-Deno.test("File widgets route .kanban files to the Kanban editor", () => {
+test("File widgets route .kanban files to the Kanban editor", () => {
   assertEquals(docKindFor("Dashboards/Kanbans/Tasks.kanban"), "kanban");
   assertEquals(docKindFor("BOARD.KANBAN"), "kanban");
 });
 
-Deno.test("File widgets route .canvas files to the visual Canvas editor", () => {
+test("File widgets route .canvas files to the visual Canvas editor", () => {
   assertEquals(docKindFor("Boards/Planning.canvas"), "canvas");
   assertEquals(docKindFor("MAP.CANVAS"), "canvas");
 });
 
-Deno.test("File widgets route YAML files to the visual Workflow editor", () => {
+test("File widgets route YAML files to the visual Workflow editor", () => {
   assertEquals(docKindFor("workflow.yaml"), "workflow");
   assertEquals(docKindFor("workflows/daily-report.yml"), "workflow");
 });
 
-Deno.test("File widgets route office and archive files to external-app view", () => {
+test("File widgets route office and archive files to external-app view", () => {
   assertEquals(docKindFor("report.xlsx"), "external");
   assertEquals(docKindFor("proposal.docx"), "external");
   assertEquals(docKindFor("assets.zip"), "external");
 });
 
-Deno.test("File widget picker includes all supported media, office, data, and workflow formats", () => {
+test("File widget picker includes all supported media, office, data, and workflow formats", () => {
   for (
     const path of [
       "clip.mp4",
@@ -122,14 +123,14 @@ Deno.test("File widget picker includes all supported media, office, data, and wo
   assertEquals(isFileWidgetFileName("program.exe"), false);
 });
 
-Deno.test("memo AI chat draft passes paths without file contents", () => {
+test("memo AI chat draft passes paths without file contents", () => {
   assertEquals(
     memoChatDraft("Memos/source.md", "Notes/source.md"),
     "Memo file:\nMemos/source.md\n\nSource file:\nNotes/source.md",
   );
 });
 
-Deno.test("memo entry AI draft includes its unchanged body and quote context", () => {
+test("memo entry AI draft includes its unchanged body and quote context", () => {
   assertEquals(
     memoEntryChatDraft("Notes/source.md", {
       id: "entry-1",

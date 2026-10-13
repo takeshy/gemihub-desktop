@@ -1,7 +1,9 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { readFile } from "node:fs/promises";
+import { test } from "vitest";
+import { assert, assertEquals } from "../testing/assert";
 import { fileRef, isFileRef, sameFileRef } from "./fileRef";
 
-Deno.test("FileRef keeps storage scope separate from its path", () => {
+test("FileRef keeps storage scope separate from its path", () => {
   assertEquals(fileRef("workspace", "Notes\\one.md"), {
     scope: "workspace",
     path: "Notes/one.md",
@@ -16,7 +18,7 @@ Deno.test("FileRef keeps storage scope separate from its path", () => {
   assert(!isFileRef("workspace://Notes/one.md"));
 });
 
-Deno.test("absolute FileRef comparison follows filesystem path semantics", () => {
+test("absolute FileRef comparison follows filesystem path semantics", () => {
   assert(sameFileRef(
     fileRef("absolute", "C:\\Notes\\One.md"),
     fileRef("absolute", "c:/notes/one.md"),
@@ -43,7 +45,7 @@ Deno.test("absolute FileRef comparison follows filesystem path semantics", () =>
   ));
 });
 
-Deno.test("Workspace-only dashboard flows do not serialize scope into paths", async () => {
+test("Workspace-only dashboard flows do not serialize scope into paths", async () => {
   for (
     const path of [
       "../dashboard/dashboardFile.ts",
@@ -52,7 +54,7 @@ Deno.test("Workspace-only dashboard flows do not serialize scope into paths", as
       "../dashboard/CalendarDashboardWidget.tsx",
     ]
   ) {
-    const source = await Deno.readTextFile(new URL(path, import.meta.url));
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
     assert(!source.includes("workspace://"), `${path} contains workspace URI`);
   }
 });

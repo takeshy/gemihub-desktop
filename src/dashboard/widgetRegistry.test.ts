@@ -1,13 +1,14 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { dashboardPluginWidgetForPath, dashboardWidgetDefinition, dashboardWidgetFilePath, dashboardWidgetHasSettings, isDashboardWidgetConfigured, pluginMainViewWidgetType, registerDashboardWidget, registerPluginWidget } from "./widgetRegistry.ts";
 
-Deno.test("dashboard plugin widgets register and resolve file-backed paths", () => {
+test("dashboard plugin widgets register and resolve file-backed paths", () => {
   registerDashboardWidget({ type: "test:chart", label: "Chart", description: "test", defaultConfig: {}, defaultSize: { w: 4, h: 3 }, filePathKey: "source" });
   assertEquals(dashboardWidgetDefinition("test:chart")?.label, "Chart");
   assertEquals(dashboardWidgetFilePath({ id: "one", type: "test:chart", title: "Chart", layout: { x: 0, y: 0, w: 4, h: 3 }, config: { source: "data/report.md" } }), "data/report.md");
 });
 
-Deno.test("Web-compatible plugin widgets use a portable type", () => {
+test("Web-compatible plugin widgets use a portable type", () => {
   const render = () => "rendered";
   const ConfigEditor = () => null;
   registerPluginWidget("example", {
@@ -28,7 +29,7 @@ Deno.test("Web-compatible plugin widgets use a portable type", () => {
   assertEquals(pluginMainViewWidgetType("example:main"), "plugin-view:example:main");
 });
 
-Deno.test("new selectable widgets are configured only after their primary selection", () => {
+test("new selectable widgets are configured only after their primary selection", () => {
   const widget = (type: string, config: Record<string, unknown>) => ({ id: "one", type, title: "", layout: { x: 0, y: 0, w: 4, h: 3 }, config });
   assertEquals(isDashboardWidgetConfigured(widget("timeline", { name: "" })), false);
   assertEquals(isDashboardWidgetConfigured(widget("timeline", { name: "Journal" })), true);
@@ -40,7 +41,7 @@ Deno.test("new selectable widgets are configured only after their primary select
   assertEquals(isDashboardWidgetConfigured(widget("memo-list", {})), true);
 });
 
-Deno.test("plugin main-view extensions route files to their widget", () => {
+test("plugin main-view extensions route files to their widget", () => {
   registerPluginWidget("audio", {
     type: "plugin-view:audio:main",
     label: "Audio",

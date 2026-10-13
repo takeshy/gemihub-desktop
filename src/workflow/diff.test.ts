@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { computeWorkflowLineDiff, workflowDiffFeedback } from "./diff.ts";
 
-Deno.test("workflow confirmation diff identifies lines and formats AI feedback", () => {
+test("workflow confirmation diff identifies lines and formats AI feedback", () => {
   const lines = computeWorkflowLineDiff("one\ntwo\nthree", "one\nTWO\nthree\nfour");
   assertEquals(lines.map((line) => line.type), ["unchanged", "removed", "added", "unchanged", "added"]);
   const added = lines.findIndex((line) => line.content === "TWO");

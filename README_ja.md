@@ -154,7 +154,7 @@ ExplorerやFinderから関連付けられたファイルを開くと、特殊な
 
 ## アーキテクチャ
 
-GemiHub Desktop は Go、Wails、Deno、Vite、React、Wysimark-lite、pdf.js
+GemiHub Desktop は Go、Wails、Node.js、Vite、React、Wysimark-lite、pdf.js
 で構築されています。
 
 デスクトップシェルが、ユーザーの選んだワークスペース内のローカルファイル操作を提供します。React
@@ -185,7 +185,7 @@ Provider、ローカル CLI、MCP Server、Skill、Plugin、YAML Workflow
 Windowsでは[Microsoft Store](https://apps.microsoft.com/detail/9PH8RH26NTD5)からインストールできます。更新は自動で適用されます。
 
 それ以外の環境では、GitHub Releases から実行ファイルをダウンロードしてください。実行時に
-Deno や Go は必要ありません。
+Node.js や Go は必要ありません。
 
 配布される実行ファイル：
 
@@ -214,7 +214,7 @@ chmod +x gemihub-desktop-linux-amd64
 ```
 
 macOS 12以降のApple Silicon Macでは、次のinstallerで `~/Applications` に
-アプリを配置できます。Go、Deno、管理者権限は不要です。
+アプリを配置できます。Go、Node.js、管理者権限は不要です。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/takeshy/gemihub-desktop/main/scripts/install_macos.sh -o /tmp/gemihub-install.sh
@@ -260,7 +260,7 @@ gemihub-desktop note.md research.pdf book.epub
 
 必要な環境：
 
-- Deno 2.9 以上
+- Node.js 24 以上
 - Go 1.25 以上
 - Wails v3.0.0-beta.12（`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12`）
 - 利用する OS 向けの Wails platform dependencies
@@ -268,22 +268,22 @@ gemihub-desktop note.md research.pdf book.epub
 依存関係をインストールし、Web UI を起動します。
 
 ```bash
-deno install --allow-scripts
-deno task dev
+npm install
+npm run dev
 ```
 
 デスクトップアプリを開発モードで起動します。
 
 ```bash
-deno task desktop
+npm run desktop
 ```
 
 型チェックとビルド：
 
 ```bash
-deno task check
-deno task build
-deno task desktop:build
+npm run check
+npm run build
+npm run desktop:build
 ```
 
 デスクトップビルドでは Developer Tools が有効です。`Ctrl+Shift+I`（macOS では

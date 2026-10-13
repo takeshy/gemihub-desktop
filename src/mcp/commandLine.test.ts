@@ -1,6 +1,6 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test as it } from "vitest";
+import { assertEquals } from "../testing/assert";
 const describe = (_name: string, run: () => void) => run();
-const it = Deno.test;
 const expect = (actual: unknown) => ({ toEqual: (expected: unknown) => assertEquals(actual, expected) });
 import { joinCommandLine, splitCommandLine } from "./commandLine.ts";
 

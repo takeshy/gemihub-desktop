@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   fileTreeContextMenuItemsFor,
   fileViewerActionsFor,
@@ -14,7 +15,7 @@ const markdown = {
   isDirectory: false,
 };
 
-Deno.test("plugin file actions filter targets and unregister by plugin", () => {
+test("plugin file actions filter targets and unregister by plugin", () => {
   unregisterPluginFileActions();
   registerFileTreeContextMenuItem("drive", {
     id: "compare",
@@ -48,7 +49,7 @@ Deno.test("plugin file actions filter targets and unregister by plugin", () => {
   assertEquals(fileViewerActionsFor(markdown), []);
 });
 
-Deno.test("an old disposer does not remove a replacement action", () => {
+test("an old disposer does not remove a replacement action", () => {
   unregisterPluginFileActions();
   const removeOld = registerFileViewerAction("drive", {
     id: "compare",

@@ -1,8 +1,9 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertRejects } from "../testing/assert";
 import { requireMcpApproval } from "./approval.ts";
 import { defaultChatSettings, loadChatSettings, saveChatSettings, type MCPServerConfig } from "../llm/settings.ts";
 
-Deno.test("MCP approval supports once, remember, revoke, deny and changed connection", async () => {
+test("MCP approval supports once, remember, revoke, deny and changed connection", async () => {
   const previous = Object.fromEntries(["localStorage", "document", "window"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values = new Map<string, string>();
   let choice = "once";

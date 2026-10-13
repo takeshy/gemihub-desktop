@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { relocatedMemoSource, replaceMemoSource } from "./memoRelocation.ts";
 
-Deno.test("memo source follows file and directory moves", () => {
+test("memo source follows file and directory moves", () => {
   assertEquals(
     relocatedMemoSource("Notes/today.md", [{
       sourcePaths: ["Notes/today.md"],
@@ -20,7 +21,7 @@ Deno.test("memo source follows file and directory moves", () => {
   );
 });
 
-Deno.test("memo frontmatter source changes without rewriting entries", () => {
+test("memo frontmatter source changes without rewriting entries", () => {
   const content = "---\nsource: Notes/today.md\nkind: memo\n---\n\nbody\n";
   assertEquals(
     replaceMemoSource(content, "Archive/today.md"),

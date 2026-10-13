@@ -1,8 +1,10 @@
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { readFile } from "node:fs/promises";
+import { test } from "vitest";
+import { assert, assertEquals, assertStringIncludes } from "../testing/assert";
 import { decodeBuiltinOkfDocuments } from "./builtinOkf.ts";
 
-Deno.test("generated built-in OKF gzip asset contains all product help", async () => {
-  const compressed = await Deno.readFile(
+test("generated built-in OKF gzip asset contains all product help", async () => {
+  const compressed = await readFile(
     new URL("../generated/builtin-okf.json.gz", import.meta.url),
   );
   const documents = decodeBuiltinOkfDocuments(compressed);

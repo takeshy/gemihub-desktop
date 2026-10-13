@@ -200,7 +200,7 @@ file, and restore an earlier state when needed.
 
 ## Architecture
 
-GemiHub Desktop is built with Go, Wails, Deno, Vite, React, Wysimark-lite, and
+GemiHub Desktop is built with Go, Wails, Node.js, Vite, React, Wysimark-lite, and
 pdf.js.
 
 The desktop shell provides local filesystem access within a user-selected
@@ -235,7 +235,7 @@ On Windows, install it from the
 [Microsoft Store](https://apps.microsoft.com/detail/9PH8RH26NTD5), which keeps
 the app updated automatically.
 
-Everywhere else, download a binary from the GitHub Releases page. Deno and Go
+Everywhere else, download a binary from the GitHub Releases page. Node.js and Go
 are not required at runtime.
 
 Available release artifacts:
@@ -268,7 +268,7 @@ chmod +x gemihub-desktop-linux-amd64
 ```
 
 On Apple Silicon Macs running macOS 12 or newer, install the app into
-`~/Applications` with the installer (no Go, Deno, or administrator access needed):
+`~/Applications` with the installer (no Go, Node.js, or administrator access needed):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/takeshy/gemihub-desktop/main/scripts/install_macos.sh -o /tmp/gemihub-install.sh
@@ -315,7 +315,7 @@ gemihub-desktop note.md research.pdf book.epub
 
 Requirements:
 
-- Deno 2.9 or newer
+- Node.js 24 or newer
 - Go 1.25 or newer
 - Wails v3.0.0-beta.12 (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12`)
 - Wails platform dependencies for your OS
@@ -323,22 +323,22 @@ Requirements:
 Install dependencies and run the web UI:
 
 ```bash
-deno install --allow-scripts
-deno task dev
+npm install
+npm run dev
 ```
 
 Run the desktop app in development mode:
 
 ```bash
-deno task desktop
+npm run desktop
 ```
 
 Type-check and build:
 
 ```bash
-deno task check
-deno task build
-deno task desktop:build
+npm run check
+npm run build
+npm run desktop:build
 ```
 
 Developer Tools are enabled in desktop builds. Press `Ctrl+Shift+I`

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { buildEntryBlock } from "./memoTimeline.ts";
 import { parseTimeline } from "./timelineFormat.ts";
 import { syncKakerattaTimeline, type KakerattaTimelineRecord } from "./kakerattaTimeline.ts";

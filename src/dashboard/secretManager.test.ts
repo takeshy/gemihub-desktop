@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   decryptFileContent,
   encryptFileContent,
@@ -8,7 +9,7 @@ import {
   reencryptFileContent,
 } from "../lib/hybridEncryption.ts";
 
-Deno.test("dashboard secret manager creates, unlocks, and updates compatible encrypted files", async () => {
+test("dashboard secret manager creates, unlocks, and updates compatible encrypted files", async () => {
   const keys = await generateKeyPair();
   const protectedKey = await encryptPrivateKey(
     keys.privateKey,

@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { buildTextIndex, findTextMatchStarts } from "./textAnchor.ts";
 
-Deno.test("file search finds every case-insensitive non-overlapping match", () => {
+test("file search finds every case-insensitive non-overlapping match", () => {
   assertEquals(findTextMatchStarts("Alpha beta ALPHA alphabet", "alpha"), [
     0,
     11,
@@ -9,7 +10,7 @@ Deno.test("file search finds every case-insensitive non-overlapping match", () =
   ]);
 });
 
-Deno.test("file search handles Japanese text and empty queries", () => {
+test("file search handles Japanese text and empty queries", () => {
   assertEquals(findTextMatchStarts("検索できます。再検索します。", "検索"), [
     0,
     8,
@@ -17,7 +18,7 @@ Deno.test("file search handles Japanese text and empty queries", () => {
   assertEquals(findTextMatchStarts("content", "   "), []);
 });
 
-Deno.test("rendered block boundaries separate headings from body text", () => {
+test("rendered block boundaries separate headings from body text", () => {
   const root = { parentElement: null };
   const heading = { tagName: "H2", parentElement: root };
   const paragraph = { tagName: "P", parentElement: root };
@@ -36,7 +37,7 @@ Deno.test("rendered block boundaries separate headings from body text", () => {
   assertEquals(buildTextIndex(root as unknown as Node).text, "見出し 本文");
 });
 
-Deno.test("PDF text-layer line breaks separate adjacent text spans", () => {
+test("PDF text-layer line breaks separate adjacent text spans", () => {
   const root = { parentElement: null };
   const nodes = [
     { nodeType: 3, data: "models that excel at", parentElement: root },

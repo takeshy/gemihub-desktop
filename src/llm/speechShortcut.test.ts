@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   speechShortcutFromEvent,
   speechShortcutLabel,
@@ -15,7 +16,7 @@ const key = {
   isComposing: false,
 };
 
-Deno.test("speech shortcuts capture modifiers and physical keys consistently", () => {
+test("speech shortcuts capture modifiers and physical keys consistently", () => {
   assertEquals(
     speechShortcutFromEvent({ ...key, ctrlKey: true, shiftKey: true }),
     "Ctrl+Shift+M",
@@ -35,7 +36,7 @@ Deno.test("speech shortcuts capture modifiers and physical keys consistently", (
   );
 });
 
-Deno.test("ordinary typing, IME composition, and modifier-only keys cannot activate speech", () => {
+test("ordinary typing, IME composition, and modifier-only keys cannot activate speech", () => {
   assertEquals(speechShortcutFromEvent(key), "");
   assertEquals(speechShortcutFromEvent({ ...key, shiftKey: true }), "");
   assertEquals(
@@ -52,7 +53,7 @@ Deno.test("ordinary typing, IME composition, and modifier-only keys cannot activ
   );
 });
 
-Deno.test("speech shortcut matching requires exactly the assigned modifiers", () => {
+test("speech shortcut matching requires exactly the assigned modifiers", () => {
   const saved = "Ctrl+Shift+M";
   assertEquals(
     speechShortcutFromEvent({ ...key, ctrlKey: true }) === saved,
@@ -69,7 +70,7 @@ Deno.test("speech shortcut matching requires exactly the assigned modifiers", ()
   );
 });
 
-Deno.test("speech shortcuts persist with an unassigned default and reject invalid stored values", () => {
+test("speech shortcuts persist with an unassigned default and reject invalid stored values", () => {
   assertEquals(loadSpeechSettings().shortcut, "");
   assertEquals(
     loadSpeechSettings({ shortcut: "Ctrl+Shift+M" }).shortcut,

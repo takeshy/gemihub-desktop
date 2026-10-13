@@ -1,10 +1,11 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   workspacePathFromRelative,
   workspaceRelativePath,
 } from "./markdownWorkspaceAssets.ts";
 
-Deno.test("Workspace assets use paths relative to the Markdown source", () => {
+test("Workspace assets use paths relative to the Markdown source", () => {
   assertEquals(
     workspaceRelativePath(
       "projects/tasks/Card.md",
@@ -22,7 +23,7 @@ Deno.test("Workspace assets use paths relative to the Markdown source", () => {
   );
 });
 
-Deno.test("relative Markdown images resolve back into the Workspace", () => {
+test("relative Markdown images resolve back into the Workspace", () => {
   assertEquals(
     workspacePathFromRelative(
       "projects/tasks/Card.md",

@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { deduplicateEmptyNewChats, isEmptyNewChat } from "./chatHistory.ts";
 
-Deno.test("chat history retains only one empty New chat", () => {
+test("chat history retains only one empty New chat", () => {
   const sessions = [
     { id: "newest", title: "New chat", messages: [] },
     { id: "used", title: "Question", messages: [{ role: "user" }] },

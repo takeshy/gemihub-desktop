@@ -6,12 +6,12 @@ tasks:
       - index.html
       - src/**/*
       - package.json
-      - deno.json
+      - package-lock.json
       - vite.config.ts
     generates:
       - dist/**/*
     cmds:
-      - deno task build
+      - npm run build
 
   tidy:
     internal: true

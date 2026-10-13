@@ -85,10 +85,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          deno-version: v2.9.0
+          node-version: 24
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
 
       - name: Install Linux Wails dependencies
         if: runner.os == 'Linux'
@@ -97,15 +101,15 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Check frontend
-        run: deno task check
+        run: npm run check
 
       - name: Test frontend
-        run: deno task test
+        run: npm test
 
       # main.go embeds dist at compile time, so a clean checkout must produce
       # the frontend assets before any Go package can be compiled or tested.
       - name: Build frontend assets
-        run: deno task build
+        run: npm run build
 
       - name: Test backend
         shell: bash

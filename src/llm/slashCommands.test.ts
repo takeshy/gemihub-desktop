@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { resolveSlashCommand, skillsForSlashCommand } from "./slashCommands.ts";
 import type { WorkspaceSkill } from "../skills/skills.ts";
 
@@ -10,21 +11,21 @@ const commands = [{
   enabledMcpServers: [],
 }];
 
-Deno.test("slash commands resolve their template for sending and display", () => {
+test("slash commands resolve their template for sending and display", () => {
   assertEquals(
     resolveSlashCommand("/review Be concise", commands),
     "Review this:\nBe concise",
   );
 });
 
-Deno.test("unknown slash commands remain unchanged", () => {
+test("unknown slash commands remain unchanged", () => {
   assertEquals(
     resolveSlashCommand("/unknown value", commands),
     "/unknown value",
   );
 });
 
-Deno.test("slash commands add configured skills without duplicating active skills", () => {
+test("slash commands add configured skills without duplicating active skills", () => {
   const skill = (name: string): WorkspaceSkill => ({
     name,
     description: "",

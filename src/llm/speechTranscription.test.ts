@@ -1,4 +1,5 @@
-import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertRejects, assertThrows } from "../testing/assert";
 import { defaultSpeechSettings } from "./settings.ts";
 import { speechLanguageCodes } from "./speechLanguages.ts";
 import {
@@ -9,7 +10,7 @@ import {
   transcriptionURL,
 } from "./speechTranscription.ts";
 
-Deno.test("retained recordings combine PCM in order with a single WAV header", async () => {
+test("retained recordings combine PCM in order with a single WAV header", async () => {
   const first = encodeSpeechWav(new Float32Array([0.25, -0.5]));
   const second = encodeSpeechWav(new Float32Array([0.75, 0]));
   const joined = await combineSpeechWavs([first, second]);
@@ -21,7 +22,7 @@ Deno.test("retained recordings combine PCM in order with a single WAV header", a
   assertEquals(joined.type, "audio/wav");
 });
 
-Deno.test("combined recording rejects empty audio and excessive total duration", async () => {
+test("combined recording rejects empty audio and excessive total duration", async () => {
   await assertRejects(() => combineSpeechWavs([]), Error, "録音が空");
   const large = encodeSpeechWav(new Float32Array(16000 * 151));
   await assertRejects(
@@ -31,7 +32,7 @@ Deno.test("combined recording rejects empty audio and excessive total duration",
   );
 });
 
-Deno.test("STT builds compatible endpoint URLs and rejects ambiguous base URLs", () => {
+test("STT builds compatible endpoint URLs and rejects ambiguous base URLs", () => {
   assertEquals(
     transcriptionURL("http://127.0.0.1:8080/", "whisper-cpp"),
     "http://127.0.0.1:8080/inference",
@@ -67,7 +68,7 @@ Deno.test("STT builds compatible endpoint URLs and rejects ambiguous base URLs",
   }
 });
 
-Deno.test("Azure MAI sends Fast Transcription multipart fields and reads combined phrases", async () => {
+test("Azure MAI sends Fast Transcription multipart fields and reads combined phrases", async () => {
   const audio = encodeSpeechWav(new Float32Array([0]));
   const text = await transcribeSpeech(audio, {
     ...defaultSpeechSettings,
@@ -107,7 +108,7 @@ Deno.test("Azure MAI sends Fast Transcription multipart fields and reads combine
   assertEquals(text, "こんにちは 世界。");
 });
 
-Deno.test("Azure MAI language choices follow the selected model", () => {
+test("Azure MAI language choices follow the selected model", () => {
   const current = speechLanguageCodes(
     "openai-compatible",
     "azure-mai-transcribe",
@@ -124,7 +125,7 @@ Deno.test("Azure MAI language choices follow the selected model", () => {
   assertEquals(legacy.includes("yue"), false);
 });
 
-Deno.test("native whisper.cpp uses inference with JSON and explicit language auto", async () => {
+test("native whisper.cpp uses inference with JSON and explicit language auto", async () => {
   await transcribeSpeech(encodeSpeechWav(new Float32Array([0])), {
     ...defaultSpeechSettings,
     provider: "openai-compatible",
@@ -151,7 +152,7 @@ Deno.test("native whisper.cpp uses inference with JSON and explicit language aut
   }, new AbortController().signal);
 });
 
-Deno.test("STT sends a multipart WAV with optional auth and automatic language omitted", async () => {
+test("STT sends a multipart WAV with optional auth and automatic language omitted", async () => {
   const audio = encodeSpeechWav(new Float32Array([-1, 0, 1]));
   for (const apiKey of ["", " dummy "]) {
     const text = await transcribeSpeech(audio, {
@@ -195,7 +196,7 @@ Deno.test("STT sends a multipart WAV with optional auth and automatic language o
   }
 });
 
-Deno.test("STT includes an explicit language and validates server responses", async () => {
+test("STT includes an explicit language and validates server responses", async () => {
   const audio = encodeSpeechWav(new Float32Array([0]));
   const settings = { ...defaultSpeechSettings, language: "ja" };
   await transcribeSpeech(audio, settings, async (request) => {
@@ -238,7 +239,7 @@ Deno.test("STT includes an explicit language and validates server responses", as
   }
 });
 
-Deno.test("STT ignores a response cancelled while the desktop request is in flight", async () => {
+test("STT ignores a response cancelled while the desktop request is in flight", async () => {
   const controller = new AbortController();
   await assertRejects(
     () =>
@@ -260,7 +261,7 @@ Deno.test("STT ignores a response cancelled while the desktop request is in flig
   );
 });
 
-Deno.test("whisper silence markers do not become chat input", async () => {
+test("whisper silence markers do not become chat input", async () => {
   assertEquals(
     await transcribeSpeech(
       encodeSpeechWav(new Float32Array([0])),
@@ -277,7 +278,7 @@ Deno.test("whisper silence markers do not become chat input", async () => {
   );
 });
 
-Deno.test("speech commands send only on final trailing over and preserve the draft", () => {
+test("speech commands send only on final trailing over and preserve the draft", () => {
   assertEquals(speechDraft("下書き", "こんにちは over", false), {
     text: "下書き こんにちは over",
     send: false,
@@ -297,7 +298,7 @@ Deno.test("speech commands send only on final trailing over and preserve the dra
   assertEquals(speechDraft("", "over", true), { text: "", send: true });
 });
 
-Deno.test("custom send phrases are literal, final-only, and can be disabled", () => {
+test("custom send phrases are literal, final-only, and can be disabled", () => {
   assertEquals(speechDraft("", "質問です 送って。", true, "送って, 完了"), {
     text: "質問です",
     send: true,
@@ -320,7 +321,7 @@ Deno.test("custom send phrases are literal, final-only, and can be disabled", ()
   });
 });
 
-Deno.test("speech WAV encodes mono 16-bit 16 kHz PCM with clipped samples", async () => {
+test("speech WAV encodes mono 16-bit 16 kHz PCM with clipped samples", async () => {
   const wav = encodeSpeechWav(new Float32Array([-2, 0, 2]));
   const view = new DataView(await wav.arrayBuffer());
   assertEquals(wav.size, 50);
@@ -354,7 +355,7 @@ const transcriptCandidate = (parts: unknown[], finishReason = "STOP") => ({
   candidates: [{ content: { parts }, finishReason }],
 });
 
-Deno.test("Transcribe sends WAV inline data to fixed Gemini and Vertex models with isolated auth", async () => {
+test("Transcribe sends WAV inline data to fixed Gemini and Vertex models with isolated auth", async () => {
   const wav = encodeSpeechWav(new Float32Array([0.5, -0.5]));
   for (const settings of [geminiSettings, vertexSettings]) {
     const vertex = settings.endpointType === "vertex-transcribe";
@@ -407,7 +408,7 @@ Deno.test("Transcribe sends WAV inline data to fixed Gemini and Vertex models wi
   }
 });
 
-Deno.test("Transcribe supports auto detection, short language aliases, silence and audio longer than a minute", async () => {
+test("Transcribe supports auto detection, short language aliases, silence and audio longer than a minute", async () => {
   const wav = encodeSpeechWav(new Float32Array(61 * 16000));
   for (
     const [language, expected] of [["auto", []], ["", []], ["ja", ["ja-JP"]], [
@@ -436,7 +437,7 @@ Deno.test("Transcribe supports auto detection, short language aliases, silence a
   }
 });
 
-Deno.test("Transcribe rejects malformed, blocked and truncated output instead of sending partial text", async () => {
+test("Transcribe rejects malformed, blocked and truncated output instead of sending partial text", async () => {
   const wav = encodeSpeechWav(new Float32Array(160));
   for (
     const body of [
@@ -497,7 +498,7 @@ Deno.test("Transcribe rejects malformed, blocked and truncated output instead of
   }
 });
 
-Deno.test("Transcribe validates credentials and project IDs and ignores cancelled responses", async () => {
+test("Transcribe validates credentials and project IDs and ignores cancelled responses", async () => {
   const wav = encodeSpeechWav(new Float32Array(160));
   const transport = () => {
     throw new Error("unexpected transport");

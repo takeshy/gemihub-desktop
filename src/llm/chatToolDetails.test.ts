@@ -1,11 +1,12 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   ragQueryTitle,
   toolChipTitle,
   withToolDetail,
 } from "./chatToolDetails.ts";
 
-Deno.test("tool details accumulate per tool without duplicates", () => {
+test("tool details accumulate per tool without duplicates", () => {
   let details = withToolDetail(undefined, "rag_search", "first query");
   details = withToolDetail(details, "rag_search", "second query");
   details = withToolDetail(details, "rag_search", "second query");
@@ -18,7 +19,7 @@ Deno.test("tool details accumulate per tool without duplicates", () => {
   assertEquals(withToolDetail(details, "list_files", undefined), details);
 });
 
-Deno.test("tool chips name the call in their tooltip", () => {
+test("tool chips name the call in their tooltip", () => {
   assertEquals(toolChipTitle("list_files"), "list_files");
   assertEquals(
     toolChipTitle("search_files", ["needle", "other"]),
@@ -26,7 +27,7 @@ Deno.test("tool chips name the call in their tooltip", () => {
   );
 });
 
-Deno.test("the RAG badge lists the automatic query and every rag_search", () => {
+test("the RAG badge lists the automatic query and every rag_search", () => {
   assertEquals(
     ragQueryTitle({
       role: "assistant",

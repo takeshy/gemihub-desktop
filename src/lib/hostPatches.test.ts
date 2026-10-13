@@ -1,7 +1,8 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import { applyHostPatches } from "./hostPatches.ts";
 
-Deno.test("host patches update, create, and delete files inside their root", () => {
+test("host patches update, create, and delete files inside their root", () => {
   const patch = [
     "diff --git a/main.js b/main.js",
     "--- a/main.js",
@@ -50,7 +51,7 @@ Deno.test("host patches update, create, and delete files inside their root", () 
   );
 });
 
-Deno.test("host patches reject traversal and protected targets without partial output", () => {
+test("host patches reject traversal and protected targets without partial output", () => {
   const traversal =
     "--- a/main.js\n+++ b/../outside.js\n@@ -1,1 +1,1 @@\n-old\n+bad\n";
   const files = [{ relativePath: "demo/main.js", content: "old\n" }, {

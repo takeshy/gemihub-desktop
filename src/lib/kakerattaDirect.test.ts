@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { directEffectKey, pollDirectRequests, type DirectState, type DirectStore } from "./kakerattaDirect";
 import { KakerattaRejectedError } from "./kakerattaErrors";
 import { pollKakeratta, type KakerattaCall } from "./kakerattaWorker";

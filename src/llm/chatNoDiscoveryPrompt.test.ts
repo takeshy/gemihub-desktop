@@ -1,7 +1,8 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import { buildNoDiscoverySystemPrompt } from "./chatNoDiscoveryPrompt.ts";
 
-Deno.test("no-discovery mode points at rag_search instead of giving up", () => {
+test("no-discovery mode points at rag_search instead of giving up", () => {
   const withContext = buildNoDiscoverySystemPrompt({
     ragRequested: true,
     hasRagContext: true,
@@ -25,7 +26,7 @@ Deno.test("no-discovery mode points at rag_search instead of giving up", () => {
   );
 });
 
-Deno.test("no-discovery mode never advertises a tool the turn lacks", () => {
+test("no-discovery mode never advertises a tool the turn lacks", () => {
   const noRag = buildNoDiscoverySystemPrompt({
     ragRequested: false,
     hasRagContext: false,

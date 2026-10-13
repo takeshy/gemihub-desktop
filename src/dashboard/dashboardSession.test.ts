@@ -1,4 +1,5 @@
-import { assertEquals, assertNotEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertNotEquals } from "../testing/assert";
 import {
   carrySingleFile,
   dashboardSessionKeys,
@@ -20,7 +21,7 @@ const fileWidget = (id: string): DashboardWidget => ({
   },
 });
 
-Deno.test("single session survives serialization with its file and keeps only one widget", () => {
+test("single session survives serialization with its file and keeps only one widget", () => {
   const data = {
     ...defaultDashboard(),
     widgets: [fileWidget("file"), fileWidget("other")],
@@ -31,7 +32,7 @@ Deno.test("single session survives serialization with its file and keeps only on
   assertEquals(data.widgets.length, 2);
 });
 
-Deno.test("moving a single file preserves existing widgets and avoids duplicate IDs", () => {
+test("moving a single file preserves existing widgets and avoids duplicate IDs", () => {
   const target = { ...defaultDashboard(), widgets: [fileWidget("file")] };
   const single = singleDashboard({
     ...defaultDashboard(),
@@ -47,7 +48,7 @@ Deno.test("moving a single file preserves existing widgets and avoids duplicate 
   assertEquals(target.widgets.length, 1);
 });
 
-Deno.test("new dashboard receives the open single file", () => {
+test("new dashboard receives the open single file", () => {
   const single = singleDashboard({
     ...defaultDashboard(),
     widgets: [fileWidget("file")],
@@ -58,7 +59,7 @@ Deno.test("new dashboard receives the open single file", () => {
   assertEquals(created.widgets[0].layout.y, 0);
 });
 
-Deno.test("single sessions are scoped per workspace including launches without a workspace", () => {
+test("single sessions are scoped per workspace including launches without a workspace", () => {
   assertNotEquals(
     dashboardSessionKeys("first").single,
     dashboardSessionKeys("second").single,
@@ -73,7 +74,7 @@ Deno.test("single sessions are scoped per workspace including launches without a
   );
 });
 
-Deno.test("associated launch starts fresh even when a regular or single dashboard was saved", () => {
+test("associated launch starts fresh even when a regular or single dashboard was saved", () => {
   for (const last of ["Dashboards/research.dashboard", "single", null]) {
     assertEquals(initialDashboardSession(["/notes/new.md"], last, false), {
       associatedLaunch: true,
@@ -82,7 +83,7 @@ Deno.test("associated launch starts fresh even when a regular or single dashboar
   }
 });
 
-Deno.test("ordinary launch restores the previous single or regular dashboard", () => {
+test("ordinary launch restores the previous single or regular dashboard", () => {
   assertEquals(initialDashboardSession([], "single", false), {
     associatedLaunch: false,
     restoreSingle: true,
@@ -96,7 +97,7 @@ Deno.test("ordinary launch restores the previous single or regular dashboard", (
   );
 });
 
-Deno.test("workspace changes do not replay the associated launch", () => {
+test("workspace changes do not replay the associated launch", () => {
   assertEquals(
     initialDashboardSession(
       ["/notes/new.md"],

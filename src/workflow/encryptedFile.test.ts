@@ -1,4 +1,5 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertRejects } from "../testing/assert";
 import {
   encryptFileContent,
   encryptPrivateKey,
@@ -8,7 +9,7 @@ import { rememberFilePassword } from "../lib/fileEncryption.ts";
 import { fileRef } from "../lib/fileRef.ts";
 import { readWorkflowWorkspaceFile } from "./encryptedFile.ts";
 
-Deno.test("workflow file reads prompt for and remember an encryption password", async () => {
+test("workflow file reads prompt for and remember an encryption password", async () => {
   const path = "workflow-encrypted-read.md.encrypted";
   const reference = fileRef("workspace", path);
   rememberFilePassword(reference, "");
@@ -55,7 +56,7 @@ Deno.test("workflow file reads prompt for and remember an encryption password", 
   rememberFilePassword(reference, "");
 });
 
-Deno.test("headless workflows reject encrypted file reads without prompting", async () => {
+test("headless workflows reject encrypted file reads without prompting", async () => {
   let prompted = false;
   await assertRejects(
     () =>

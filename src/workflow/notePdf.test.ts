@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import type { ChatSettings } from "../llm/settings.ts";
 import { executeWorkflow } from "./executor.ts";
 import { parseWorkflowFile } from "./parser.ts";
@@ -61,7 +62,7 @@ async function runWithPdfBackend(yaml: string) {
   }
 }
 
-Deno.test("note-read reads a PDF page range as text without adding .md", async () => {
+test("note-read reads a PDF page range as text without adding .md", async () => {
   const { run, calls } = await runWithPdfBackend(`name: pdf
 nodes:
   - id: start
@@ -85,7 +86,7 @@ nodes:
   assertEquals(run.variables.lastPage, 10);
 });
 
-Deno.test("note-read format pdf returns FileExplorerData for attachments", async () => {
+test("note-read format pdf returns FileExplorerData for attachments", async () => {
   const { run, calls } = await runWithPdfBackend(`name: pdf
 nodes:
   - id: read
@@ -112,7 +113,7 @@ nodes:
   assertEquals(output?.data, undefined);
 });
 
-Deno.test("note-read with only savePageCountTo counts pages without reading", async () => {
+test("note-read with only savePageCountTo counts pages without reading", async () => {
   const { run, calls } = await runWithPdfBackend(`name: pdf
 nodes:
   - id: count
@@ -125,7 +126,7 @@ nodes:
   assertEquals(run.variables.total, 10);
 });
 
-Deno.test("note-read rejects a page that is not a positive integer", async () => {
+test("note-read rejects a page that is not a positive integer", async () => {
   const { run, calls } = await runWithPdfBackend(`name: pdf
 nodes:
   - id: read

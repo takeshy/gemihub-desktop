@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   basePropertyLabel,
   type DashboardDataRow,
@@ -27,7 +28,7 @@ const row = (
   cells: { status, "file.path": path, "file.tags": tags },
 });
 
-Deno.test("workspace Kanban rows load from the selected folder", async () => {
+test("workspace Kanban rows load from the selected folder", async () => {
   const target = globalThis as unknown as Record<string, unknown>;
   const original = target.go;
   const originalWindow = target.window;
@@ -78,7 +79,7 @@ Deno.test("workspace Kanban rows load from the selected folder", async () => {
   }
 });
 
-Deno.test("base definitions parse views and filter DirectoryBase rows", () => {
+test("base definitions parse views and filter DirectoryBase rows", () => {
   const base = parseBaseDefinition(
     `filters:\n  and:\n    - 'file.inFolder("Projects")'\nviews:\n  - type: table\n    name: Active\n    filters:\n      - 'status != "done"'\n    order: [file.name, status]\n`,
   )!;
@@ -96,7 +97,7 @@ Deno.test("base definitions parse views and filter DirectoryBase rows", () => {
   );
 });
 
-Deno.test("kanban files preserve tolerant board definitions", () => {
+test("kanban files preserve tolerant board definitions", () => {
   const parsed = parseKanbanDefinition(
     `version: 1\nfolder: Tasks\nstatusProperty: stage\ncolumns:\n  - { value: todo, label: To do }\nfuture: keep\n`,
   )!;
@@ -105,7 +106,7 @@ Deno.test("kanban files preserve tolerant board definitions", () => {
   assertEquals(parsed.future, "keep");
 });
 
-Deno.test("base rows support configured sorting, view search, and display names", () => {
+test("base rows support configured sorting, view search, and display names", () => {
   const rows = [
     {
       ...row("Projects/b.md", "todo"),
@@ -145,7 +146,7 @@ Deno.test("base rows support configured sorting, view search, and display names"
   assertEquals(basePropertyLabel(null, "formula.total"), "total");
 });
 
-Deno.test("Base filesystem timestamps render as localized date and time", () => {
+test("Base filesystem timestamps render as localized date and time", () => {
   const item = row("notes/example.md", "open");
   item.ctime = new Date(2024, 0, 15, 10, 30).getTime();
   item.mtime = new Date(2024, 1, 20, 12, 45).getTime();

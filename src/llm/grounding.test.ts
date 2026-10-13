@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { groundingSourceLabel, groundingSources } from "./grounding.ts";
 
-Deno.test("builds unique grounding sources by file and page", () => {
+test("builds unique grounding sources by file and page", () => {
   const sources = groundingSources([
     { filePath: "Books/guide.pdf", text: "a", score: 0.9, chunkIndex: 0, pageLabel: "p.3" },
     { filePath: "Books/guide.pdf", text: "b", score: 0.8, chunkIndex: 1, pageLabel: "p.3" },

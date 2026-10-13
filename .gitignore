@@ -10,9 +10,6 @@ wailsjs/
 frontend/
 package.json.md5
 
-# Deno
-.deno/
-
 # Vite
 .vite/
 
@@ -40,5 +37,5 @@ Thumbs.db
 .codex-downloads/
 .codex-store-assets/
 
-# Generated from docs/okf by `deno task generate:builtin-okf`
+# Generated from docs/okf by `npm run generate:builtin-okf`
 src/generated/

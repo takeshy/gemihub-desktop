@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { withTimelineFileLock } from "./timelineLocalLock.ts";
 
 test("sync waits for an in-progress post before reading its local snapshot", async () => {

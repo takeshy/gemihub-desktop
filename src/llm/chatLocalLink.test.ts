@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { chatExternalUrl, chatLocalFileRef } from "./chatLocalLink.ts";
 
-Deno.test("chat links resolve relative and workspace-absolute files", () => {
+test("chat links resolve relative and workspace-absolute files", () => {
   assertEquals(chatLocalFileRef("Notes/a.md#part", "/vault"), {
     scope: "workspace",
     path: "Notes/a.md",
@@ -12,14 +13,14 @@ Deno.test("chat links resolve relative and workspace-absolute files", () => {
   });
 });
 
-Deno.test("chat links leave web and bare host links alone", () => {
+test("chat links leave web and bare host links alone", () => {
   assertEquals(chatLocalFileRef("https://example.com/a", "/vault"), null);
   assertEquals(chatLocalFileRef("www.example.com/a", "/vault"), null);
   assertEquals(chatLocalFileRef("example.com/a", "/vault"), null);
   assertEquals(chatLocalFileRef("example.com", "/vault"), null);
 });
 
-Deno.test("bare host links get an https target instead of a dead button", () => {
+test("bare host links get an https target instead of a dead button", () => {
   assertEquals(
     chatExternalUrl("www.example.com/a"),
     "https://www.example.com/a",
@@ -33,7 +34,7 @@ Deno.test("bare host links get an https target instead of a dead button", () => 
   assertEquals(chatExternalUrl("main.go"), null);
 });
 
-Deno.test("chat links keep dotted folder names and encoded hashes", () => {
+test("chat links keep dotted folder names and encoded hashes", () => {
   assertEquals(chatLocalFileRef("notes.backup/a.md", "/vault"), {
     scope: "workspace",
     path: "notes.backup/a.md",
@@ -44,7 +45,7 @@ Deno.test("chat links keep dotted folder names and encoded hashes", () => {
   });
 });
 
-Deno.test("chat links accept top-level files with arbitrary extensions", () => {
+test("chat links accept top-level files with arbitrary extensions", () => {
   assertEquals(chatLocalFileRef("App.tsx", "/vault"), {
     scope: "workspace",
     path: "App.tsx",
@@ -64,7 +65,7 @@ Deno.test("chat links accept top-level files with arbitrary extensions", () => {
 });
 
 // Ported from the chatLinks module this one replaced.
-Deno.test("chat links convert a Windows Workspace path to a Workspace path", () => {
+test("chat links convert a Windows Workspace path to a Workspace path", () => {
   assertEquals(
     chatLocalFileRef(
       "C:\\Users\\takes\\takeshy\\人材マッチング.canvas",

@@ -1,4 +1,5 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertThrows } from "../testing/assert";
 import {
   canonicalWorkflowPath,
   findWorkflowBlocks,
@@ -19,7 +20,7 @@ import {
 import { readWorkflowDocument } from "./document.ts";
 import { workflowToMermaid } from "./mermaid.ts";
 
-Deno.test("parses fenced AI workflow output and branches", () => {
+test("parses fenced AI workflow output and branches", () => {
   const markdown = `# Demo\n\n${
     serializeWorkflowData({
       name: "Demo",
@@ -49,7 +50,7 @@ Deno.test("parses fenced AI workflow output and branches", () => {
   assertEquals(nextWorkflowNode(workflow, "check", false), null);
 });
 
-Deno.test("plain YAML is the canonical workflow format", () => {
+test("plain YAML is the canonical workflow format", () => {
   const source = serializeWorkflowYaml({
     name: "Canonical",
     nodes: [{ id: "start", type: "sleep", duration: 1 }],
@@ -90,7 +91,7 @@ Deno.test("plain YAML is the canonical workflow format", () => {
   );
 });
 
-Deno.test("parses AI workflow fences and rejects multiple blocks", () => {
+test("parses AI workflow fences and rejects multiple blocks", () => {
   assertEquals(
     findWorkflowBlocks(
       "```workflow\nnodes:\n  - type: sleep\n    duration: 1\n```",
@@ -102,7 +103,7 @@ Deno.test("parses AI workflow fences and rejects multiple blocks", () => {
   assertThrows(() => parseWorkflowFromMarkdown(`${block}\n\n${block}`));
 });
 
-Deno.test("normalizes external workflow YAML list markers and block scalar indentation", () => {
+test("normalizes external workflow YAML list markers and block scalar indentation", () => {
   const external =
     `name: generated\nnodes:\n* id: script\n  type: script\n  code: |\n  return {\n  name: "Ada",\n  count: 1\n  };\n  saveTo: result\n* id: show\n  type: dialog\n  message: "{{result.name}}"`;
   const normalized = normalizeWorkflowYaml(external);
@@ -119,7 +120,7 @@ Deno.test("normalizes external workflow YAML list markers and block scalar inden
   );
 });
 
-Deno.test("rejects back-references unless the target is a while node", () => {
+test("rejects back-references unless the target is a while node", () => {
   const invalid = serializeWorkflowData({
     name: "bad loop",
     nodes: [{ id: "first", type: "set", name: "x", value: 1 }, {
@@ -159,7 +160,7 @@ Deno.test("rejects back-references unless the target is a while node", () => {
   );
 });
 
-Deno.test("accepts external workflows with an explicit end node as a terminal alias", () => {
+test("accepts external workflows with an explicit end node as a terminal alias", () => {
   const source = serializeWorkflowData({
     name: "external terminal",
     nodes: [{
@@ -179,7 +180,7 @@ Deno.test("accepts external workflows with an explicit end node as a terminal al
   assertEquals(workflow.edges, []);
 });
 
-Deno.test("replaces nested values and evaluates conditions and arithmetic", () => {
+test("replaces nested values and evaluates conditions and arithmetic", () => {
   const variables = new Map<string, string | number>([["count", 2], [
     "payload",
     JSON.stringify({ user: { name: "Ada" } }),
@@ -205,7 +206,7 @@ Deno.test("replaces nested values and evaluates conditions and arithmetic", () =
   assertEquals(evaluateWorkflowValue("{{count}} + 3", variables), 5);
 });
 
-Deno.test("workflow variables resolve array and variable indexes", () => {
+test("workflow variables resolve array and variable indexes", () => {
   const variables = new Map<string, string | number>([[
     "items",
     JSON.stringify([{ name: "first" }, { name: "second" }]),
@@ -223,7 +224,7 @@ Deno.test("workflow variables resolve array and variable indexes", () => {
   );
 });
 
-Deno.test("workflow variables support nested indexes, objects, legacy system names, and repeated expansion", () => {
+test("workflow variables support nested indexes, objects, legacy system names, and repeated expansion", () => {
   const variables = new Map<string, string | number>([
     [
       "items",
@@ -248,7 +249,7 @@ Deno.test("workflow variables support nested indexes, objects, legacy system nam
   );
 });
 
-Deno.test("visual editor updates nodes while preserving markdown and workflow wrapper", () => {
+test("visual editor updates nodes while preserving markdown and workflow wrapper", () => {
   const markdown =
     "# Before\n\n```hub-workflow\nworkflow:\n  name: Wrapped\n  nodes:\n    - id: one\n      type: sleep\n      duration: 1\n```\n\nAfter\n";
   const document = readWorkflowDocument(markdown);
@@ -262,7 +263,7 @@ Deno.test("visual editor updates nodes while preserving markdown and workflow wr
   assertEquals(parseWorkflowFromMarkdown(updated).nodes.has("two"), true);
 });
 
-Deno.test("plain web YAML node names execute as desktop workflow nodes", () => {
+test("plain web YAML node names execute as desktop workflow nodes", () => {
   const workflow = parseWorkflowFile(
     "nodes:\n  - id: read\n    type: drive-read\n    path: note.md\n    saveTo: body\n  - id: action\n    type: gemihub-command\n    command: duplicate\n    path: note.md\n",
     "workflows/web.yaml",
@@ -271,7 +272,7 @@ Deno.test("plain web YAML node names execute as desktop workflow nodes", () => {
   assertEquals(workflow.nodes.get("action")?.type, "gemihub-command");
 });
 
-Deno.test("visual workflow edits preserve the target file dialect", () => {
+test("visual workflow edits preserve the target file dialect", () => {
   const web = readWorkflowDocument(
     "nodes:\n  - id: read\n    type: drive-read\n    path: note.md\n",
     "workflows/web.yaml",
@@ -289,7 +290,7 @@ Deno.test("visual workflow edits preserve the target file dialect", () => {
   );
 });
 
-Deno.test("workflow Mermaid export contains branches and terminal node", () => {
+test("workflow Mermaid export contains branches and terminal node", () => {
   const workflow = parseWorkflowFromMarkdown(
     serializeWorkflowData({
       nodes: [{

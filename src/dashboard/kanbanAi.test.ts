@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { parseKanbanAiTasks } from "./kanbanAi.ts";
 
-Deno.test("Kanban AI parser accepts fenced task arrays", () => {
+test("Kanban AI parser accepts fenced task arrays", () => {
   assertEquals(
     parseKanbanAiTasks(`\`\`\`json
 [{"title":"Ship","description":"Check it","due":"2026-09-01","checklist":[{"text":"Test","completed":false}]}]

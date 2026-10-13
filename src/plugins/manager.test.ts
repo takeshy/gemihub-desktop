@@ -1,8 +1,9 @@
+import { test } from "vitest";
 import {
   assertEquals,
   assertRejects,
   assertStringIncludes,
-} from "jsr:@std/assert";
+} from "../testing/assert";
 import {
   installPluginRelease,
   normalizePluginRepo,
@@ -77,7 +78,7 @@ function mockRuntime(
   return { backend, installed };
 }
 
-Deno.test("plugin release decodes octet-stream assets from bodyBase64", async () => {
+test("plugin release decodes octet-stream assets from bodyBase64", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   const mock = mockRuntime(pluginManifest(), true);
@@ -92,7 +93,7 @@ Deno.test("plugin release decodes octet-stream assets from bodyBase64", async ()
   }
 });
 
-Deno.test("plugin release install validates and applies the workspace patch", async () => {
+test("plugin release install validates and applies the workspace patch", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   const mock = mockRuntime();
@@ -118,7 +119,7 @@ Deno.test("plugin release install validates and applies the workspace patch", as
   }
 });
 
-Deno.test("plugin repository input accepts supported GitHub forms only", () => {
+test("plugin repository input accepts supported GitHub forms only", () => {
   assertEquals(normalizePluginRepo("owner/repo"), "owner/repo");
   assertEquals(
     normalizePluginRepo("https://github.com/owner/repo.git/"),
@@ -135,7 +136,7 @@ Deno.test("plugin repository input accepts supported GitHub forms only", () => {
   );
 });
 
-Deno.test("plugin recommendation trusts only official and local provenance", () => {
+test("plugin recommendation trusts only official and local provenance", () => {
   assertEquals(pluginRecommendation(), "custom");
   assertEquals(
     pluginRecommendation({ source: "local" }),
@@ -155,7 +156,7 @@ Deno.test("plugin recommendation trusts only official and local provenance", () 
   );
 });
 
-Deno.test("plugin install rejects a release changed after permission preview", async () => {
+test("plugin install rejects a release changed after permission preview", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   const previewRuntime = mockRuntime();
@@ -179,7 +180,7 @@ Deno.test("plugin install rejects a release changed after permission preview", a
   }
 });
 
-Deno.test("plugin release rejects incompatible hosts and tag mismatches", async () => {
+test("plugin release rejects incompatible hosts and tag mismatches", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   try {

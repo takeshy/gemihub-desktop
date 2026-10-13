@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { proposedPendingFileContent } from "./pendingFileAction.ts";
 
-Deno.test("pending file replacement previews the complete proposed file", () => {
+test("pending file replacement previews the complete proposed file", () => {
   assertEquals(
     proposedPendingFileContent("before", {
       kind: "write",
@@ -13,7 +14,7 @@ Deno.test("pending file replacement previews the complete proposed file", () => 
   );
 });
 
-Deno.test("pending append and prepend previews match backend newline handling", () => {
+test("pending append and prepend previews match backend newline handling", () => {
   assertEquals(
     proposedPendingFileContent("first", {
       kind: "write",

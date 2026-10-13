@@ -1,10 +1,11 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertRejects } from "../testing/assert";
 import { speechHTTPRequest } from "../lib/wailsBackend.ts";
 import { encodeSpeechWav, transcribeSpeech } from "./speechTranscription.ts";
 import { defaultSpeechSettings, selectSpeechEndpoint } from "./settings.ts";
 import type { ExternalHTTPRequest } from "../lib/wailsBackend.ts";
 
-Deno.test("recorded speech routes Vertex to native OAuth and AI Studio to the API-key transport", async () => {
+test("recorded speech routes Vertex to native OAuth and AI Studio to the API-key transport", async () => {
   const scope = globalThis as unknown as { window?: unknown };
   const previous = scope.window;
   const calls: string[] = [];

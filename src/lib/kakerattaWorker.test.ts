@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { pollKakeratta, type KakerattaCall } from "./kakerattaWorker";
 
 function fixture(asks: unknown[] = [{ id: "ask-1", status: "pending", claimBy: new Date(Date.now() + 60_000).toISOString() }]) {

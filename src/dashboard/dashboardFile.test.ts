@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import {
   deriveSmallLayout,
   listDashboardFiles,
@@ -8,11 +9,11 @@ import {
 } from "./dashboardFile.ts";
 import { defaultDashboard } from "./types.ts";
 
-Deno.test("the default dashboard starts without a placeholder widget", () => {
+test("the default dashboard starts without a placeholder widget", () => {
   assertEquals(defaultDashboard().widgets, []);
 });
 
-Deno.test("GemiHub dashboard YAML preserves unknown keys and widget configs", () => {
+test("GemiHub dashboard YAML preserves unknown keys and widget configs", () => {
   const source =
     `version: 1\npluginTop: keep\ngrid: { cols: 12, rowHeight: 80, gap: 8 }\nwidgets:\n  - id: one\n    type: plugin-chart\n    pluginWidgetKey: keep-too\n    layout:\n      lg: { x: 1, y: 2, w: 5, h: 4 }\n      sm: { x: 0, y: 0, w: 12, h: 3 }\n    config:\n      query: test\n      future: 42\n`;
   const parsed = parseDashboard(source)!;
@@ -32,7 +33,7 @@ Deno.test("GemiHub dashboard YAML preserves unknown keys and widget configs", ()
   assertEquals(parseDashboard(serialized)?.widgets[0].layout.x, 3);
 });
 
-Deno.test("dashboard parser accepts legacy flat layouts and derives mobile stacking", () => {
+test("dashboard parser accepts legacy flat layouts and derives mobile stacking", () => {
   const parsed = parseDashboard(
     `grid: { cols: 10, rowHeight: 72, gap: 5 }\nwidgets:\n  - { id: a, type: file, layout: { x: 0, y: 0, w: 5, h: 2 }, config: {} }\n  - { id: b, type: web, layout: { x: 5, y: 0, w: 5, h: 3 }, config: {} }`,
   )!;
@@ -54,7 +55,7 @@ Deno.test("dashboard parser accepts legacy flat layouts and derives mobile stack
   assertEquals(safeDashboardPath("../home"), null);
 });
 
-Deno.test("legacy File widget paths migrate once to FileRef", () => {
+test("legacy File widget paths migrate once to FileRef", () => {
   const parsed = parseDashboard(`widgets:
   - id: legacy
     type: file
@@ -74,7 +75,7 @@ Deno.test("legacy File widget paths migrate once to FileRef", () => {
   assertEquals(reparsed.widgets[0].config.file, parsed.widgets[0].config.file);
 });
 
-Deno.test("dashboard parser repairs duplicate widget IDs", () => {
+test("dashboard parser repairs duplicate widget IDs", () => {
   const parsed = parseDashboard(`widgets:
   - { id: duplicate, type: file, layout: { x: 0, y: 0, w: 6, h: 3 } }
   - { id: duplicate, type: kanban, layout: { x: 6, y: 0, w: 6, h: 3 } }
@@ -85,7 +86,7 @@ Deno.test("dashboard parser repairs duplicate widget IDs", () => {
   assertEquals(new Set(parsed.widgets.map((widget) => widget.id)).size, 2);
 });
 
-Deno.test("dashboard list discovers .dashboard files anywhere in the Workspace", async () => {
+test("dashboard list discovers .dashboard files anywhere in the Workspace", async () => {
   const runtime = globalThis as unknown as { window?: unknown };
   const previous = runtime.window;
   runtime.window = {

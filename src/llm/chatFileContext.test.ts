@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { attachedActiveFile } from "./chatFileContext.ts";
 import { resolveSlashCommand } from "./slashCommands.ts";
 
@@ -10,7 +11,7 @@ const commands = [{
   enabledMcpServers: [],
 }];
 
-Deno.test("removing the active chip excludes its content from slash commands and workflows", () => {
+test("removing the active chip excludes its content from slash commands and workflows", () => {
   const context = attachedActiveFile("private.md", [
     { path: "other.md", content: "Other attachment" },
   ]);
@@ -21,7 +22,7 @@ Deno.test("removing the active chip excludes its content from slash commands and
   );
 });
 
-Deno.test("an attached active file provides the same snapshot to commands and workflows", () => {
+test("an attached active file provides the same snapshot to commands and workflows", () => {
   const file = { path: "note.md", content: "Attached version" };
   const context = attachedActiveFile("note.md", [file]);
   file.content = "Edited after sending";
@@ -32,7 +33,7 @@ Deno.test("an attached active file provides the same snapshot to commands and wo
   );
 });
 
-Deno.test("cleared attachments and unattached editor switches have no active context", () => {
+test("cleared attachments and unattached editor switches have no active context", () => {
   assertEquals(attachedActiveFile("note.md", []), null);
   assertEquals(attachedActiveFile("new.md", [
     { path: "note.md", content: "Earlier file" },

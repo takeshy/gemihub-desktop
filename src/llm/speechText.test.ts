@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   applyReplacementRules,
   applySpeechCommands,
@@ -6,7 +7,7 @@ import {
   serializeReplacementRules,
   trailingSpeechCommand,
 } from "./speechText.ts";
-Deno.test("speech replacements prefer the longest phrase and consume punctuation", () => {
+test("speech replacements prefer the longest phrase and consume punctuation", () => {
   const rules = parseReplacementRules(
     "daily => wrong\ndaily note => /daily\n日記書いて => /daily",
   );
@@ -20,7 +21,7 @@ Deno.test("speech replacements prefer the longest phrase and consume punctuation
   );
 });
 
-Deno.test("replacement rows serialize compatibly with speech-popup", () => {
+test("replacement rows serialize compatibly with speech-popup", () => {
   const stored = serializeReplacementRules([
     { from: "日記書いて", to: "/daily" },
     { from: "two lines", to: "first\nsecond" },
@@ -31,7 +32,7 @@ Deno.test("replacement rows serialize compatibly with speech-popup", () => {
     { from: "two lines", to: "first\nsecond" },
   ]);
 });
-Deno.test("a spoken phrase may start with a hash without becoming a comment", () => {
+test("a spoken phrase may start with a hash without becoming a comment", () => {
   const stored = serializeReplacementRules([
     { from: "#tag", to: "hashtag" },
     { from: "back\\slash", to: "ok" },
@@ -41,7 +42,7 @@ Deno.test("a spoken phrase may start with a hash without becoming a comment", ()
     { from: "back\\slash", to: "ok" },
   ]);
 });
-Deno.test("speech symbol commands are final trailing phrases", () => {
+test("speech symbol commands are final trailing phrases", () => {
   assertEquals(
     applySpeechCommands("Is this working question.", {
       question: "question",
@@ -52,7 +53,7 @@ Deno.test("speech symbol commands are final trailing phrases", () => {
   );
   assertEquals(trailingSpeechCommand("turn over the page", "over"), null);
 });
-Deno.test("a rule with no spoken phrase is dropped instead of matching everywhere", () => {
+test("a rule with no spoken phrase is dropped instead of matching everywhere", () => {
   assertEquals(parseReplacementRules(" => hello"), []);
   assertEquals(
     applyReplacementRules("this is a test", [{ from: "", to: "hello" }]),

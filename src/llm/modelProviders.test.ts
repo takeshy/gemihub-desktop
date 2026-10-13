@@ -1,8 +1,9 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { fetchProviderModels } from "./modelProviders.ts";
 import { newModelProfile } from "./settings.ts";
 
-Deno.test("Gemini model discovery keeps API keys out of URLs", async () => {
+test("Gemini model discovery keeps API keys out of URLs", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   let received: { url: string; headers: Record<string, string> } | undefined;
@@ -56,7 +57,7 @@ Deno.test("Gemini model discovery keeps API keys out of URLs", async () => {
   }
 });
 
-Deno.test("AnythingLLM uses its OpenAI compatibility model endpoint", async () => {
+test("AnythingLLM uses its OpenAI compatibility model endpoint", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   let receivedURL = "";
@@ -87,7 +88,7 @@ Deno.test("AnythingLLM uses its OpenAI compatibility model endpoint", async () =
   }
 });
 
-Deno.test("OpenCode model discovery flattens provider and model IDs", async () => {
+test("OpenCode model discovery flattens provider and model IDs", async () => {
   const runtime = globalThis as unknown as { window?: { go?: unknown } };
   const previous = runtime.window;
   runtime.window = {

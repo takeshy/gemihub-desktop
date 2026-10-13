@@ -1,10 +1,11 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   parseFileViewPosition,
   restoredScrollTop,
 } from "./fileViewPosition.ts";
 
-Deno.test("file view positions restore by ratio and reject another file", () => {
+test("file view positions restore by ratio and reject another file", () => {
   const raw = JSON.stringify({
     key: "workspace:manual.pdf:pdf",
     targetPath: [0, 1],

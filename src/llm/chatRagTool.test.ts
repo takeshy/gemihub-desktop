@@ -1,11 +1,12 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import {
   formatRagSearchToolResult,
   mergeRagSources,
   ragSearchSystemPrompt,
 } from "./chatRagTool.ts";
 
-Deno.test("dynamic RAG results include chunk text and remaining budget", () => {
+test("dynamic RAG results include chunk text and remaining budget", () => {
   const value = formatRagSearchToolResult("focused", [{
     filePath: "Notes/a.md",
     text: "answer",
@@ -16,7 +17,7 @@ Deno.test("dynamic RAG results include chunk text and remaining budget", () => {
   assertStringIncludes(value, '"remainingSearches":1');
 });
 
-Deno.test("RAG source merging removes duplicate citations", () => {
+test("RAG source merging removes duplicate citations", () => {
   assertEquals(
     mergeRagSources([{ path: "a.md", score: 0.8 }], [{
       filePath: "a.md",
@@ -38,7 +39,7 @@ Deno.test("RAG source merging removes duplicate citations", () => {
   );
 });
 
-Deno.test("the RAG prompt exposes on-demand search without claiming automatic retrieval", () => {
+test("the RAG prompt exposes on-demand search without claiming automatic retrieval", () => {
   const prompt = ragSearchSystemPrompt();
   assertStringIncludes(
     prompt,

@@ -1,4 +1,5 @@
-import { assertEquals, assertStrictEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStrictEquals } from "../testing/assert";
 import {
   type ChatSettings,
   defaultChatSettings,
@@ -24,7 +25,7 @@ function configuredSettings(): ChatSettings {
   };
 }
 
-Deno.test("speech inherits the matching AI key without copying it into saved speech settings", () => {
+test("speech inherits the matching AI key without copying it into saved speech settings", () => {
   const settings = configuredSettings();
   const saved = JSON.stringify(settings);
   assertEquals(resolveSpeechSettings(settings).apiKey, "gemini-key");
@@ -47,7 +48,7 @@ Deno.test("speech inherits the matching AI key without copying it into saved spe
   assertEquals(resolveSpeechSettings(rotated).apiKey, "gemini-key-new");
 });
 
-Deno.test("selected official profile has priority and its current edits override its stored key", () => {
+test("selected official profile has priority and its current edits override its stored key", () => {
   const settings = configuredSettings();
   settings.modelProfiles.push({
     ...newModelProfile("gemini"),
@@ -64,7 +65,7 @@ Deno.test("selected official profile has priority and its current edits override
   assertEquals(resolveSpeechSettings(settings).apiKey, "gemini-key");
 });
 
-Deno.test("registered AI key wins over a speech key and unrelated services do not inherit API keys", () => {
+test("registered AI key wins over a speech key and unrelated services do not inherit API keys", () => {
   const settings = configuredSettings();
   const explicit = { ...settings.speech, apiKey: "speech-key" };
   assertEquals(resolveSpeechSettings(settings, explicit).apiKey, "gemini-key");
@@ -93,7 +94,7 @@ Deno.test("registered AI key wins over a speech key and unrelated services do no
   }
 });
 
-Deno.test("speech ignores disabled and compatible AI profiles and stale legacy keys", () => {
+test("speech ignores disabled and compatible AI profiles and stale legacy keys", () => {
   for (
     const change of [
       { enabled: false },
@@ -115,7 +116,7 @@ Deno.test("speech ignores disabled and compatible AI profiles and stale legacy k
   }
 });
 
-Deno.test("speech can reuse legacy AI keys for either provider", () => {
+test("speech can reuse legacy AI keys for either provider", () => {
   for (const provider of ["openai", "gemini"] as const) {
     const profile = newModelProfile(provider);
     const settings: ChatSettings = {
@@ -141,7 +142,7 @@ Deno.test("speech can reuse legacy AI keys for either provider", () => {
   }
 });
 
-Deno.test("Vertex speech always follows current AI settings, overriding old speech project and key", () => {
+test("Vertex speech always follows current AI settings, overriding old speech project and key", () => {
   const settings: ChatSettings = {
     ...configuredSettings(),
     provider: "vertex",
@@ -173,7 +174,7 @@ Deno.test("Vertex speech always follows current AI settings, overriding old spee
   assertEquals(JSON.stringify(settings), before);
 });
 
-Deno.test("Vertex configuration remains available to speech after switching chat to another provider", () => {
+test("Vertex configuration remains available to speech after switching chat to another provider", () => {
   const settings: ChatSettings = {
     ...configuredSettings(),
     provider: "vertex",
@@ -229,7 +230,7 @@ Deno.test("Vertex configuration remains available to speech after switching chat
   );
 });
 
-Deno.test("speech-only keys work with the opposite cloud AI, local models and OpenCode until an AI key is registered", () => {
+test("speech-only keys work with the opposite cloud AI, local models and OpenCode until an AI key is registered", () => {
   for (const endpointType of ["openai", "gemini-transcribe"] as const) {
     const provider = endpointType === "openai" ? "openai" : "gemini";
     const other = newModelProfile(provider === "openai" ? "gemini" : "openai");

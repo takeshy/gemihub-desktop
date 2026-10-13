@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   encryptedPathFor,
   rememberedFilePassword,
@@ -6,7 +7,7 @@ import {
 } from "./fileEncryption.ts";
 import { fileRef } from "./fileRef.ts";
 
-Deno.test("encrypted paths and session passwords retain FileRef scope", () => {
+test("encrypted paths and session passwords retain FileRef scope", () => {
   assertEquals(
     encryptedPathFor("notes/readme.md"),
     "notes/readme.md.encrypted",

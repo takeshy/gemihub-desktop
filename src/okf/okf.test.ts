@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assert, assertEquals, assertStringIncludes } from "../testing/assert";
 import {
   buildOkfSystemPrompt,
   discoverOkfBundles,
@@ -73,21 +74,16 @@ const fakeBuiltinDocs = [
   },
 ];
 
-Deno.test({
-  name: "OKF discovers only top-level bundles and uses index titles",
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn() {
-    await withFakeBackend(async () => {
-      assertEquals(await discoverOkfBundles("Knowledge"), [
-        { id: "operations", name: "Operations" },
-        { id: "product", name: "Product Handbook" },
-      ]);
-    });
-  },
+test("OKF discovers only top-level bundles and uses index titles", async () => {
+  await withFakeBackend(async () => {
+    assertEquals(await discoverOkfBundles("Knowledge"), [
+      { id: "operations", name: "Operations" },
+      { id: "product", name: "Product Handbook" },
+    ]);
+  });
 });
 
-Deno.test("built-in OKF is available without an external root", async () => {
+test("built-in OKF is available without an external root", async () => {
   assertEquals(getBuiltinOkfBundle(), {
     id: BUILTIN_OKF_BUNDLE_ID,
     name: "GemiHub Desktop Help",
@@ -106,31 +102,26 @@ Deno.test("built-in OKF is available without an external root", async () => {
   assertStringIncludes(prompt, "read_okf_document");
 });
 
-Deno.test({
-  name: "OKF prompt inlines only the bundle index and excludes logs/other docs",
-  sanitizeOps: false,
-  sanitizeResources: false,
-  async fn() {
-    await withFakeBackend(async () => {
-      const prompt = await buildOkfSystemPrompt("Knowledge", ["product"]);
-      assertStringIncludes(prompt, "## OKF bundle: Product Handbook (bundleId=product)");
-      assertStringIncludes(prompt, "Bundle overview.");
-      assert(!prompt.includes("Internal release history"));
-      assert(!prompt.includes("Operations overview"));
-      // Concept documents are no longer eagerly inlined; only the index is.
-      assert(!prompt.includes("A widget belongs to a project."));
-    });
-  },
+test("OKF prompt inlines only the bundle index and excludes logs/other docs", async () => {
+  await withFakeBackend(async () => {
+    const prompt = await buildOkfSystemPrompt("Knowledge", ["product"]);
+    assertStringIncludes(prompt, "## OKF bundle: Product Handbook (bundleId=product)");
+    assertStringIncludes(prompt, "Bundle overview.");
+    assert(!prompt.includes("Internal release history"));
+    assert(!prompt.includes("Operations overview"));
+    // Concept documents are no longer eagerly inlined; only the index is.
+    assert(!prompt.includes("A widget belongs to a project."));
+  });
 });
 
-Deno.test("okfDocumentTool is only offered when a bundle is active", () => {
+test("okfDocumentTool is only offered when a bundle is active", () => {
   assertEquals(okfDocumentTool([]), []);
   const tools = okfDocumentTool(["product"]);
   assertEquals(tools.length, 1);
   assertEquals(tools[0].name, "read_okf_document");
 });
 
-Deno.test("fetchOkfDocument resolves built-in and external documents on demand", async () => {
+test("fetchOkfDocument resolves built-in and external documents on demand", async () => {
   const builtinDoc = await fetchOkfDocument(
     "",
     BUILTIN_OKF_BUNDLE_ID,

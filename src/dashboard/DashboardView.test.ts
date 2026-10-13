@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { sameFileReference, shouldApplyFileResult } from "./fileReference.ts";
 
-Deno.test("memo source matching recognizes open file widget paths", () => {
+test("memo source matching recognizes open file widget paths", () => {
   assertEquals(
     sameFileReference("Notes/example.md", "Notes/example.md"),
     true,
@@ -19,7 +20,7 @@ Deno.test("memo source matching recognizes open file widget paths", () => {
   );
 });
 
-Deno.test("stale file restoration does not replace a newly opened file", () => {
+test("stale file restoration does not replace a newly opened file", () => {
   assertEquals(
     shouldApplyFileResult("C:\\Notes\\new.md", "C:\\Notes\\old.md"),
     false,

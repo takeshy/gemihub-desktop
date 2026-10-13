@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   isLocalDocumentHref,
   localHrefToPathCandidates,
@@ -7,12 +8,12 @@ import {
   wikiTargetToPath,
 } from "./wikiLinks.ts";
 
-Deno.test("wiki links remain relative for logical workspace files", () => {
+test("wiki links remain relative for logical workspace files", () => {
   assertEquals(wikiTargetToPath("", "Note"), "Note.md");
   assertEquals(wikiTargetToPath("folder", "Note"), "folder/Note.md");
 });
 
-Deno.test("wiki embeds try workspace-root and source-relative paths", () => {
+test("wiki embeds try workspace-root and source-relative paths", () => {
   assertEquals(
     wikiEmbedPathCandidates(
       "Dashboards/Timeline/Timeline",
@@ -45,7 +46,7 @@ Deno.test("wiki embeds try workspace-root and source-relative paths", () => {
   );
 });
 
-Deno.test("root-relative markdown links resolve from the workspace root", () => {
+test("root-relative markdown links resolve from the workspace root", () => {
   assertEquals(localHrefToPathCandidates("task", "/task/cron-parent.md"), [
     "task/cron-parent.md",
     "task/task/cron-parent.md",
@@ -59,7 +60,7 @@ Deno.test("root-relative markdown links resolve from the workspace root", () => 
   );
 });
 
-Deno.test("root-relative links in local documents search parent document roots", () => {
+test("root-relative links in local documents search parent document roots", () => {
   assertEquals(
     localHrefToPathCandidates(
       "/docs/sample-project/meetings",
@@ -74,7 +75,7 @@ Deno.test("root-relative links in local documents search parent document roots",
   );
 });
 
-Deno.test("links from a Windows absolute source stay local", () => {
+test("links from a Windows absolute source stay local", () => {
   const base = "C:\\Users\\adac_t.m_Mws20382\\work\\lisa";
   assertEquals(localHrefToPathCandidates(base, "task/research-addition.md"), [
     "C:\\Users\\adac_t.m_Mws20382\\work\\lisa\\task/research-addition.md",

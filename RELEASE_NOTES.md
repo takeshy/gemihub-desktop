@@ -1,3 +1,15 @@
+# GemiHub Desktop v1.9.0
+
+## What's new
+
+- Added Kakeratta integration and threaded Timeline AI replies.
+
+## Changes
+
+- Migrated frontend development and release builds from Deno to Node.js 24
+  and npm, with a committed dependency lockfile.
+- Migrated the frontend test suite to Vitest.
+
 # GemiHub Desktop v1.8.2
 
 ## Fixes

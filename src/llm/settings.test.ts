@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   chatModelChoices,
   configuredModelOptions,
@@ -17,7 +18,7 @@ import {
   updateModelProfile,
 } from "./settings.ts";
 
-Deno.test("speech settings keep browser as default and load compatible endpoints with an empty key", () => {
+test("speech settings keep browser as default and load compatible endpoints with an empty key", () => {
   assertEquals(
     loadChatSettings({ getItem: () => "{}" }).speech.provider,
     "browser",
@@ -57,7 +58,7 @@ Deno.test("speech settings keep browser as default and load compatible endpoints
   );
 });
 
-Deno.test("read-aloud settings load with clamped values", () => {
+test("read-aloud settings load with clamped values", () => {
   const loaded = loadSpeechSettings({
     autoReadAloud: true,
     readAloudRate: 99,
@@ -69,7 +70,7 @@ Deno.test("read-aloud settings load with clamped values", () => {
   assertEquals(loadSpeechSettings({}).autoReadAloud, false);
 });
 
-Deno.test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {
+test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {
   assertEquals(chatModelChoices.openai.includes("gpt-6-astra"), true);
   assertEquals(chatModelChoices.openai.includes("gpt-5.6-sol"), true);
   assertEquals(
@@ -82,7 +83,7 @@ Deno.test("current OpenAI and Gemini model choices omit Gemini 2.5", () => {
   );
 });
 
-Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
+test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
   let stored = JSON.stringify({
     ...defaultChatSettings,
     provider: "gemini",
@@ -112,7 +113,7 @@ Deno.test("Gemini defaults and legacy Flash settings follow GemiHub", () => {
 
 // A stored Gemini 2.x id would be sent as-is and rejected by the API, and it gets
 // no reasoning control in the chat bar, so loading drops it for a current model.
-Deno.test("stored Gemini 2.x models are migrated out of profiles on load", () => {
+test("stored Gemini 2.x models are migrated out of profiles on load", () => {
   const stored = JSON.stringify({
     ...defaultChatSettings,
     provider: "gemini",
@@ -154,7 +155,7 @@ Deno.test("stored Gemini 2.x models are migrated out of profiles on load", () =>
   );
 });
 
-Deno.test("OpenAI reasoning effort defaults to provider behavior and validates stored values", () => {
+test("OpenAI reasoning effort defaults to provider behavior and validates stored values", () => {
   const storage = (value: string) => ({
     getItem: (key: string) =>
       key === "gemihub-desktop:chat-settings" ? value : null,
@@ -176,7 +177,7 @@ Deno.test("OpenAI reasoning effort defaults to provider behavior and validates s
   );
 });
 
-Deno.test("Gemini reasoning effort defaults to provider behavior and validates stored values", () => {
+test("Gemini reasoning effort defaults to provider behavior and validates stored values", () => {
   const storage = (value: string) => ({
     getItem: (key: string) =>
       key === "gemihub-desktop:chat-settings" ? value : null,
@@ -198,7 +199,7 @@ Deno.test("Gemini reasoning effort defaults to provider behavior and validates s
   );
 });
 
-Deno.test("multiple API and local profiles become distinct selectable models", () => {
+test("multiple API and local profiles become distinct selectable models", () => {
   const cloud = {
     ...newModelProfile("openai"),
     id: "cloud",
@@ -231,7 +232,7 @@ Deno.test("multiple API and local profiles become distinct selectable models", (
   }, { id: "local", endpoint: "http://127.0.0.1:11434/v1", model: "qwen3" });
 });
 
-Deno.test("OpenAI and OpenAI Compatible profiles have distinct defaults", () => {
+test("OpenAI and OpenAI Compatible profiles have distinct defaults", () => {
   const official = newModelProfile("openai");
   const compatible = newModelProfile("openai", false, true);
   assertEquals({
@@ -254,7 +255,7 @@ Deno.test("OpenAI and OpenAI Compatible profiles have distinct defaults", () => 
   });
 });
 
-Deno.test("Local LLM frameworks expose the expected connection presets", () => {
+test("Local LLM frameworks expose the expected connection presets", () => {
   assertEquals(Object.keys(localLLMFrameworks), [
     "ollama",
     "lm-studio",
@@ -272,7 +273,7 @@ Deno.test("Local LLM frameworks expose the expected connection presets", () => {
   );
 });
 
-Deno.test("editing the active profile keeps type and credentials in sync", () => {
+test("editing the active profile keeps type and credentials in sync", () => {
   const anthropic = {
     ...newModelProfile("anthropic"),
     id: "provider",
@@ -310,7 +311,7 @@ Deno.test("editing the active profile keeps type and credentials in sync", () =>
   });
 });
 
-Deno.test("selecting a CLI clears the previous API model", () => {
+test("selecting a CLI clears the previous API model", () => {
   const settings = {
     ...defaultChatSettings,
     model: "gemini-3.8-flash",
@@ -327,7 +328,7 @@ Deno.test("selecting a CLI clears the previous API model", () => {
   );
 });
 
-Deno.test("RAG embeddings use AI provider credentials or isolated custom credentials", () => {
+test("RAG embeddings use AI provider credentials or isolated custom credentials", () => {
   const ai = resolveRAGSetting({
     ...defaultChatSettings,
     provider: "gemini",
@@ -353,7 +354,7 @@ Deno.test("RAG embeddings use AI provider credentials or isolated custom credent
   });
 });
 
-Deno.test("Jev RAG filtering resolves a configured OpenRouter key", () => {
+test("Jev RAG filtering resolves a configured OpenRouter key", () => {
   const profile = {
     ...newModelProfile("openai"),
     enabled: true,
@@ -376,7 +377,7 @@ Deno.test("Jev RAG filtering resolves a configured OpenRouter key", () => {
   }, { enabled: true, key: "router-key", openRouter: true });
 });
 
-Deno.test("speech service presets set OpenAI defaults and preserve legacy whisper settings", () => {
+test("speech service presets set OpenAI defaults and preserve legacy whisper settings", () => {
   const legacy = loadSpeechSettings({
     provider: "whisper-cpp",
     baseUrl: "http://127.0.0.1:8080",
@@ -407,7 +408,7 @@ Deno.test("speech service presets set OpenAI defaults and preserve legacy whispe
   assertEquals(loadSpeechSettings(edited).endpointType, "whisper-cpp");
 });
 
-Deno.test("Transcribe presets persist both backends without sharing API keys", () => {
+test("Transcribe presets persist both backends without sharing API keys", () => {
   const gemini = selectSpeechEndpoint({
     ...defaultSpeechSettings,
     apiKey: "openai-secret",
@@ -437,7 +438,7 @@ Deno.test("Transcribe presets persist both backends without sharing API keys", (
   );
 });
 
-Deno.test("old Cloud STT settings migrate to Transcribe without reusing Cloud STT credentials", () => {
+test("old Cloud STT settings migrate to Transcribe without reusing Cloud STT credentials", () => {
   const migrated = loadSpeechSettings({
     provider: "openai-compatible",
     endpointType: "google-cloud",

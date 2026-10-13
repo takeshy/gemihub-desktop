@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "../i18n/context.tsx";
 import { t } from "../i18n/translations.ts";
@@ -7,7 +8,7 @@ import { SpeechActivity } from "./SpeechActivity.tsx";
 import { defaultChatSettings, selectSpeechEndpoint } from "./settings.ts";
 import { SpeechError, speechErrorMessage } from "./speechErrors.ts";
 
-Deno.test("English speech settings contain no fixed Japanese UI text across services", () => {
+test("English speech settings contain no fixed Japanese UI text across services", () => {
   for (
     const endpoint of [
       null,
@@ -39,7 +40,7 @@ Deno.test("English speech settings contain no fixed Japanese UI text across serv
   }
 });
 
-Deno.test("Japanese speech settings still use Japanese labels", () => {
+test("Japanese speech settings still use Japanese labels", () => {
   const html = renderToStaticMarkup(
     <I18nProvider language="ja">
       <SpeechSettingsPanel
@@ -53,7 +54,7 @@ Deno.test("Japanese speech settings still use Japanese labels", () => {
   assertStringIncludes(html, "日本語 (ja-JP)");
 });
 
-Deno.test("speech activity and service errors follow the UI language", () => {
+test("speech activity and service errors follow the UI language", () => {
   for (const status of ["starting", "recording", "preparing", "transcribing"]) {
     const html = renderToStaticMarkup(
       <I18nProvider language="en">

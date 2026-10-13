@@ -1,7 +1,8 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import { truncateWorkflowHistoryData } from "./history.ts";
 
-Deno.test("workflow history truncates large text and binary recursively", () => {
+test("workflow history truncates large text and binary recursively", () => {
   const text = "prefix " + "x".repeat(2000) + " suffix";
   const binary = "A".repeat(2000);
   const result = truncateWorkflowHistoryData({ text, nested: [binary] }) as { text: string; nested: string[] };

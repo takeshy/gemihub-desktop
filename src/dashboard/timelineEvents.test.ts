@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   loadTimelineCalendarPosts,
   memoTimelineBody,
@@ -7,7 +8,7 @@ import {
   timelineFolder,
 } from "./timelineEvents";
 
-Deno.test("Calendar loads Timeline data without scanning DirectoryBase", async () => {
+test("Calendar loads Timeline data without scanning DirectoryBase", async () => {
   const runtime = globalThis as unknown as {
     window?: { go?: { main: { App: Record<string, unknown> } } };
   };
@@ -45,7 +46,7 @@ Deno.test("Calendar loads Timeline data without scanning DirectoryBase", async (
   }
 });
 
-Deno.test("timeline calendar posts parse shared timeline and event markers", () => {
+test("timeline calendar posts parse shared timeline and event markers", () => {
   const content = `<!-- timeline-post: 2026-07-18T01:02:03.000Z -->
 2026-07-18T01:02:03.000Z
 id: calendar-event-one
@@ -88,7 +89,7 @@ id: kanban-history
   });
 });
 
-Deno.test("timeline names use the shared portable folder convention", () => {
+test("timeline names use the shared portable folder convention", () => {
   assertEquals(sanitizeTimelineName(" Team / Launch.md "), "Team-Launch");
   assertEquals(sanitizeTimelineName(""), "Timeline");
   assertEquals(
@@ -98,7 +99,7 @@ Deno.test("timeline names use the shared portable folder convention", () => {
   assertEquals(timelineFolder(""), "Dashboards/Timeline/Timeline");
 });
 
-Deno.test("memo Timeline history retains its source, quote, and body", () => {
+test("memo Timeline history retains its source, quote, and body", () => {
   assertEquals(
     memoTimelineBody(
       "Research/Paper.pdf",

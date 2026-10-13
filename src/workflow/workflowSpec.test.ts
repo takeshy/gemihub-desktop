@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertStringIncludes } from "../testing/assert";
 import {
   buildWorkflowGenerationSpec,
   documentedWorkflowNodeTypes,
@@ -7,7 +8,7 @@ import {
 } from "./workflowSpec.ts";
 import { workflowNodeTypes } from "./types.ts";
 
-Deno.test("workflow spec tool returns requested node documentation and configured context", () => {
+test("workflow spec tool returns requested node documentation and configured context", () => {
   assertEquals(getWorkflowSpecTool.name, "get_workflow_spec");
   const result = getWorkflowNodeSpec('["command", "http"]', {
     models: ["gemini-3.8-flash"],
@@ -20,7 +21,7 @@ Deno.test("workflow spec tool returns requested node documentation and configure
   assertEquals(result.includes("- note:"), false);
 });
 
-Deno.test("workflow spec documents every executable node type", () => {
+test("workflow spec documents every executable node type", () => {
   assertEquals(documentedWorkflowNodeTypes(), [...workflowNodeTypes]);
   for (const type of workflowNodeTypes) {
     assertEquals(
@@ -31,7 +32,7 @@ Deno.test("workflow spec documents every executable node type", () => {
   }
 });
 
-Deno.test("workflow generation distinguishes caller input from interactive input", () => {
+test("workflow generation distinguishes caller input from interactive input", () => {
   const spec = getWorkflowNodeSpec();
   assertStringIncludes(spec, "It does not show an input dialog");
   assertStringIncludes(
@@ -40,14 +41,14 @@ Deno.test("workflow generation distinguishes caller input from interactive input
   );
 });
 
-Deno.test("workflow generation requires an image model for image output", () => {
+test("workflow generation requires an image model for image output", () => {
   assertStringIncludes(
     getWorkflowNodeSpec(["command"]),
     "saveImageTo requires an explicitly selected image-generation model",
   );
 });
 
-Deno.test("workflow generation treats infographics as structured text by default", () => {
+test("workflow generation treats infographics as structured text by default", () => {
   const spec = getWorkflowNodeSpec();
   assertStringIncludes(
     spec,
@@ -59,7 +60,7 @@ Deno.test("workflow generation treats infographics as structured text by default
   );
 });
 
-Deno.test("workflow generation spec includes runtime names and correctness examples", () => {
+test("workflow generation spec includes runtime names and correctness examples", () => {
   const spec = buildWorkflowGenerationSpec({
     models: ["configured-model"],
     ragSettings: ["docs"],

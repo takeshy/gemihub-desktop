@@ -1,4 +1,5 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import {
   compareVersions,
   fetchSkillCatalog,
@@ -6,7 +7,7 @@ import {
   installSkillFiles,
 } from "./externalSkills.ts";
 
-Deno.test("external skill semver and paths follow the catalog contract", () => {
+test("external skill semver and paths follow the catalog contract", () => {
   assertEquals((compareVersions("1.0.0", "1.0.0-beta") ?? 0) > 0, true);
   assertEquals(compareVersions("1.0", "1.0.0"), null);
   assertEquals(
@@ -16,7 +17,7 @@ Deno.test("external skill semver and paths follow the catalog contract", () => {
   assertEquals(getSafeSkillTargetPath("review", "review/../escape.md"), null);
 });
 
-Deno.test("official catalog accepts the shared GemiHub compatibility baseline", async () => {
+test("official catalog accepts the shared GemiHub compatibility baseline", async () => {
   const runtime = globalThis as unknown as {
     window?: { go?: { main: { App: Record<string, unknown> } } };
   };
@@ -64,7 +65,7 @@ Deno.test("official catalog accepts the shared GemiHub compatibility baseline", 
   }
 });
 
-Deno.test("external skills apply workspace host patches before installation", async () => {
+test("external skills apply workspace host patches before installation", async () => {
   const writes: Array<[string, string]> = [];
   const backend = {
     CreateWorkspaceDirectory: async () => undefined,
@@ -100,7 +101,7 @@ Deno.test("external skills apply workspace host patches before installation", as
   }
 });
 
-Deno.test("external skill installer validates manifests and confines writes", async () => {
+test("external skill installer validates manifests and confines writes", async () => {
   const writes = new Map<string, string>();
   const runtime = globalThis as unknown as {
     window?: { go?: { main: { App: Record<string, unknown> } } };

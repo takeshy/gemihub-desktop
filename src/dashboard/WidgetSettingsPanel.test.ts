@@ -1,7 +1,8 @@
-import { assertEquals } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals } from "../testing/assert";
 import { displayFilePath } from "./WidgetSettingsPanel.tsx";
 
-Deno.test("File Widget settings hide internal file scope prefixes", () => {
+test("File Widget settings hide internal file scope prefixes", () => {
   assertEquals(
     displayFilePath("Notes/example.md", "C:\\Users\\me\\Files"),
     "Notes/example.md",

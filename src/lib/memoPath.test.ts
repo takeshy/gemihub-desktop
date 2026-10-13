@@ -1,21 +1,22 @@
-import { assertEquals, assertMatch } from "jsr:@std/assert";
+import { test } from "vitest";
+import { assertEquals, assertMatch } from "../testing/assert";
 import { decodeMemoPath, encodeMemoPath, memoFileNameFor, sha256Hex } from "./memoPath.ts";
 
-Deno.test("encodes posix paths per spec example", () => {
+test("encodes posix paths per spec example", () => {
   assertEquals(
     memoFileNameFor("/Users/takeshy/books/go_book.pdf"),
     "_sUsers_stakeshy_sbooks_sgo_ubook.pdf.md",
   );
 });
 
-Deno.test("encodes windows paths per spec example", () => {
+test("encodes windows paths per spec example", () => {
   assertEquals(
     memoFileNameFor("C:\\Users\\takeshy\\doc.md"),
     "C_c_sUsers_stakeshy_sdoc.md.md",
   );
 });
 
-Deno.test("round-trips paths containing underscores, slashes, and colons", () => {
+test("round-trips paths containing underscores, slashes, and colons", () => {
   const paths = [
     "/Users/takeshy/books/go_book.pdf",
     "/a_/b",
@@ -29,31 +30,31 @@ Deno.test("round-trips paths containing underscores, slashes, and colons", () =>
   }
 });
 
-Deno.test("round-trips windows paths (separators normalize to /)", () => {
+test("round-trips windows paths (separators normalize to /)", () => {
   const encoded = encodeMemoPath("C:\\Users\\takeshy\\doc.md");
   assertEquals(decodeMemoPath(encoded), "C:/Users/takeshy/doc.md");
 });
 
-Deno.test("does not encode backslash in posix paths", () => {
+test("does not encode backslash in posix paths", () => {
   const path = "/tmp/back\\slash_file";
   const encoded = encodeMemoPath(path);
   assertEquals(encoded, "_stmp_sback\\slash_ufile");
   assertEquals(decodeMemoPath(encoded), path);
 });
 
-Deno.test("prefix-free mapping keeps ambiguous inputs distinct", () => {
+test("prefix-free mapping keeps ambiguous inputs distinct", () => {
   assertEquals(encodeMemoPath("a_/b"), "a_u_sb");
   assertEquals(encodeMemoPath("a/_b"), "a_s_ub");
   assertEquals(decodeMemoPath("a_u_sb"), "a_/b");
   assertEquals(decodeMemoPath("a_s_ub"), "a/_b");
 });
 
-Deno.test("rejects invalid escape sequences", () => {
+test("rejects invalid escape sequences", () => {
   assertEquals(decodeMemoPath("bad_name"), null);
   assertEquals(decodeMemoPath("trailing_"), null);
 });
 
-Deno.test("falls back to truncated name + hash for long paths", () => {
+test("falls back to truncated name + hash for long paths", () => {
   const longPath = `/books/${"あ".repeat(120)}.pdf`;
   const name = memoFileNameFor(longPath);
   assertMatch(name, /\.[0-9a-f]{8}\.md$/);
@@ -65,12 +66,12 @@ Deno.test("falls back to truncated name + hash for long paths", () => {
   assertEquals(memoFileNameFor(longPath), name);
 });
 
-Deno.test("short names do not use the fallback", () => {
+test("short names do not use the fallback", () => {
   assertEquals(memoFileNameFor("/a/b.md").includes(".md"), true);
   assertEquals(/\.[0-9a-f]{8}\.md$/.test(memoFileNameFor("/a/b.md")), false);
 });
 
-Deno.test("sha256 matches known vector", () => {
+test("sha256 matches known vector", () => {
   assertEquals(
     sha256Hex("abc"),
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
