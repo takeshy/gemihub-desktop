@@ -46,12 +46,10 @@ function summarize(result: KakerattaCycleResult): string {
  * Checks Kakeratta once when enabled (or when its settings change), then every
  * minute while the app is open unless periodic checks are turned off.
  */
-export function useKakeratta(settings: ChatSettings, language: string) {
+export function useKakeratta(settings: ChatSettings) {
   const [status, setStatus] = useState<KakerattaStatus>(OFF);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  const languageRef = useRef(language);
-  languageRef.current = language;
   const running = useRef<AbortController | null>(null);
   const config = settings.kakeratta;
   const key = JSON.stringify([config, settings.model, settings.provider, settings.mcpServers]);
@@ -69,7 +67,6 @@ export function useKakeratta(settings: ChatSettings, language: string) {
     try {
       const result = await runKakerattaCycle(
         current,
-        languageRef.current,
         controller.signal,
       );
       if (controller.signal.aborted) return;

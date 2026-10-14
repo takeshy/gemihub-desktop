@@ -17,7 +17,6 @@ import { mergeTimelineSnapshots } from "./timelineSnapshotMerge";
 export interface LocalTimelineSyncResult {
   files: number;
   conflicts: number;
-  pending: number;
   backfillPending: boolean;
 }
 
@@ -36,7 +35,6 @@ export async function syncTimelineLocal(
   config: KakerattaSettings,
   call: KakerattaCall,
   connection: string,
-  language: string,
   signal: AbortSignal,
 ): Promise<LocalTimelineSyncResult> {
   const folder = timelineFolder(config.timelineSync.name);
@@ -65,8 +63,6 @@ export async function syncTimelineLocal(
     call,
     connection,
     directory: folder,
-    enabledAt: config.timelineSync.enabledAt,
-    language,
     cursor,
     signal,
   });
@@ -112,7 +108,6 @@ export async function syncTimelineLocal(
   return {
     files: written,
     conflicts: result.conflicts,
-    pending: result.pending,
     backfillPending: !result.cursor.complete,
   };
 }

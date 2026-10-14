@@ -339,6 +339,8 @@ export interface ChatSettings {
   manualChatSaveFolder: string;
   discord: DiscordIntegrationSettings;
   kakeratta: KakerattaSettings;
+  /** Timeline posts show a Bluesky button only while this is on and an account is connected. */
+  bluesky: { enabled: boolean };
 }
 
 // Resolve AI credentials and the Vertex project at use time so changes follow
@@ -492,6 +494,7 @@ export const defaultChatSettings: ChatSettings = {
   maxSavedChatHistories: 100,
   manualChatSaveFolder: "",
   kakeratta: defaultKakerattaSettings(),
+  bluesky: { enabled: false },
   discord: {
     enabled: false,
     botToken: "",
@@ -1055,6 +1058,7 @@ export function loadChatSettings(
         : [],
       discord: { ...defaultChatSettings.discord, ...(parsed.discord ?? {}) },
       kakeratta: normalizeKakerattaSettings(parsed.kakeratta),
+      bluesky: { enabled: parsed.bluesky?.enabled === true },
       ragSettings: parsed.ragSettings && typeof parsed.ragSettings === "object"
         ? Object.fromEntries(
           Object.entries(parsed.ragSettings).map(([name, setting]) => {

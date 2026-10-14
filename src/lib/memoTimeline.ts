@@ -259,6 +259,15 @@ export function uniqueEntryId(content: string, date: Date): string {
 
 // Rewrites the file with one entry's body replaced. Returns null if the id
 // was not found. Unparsed blocks pass through verbatim without loss or damage.
+/**
+ * A post imported from Kakeratta: Kakeratta owns its content, so it is
+ * read-only here. Conflict copies and posts never acknowledged by Kakeratta
+ * (no imported base) remain local and editable.
+ */
+export function isKakerattaImport(metadata: Record<string, string> | undefined): boolean {
+  return !!metadata?.["kakeratta-id"] && !!metadata["kakeratta-base"] && metadata["local-only"] !== "true";
+}
+
 export function replaceEntryBody(
   content: string,
   entryId: string,
@@ -268,6 +277,7 @@ export function replaceEntryBody(
   let changed = false;
   const blocks = entries.map((entry) => {
     if (entry.id !== entryId) return entryToBlock(entry);
+    if (isKakerattaImport(entry.metadata)) throw new Error("Edit this post in Kakeratta");
     changed = true;
     if (!entry.parsed) return nextBody.trim();
     return entryToBlock({ ...entry, body: nextBody });
@@ -292,6 +302,8 @@ export function setEntryPinned(
 
 export function deleteEntry(content: string, entryId: string): string | null {
   const { source, entries } = parseMemoFile(content);
+  const target = entries.find((entry) => entry.id === entryId);
+  if (isKakerattaImport(target?.metadata)) throw new Error("Delete this post in Kakeratta");
   const remaining = entries.filter((entry) => entry.id !== entryId);
   if (remaining.length === entries.length) return null;
   return serializeMemoFile(source, remaining.map(entryToBlock));

@@ -28,9 +28,10 @@ timestamp: 2026-10-13T00:00:00+09:00
 
 # Timeline同期
 
-**Synchronize Timeline with Kakeratta**を有効にし、Timeline名を指定すると、`Dashboards/Timeline/<名前>/YYYY-MM-DD.md`の投稿・返信・担当名をKakerattaと同期します。接続先に`sync_timeline`ツールが必要です。
+**Import Timeline from Kakeratta**を有効にし、Timeline名を指定すると、`Dashboards/Timeline/<名前>/YYYY-MM-DD.md`にKakerattaの投稿・返信・担当名を取り込みます。接続先の読み取り専用ツール`get_timeline`を使います。
 
-- 同期を有効にした後に追加した投稿・返信は、Kakeratta側の担当ルーティングと提供元の課金に従います。それ以前の投稿は担当を起動せずに取り込みます。過去分はページ単位で取り込み、次回以降の確認で続きます。
+- 取り込み専用です。こちらで追加した投稿・返信・編集・削除はKakerattaへ送信しません。過去分はページ単位で取り込み、次回以降の確認で続きます。
+- Kakeratta由来の投稿は編集・削除できません。変更はKakeratta側で行ってください。ピン留めとローカルの返信は利用できます。
 - 競合した編集・削除はKakerattaを優先し、負けた側のGemiHubの内容は元の投稿の隣に「conflicting edit」「conflicting deletion」として残します。これらは`local-only: true`で、Kakerattaには送信されません。
 - URLまたは認証キーを変更すると新しい同期範囲になります。以前の接続の内容はローカルに残り、新しい接続へは転送されません。
 - 各日次ファイルの同期用メタデータと、同じフォルダの`_kakeratta-sync.json`（履歴の位置）は削除しないでください。

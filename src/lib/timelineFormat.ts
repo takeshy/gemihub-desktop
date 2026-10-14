@@ -1,4 +1,4 @@
-import { parseMemoFile, buildEntryBlock, serializeMemoFile } from "./memoTimeline";
+import { parseMemoFile, buildEntryBlock, serializeMemoFile, isKakerattaImport } from "./memoTimeline";
 
 export interface TimelineEntry {
   id: string;
@@ -60,14 +60,21 @@ export function serializeTimeline(entries: TimelineEntry[], source = "timeline:T
   return serializeMemoFile(source, entries.map(timelineBlock));
 }
 
-/** Preserve metadata when editing, pinning, or recording a deletion for sync. */
-export function changeTimelineEntry(content: string, path: string, id: string, change: (entry: TimelineEntry) => TimelineEntry): string | null {
+/** Preserve metadata when editing or pinning; returning null removes the entry. */
+export function changeTimelineEntry(content: string, path: string, id: string, change: (entry: TimelineEntry) => TimelineEntry | null): string | null {
   const parsed = parseMemoFile(normalizeLegacy(content));
   const entries = parseTimeline(content, path);
   if (!entries.some(entry => entry.id === id)) return null;
-  return serializeMemoFile(parsed.source, entries.map((entry, index) => {
-    if (entry.id === id) return timelineBlock(change(entry));
-    return parsed.entries[index].raw;
+  return serializeMemoFile(parsed.source, entries.flatMap((entry, index) => {
+    if (entry.id === id) {
+      const next = change(entry);
+      if (isKakerattaImport(entry.metadata) &&
+        (!next || next.content !== entry.content || next.deleted !== entry.deleted)) {
+        throw new Error("Edit this post in Kakeratta");
+      }
+      return next ? [timelineBlock(next)] : [];
+    }
+    return [parsed.entries[index].raw];
   }));
 }
 

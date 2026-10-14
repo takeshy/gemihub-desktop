@@ -7,55 +7,49 @@ import type { KakerattaCall } from "./kakerattaWorker.ts";
 
 const at = "2026-10-12T10:00:00.000Z";
 const directory = "Dashboards/Timeline/Timeline";
-const record = (id: string, text: string, revision = "r1", replyTo = ""): KakerattaTimelineRecord => ({
+const record = (id: string, text: string, replyTo = ""): KakerattaTimelineRecord => ({
   entry: { id, text, at, speaker: "user", kind: replyTo ? "reply" : "post", ...(replyTo ? { root: replyTo, replyTo } : {}) },
-  revision, deleteRevision: `delete-${revision}`, authorName: "担当者",
+  authorName: "担当者",
 });
 const local = (id: string, text: string, metadata: Record<string, string> = {}) => parseTimeline(buildEntryBlock({ id, createdAt: at, body: text, metadata }), `${directory}/2026-10-12.md`)[0];
+const response = (rows: KakerattaTimelineRecord[], ids?: string[]) => ({
+  entries: rows.map(row => row.entry),
+  authors: Object.fromEntries(rows.map(row => [row.entry.speaker, row.authorName])),
+  ...(ids ? { missing: ids.filter(id => !rows.some(row => row.entry.id === id)) } : {}),
+});
 function backend(initial: KakerattaTimelineRecord[] = []) {
   const rows = new Map(initial.map(row => [row.entry.id, row]));
   const calls: Record<string, unknown>[] = [];
+  // Importing is read-only: any call carrying entries would be a write.
   const writes: Record<string, unknown>[] = [];
   const call: KakerattaCall = async (name, args) => {
-    assert.equal(name, "sync_timeline");
+    assert.equal(name, "get_timeline");
     calls.push(args);
-    const results: { id: string; status: string }[] = [];
-    for (const value of (args.entries ?? []) as Record<string, unknown>[]) {
-      writes.push(value);
-      const id = value.id as string;
-      const current = rows.get(id);
-      if (value.deleted) {
-        if (current && current.deleteRevision === value.deleteRevision) { rows.delete(id); results.push({ id, status: "applied" }); }
-        else results.push({ id, status: current ? "conflict" : "missing" });
-      } else if (current && value.revision !== current.revision && current.entry.text !== value.text) results.push({ id, status: "conflict" });
-      else {
-        assert.ok(!value.replyTo || rows.has(value.replyTo as string), "parent must exist first");
-        rows.set(id, record(id, value.text as string, "r2", value.replyTo as string));
-        results.push({ id, status: "applied" });
-      }
-    }
-    return { records: [...rows.values()], missing: ((args.ids ?? []) as string[]).filter(id => !rows.has(id)), results, next: "" };
+    if ("entries" in args) writes.push(args);
+    return response([...rows.values()], (args.ids ?? []) as string[]);
   };
   return { call, calls, writes, rows };
 }
-const options = { connection: "connection-a", directory, enabledAt: "2026-10-12T09:00:00.000Z", language: "ja", signal: new AbortController().signal };
+const options = { connection: "connection-a", directory, signal: new AbortController().signal };
 
-test("new posts and cross-day replies synchronize with stable IDs and parent ordering", async () => {
-  const remote = backend();
+test("local posts and replies stay local while remote threads import with stable IDs", async () => {
+  const remote = backend([record("remote-root", "remote post"), record("remote-reply", "remote reply", "remote-root")]);
   const root = local("root", "post");
   const reply = local("reply", "reply", { "root-id": "root", "reply-to": "root" });
   const result = await syncKakerattaTimeline({ ...options, call: remote.call, entries: [reply, root] });
-  assert.equal(remote.writes.length, 2);
-  assert.equal(remote.writes[0].text, "post");
-  assert.equal(remote.writes[1].replyTo, remote.writes[0].id);
-  assert.equal(result.entries.find(entry => entry.id === "reply")?.replyTo, "root");
-  assert.equal(result.entries.find(entry => entry.id === "root")?.authorName, "担当者");
-  await syncKakerattaTimeline({ ...options, call: remote.call, entries: result.entries, cursor: result.cursor });
-  assert.equal(remote.writes.length, 2, "an acknowledged retry must not submit again");
+  assert.equal(remote.writes.length, 0);
+  assert.deepEqual(result.entries.slice(0, 2), [reply, root]);
+  const importedRoot = result.entries.find(entry => entry.metadata["kakeratta-id"] === "remote-root")!;
+  const importedReply = result.entries.find(entry => entry.metadata["kakeratta-id"] === "remote-reply")!;
+  assert.equal(importedReply.replyTo, importedRoot.id);
+  assert.equal(importedReply.authorName, "担当者");
+  const retry = await syncKakerattaTimeline({ ...options, call: remote.call, entries: result.entries, cursor: result.cursor });
+  assert.deepEqual(retry.entries.map(entry => entry.id), result.entries.map(entry => entry.id));
+  assert.ok(remote.calls.every(call => !("entries" in call)));
 });
 
 test("simultaneous edits keep Kakeratta and archive the local edit without uploading it", async () => {
-  const remote = backend([record("remote", "Kakeratta edit", "r2")]);
+  const remote = backend([record("remote", "Kakeratta edit")]);
   const entry = local("ours", "GemiHub edit", { "kakeratta-id": "remote", "kakeratta-connection": options.connection, "kakeratta-revision": "r1", "kakeratta-base": JSON.stringify({ content: "original", deleted: false }) });
   const result = await syncKakerattaTimeline({ ...options, call: remote.call, entries: [entry] });
   assert.equal(remote.writes.length, 0);
@@ -87,48 +81,30 @@ test("connection changes archive previous bound content instead of sending it el
   assert.ok(remote.calls.every(call => !(call.ids as string[]).includes("old-remote")));
 });
 
-test("historical imports are silent and new posts request ordinary persona routing", async () => {
-  const remote = backend();
-  await syncKakerattaTimeline({ ...options, enabledAt: "2026-10-12T11:00:00.000Z", call: remote.call, entries: [local("old", "historical")] });
-  assert.equal(remote.writes[0].react, false);
-  await syncKakerattaTimeline({ ...options, call: remote.call, entries: [local("new", "new")] });
-  assert.equal(remote.writes[1].react, true);
-});
-
-test("local deletion uses its acknowledged subtree revision, preserving replies added remotely", async () => {
-  const remote = backend([record("remote", "original", "r2")]);
-  const entry = local("ours", "original", { deleted: "true", "kakeratta-id": "remote", "kakeratta-connection": options.connection, "kakeratta-delete-revision": "delete-r1", "kakeratta-base": JSON.stringify({ content: "original", deleted: false }) });
-  const result = await syncKakerattaTimeline({ ...options, call: remote.call, entries: [entry] });
-  assert.equal(remote.writes[0].deleteRevision, "delete-r1");
-  assert.equal(result.entries[0].deleted, false);
-  assert.equal(result.entries[1].metadata["conflict-operation"], "delete");
-});
-
-test("a lost creation response is reconciled without another creation", async () => {
-  const remote = backend();
-  let lost = false;
-  const call: KakerattaCall = async (name, args) => {
-    const result = await remote.call(name, args);
-    if (args.entries && !lost) { lost = true; throw new Error("Response lost"); }
-    return result;
-  };
-  const original = local("post", "content");
-  await assert.rejects(syncKakerattaTimeline({ ...options, call, entries: [original] }));
-  const retried = await syncKakerattaTimeline({ ...options, call, entries: [original] });
-  assert.equal(remote.rows.size, 1);
-  assert.equal(remote.writes.length, 1);
-  assert.ok(retried.entries[0].metadata["kakeratta-base"]);
+test("legacy local edits and deletions never mutate unchanged remote posts", async () => {
+  for (const deleted of [false, true]) {
+    const remote = backend([record("remote", "original")]);
+    const entry = local("ours", deleted ? "original" : "local edit", {
+      deleted: String(deleted), "kakeratta-id": "remote", "kakeratta-connection": options.connection,
+      "kakeratta-base": JSON.stringify({ content: "original", deleted: false }),
+    });
+    const result = await syncKakerattaTimeline({ ...options, call: remote.call, entries: [entry] });
+    assert.equal(remote.writes.length, 0);
+    assert.equal(result.entries[0].content, "original");
+    assert.equal(result.entries[0].deleted, false);
+    assert.equal(result.entries[1].metadata["conflict-operation"], deleted ? "delete" : "edit");
+  }
 });
 
 test("history scanning continues after backfill to discover older new imports", async () => {
   const requests: Record<string, unknown>[] = [];
   const call: KakerattaCall = async (_name, args) => {
     requests.push(args);
-    return { records: args.before === "old-page" ? [record("old-import", "older imported post")] : [], missing: [], results: [], next: "" };
+    return response(args.before === "old-page" ? [record("old-import", "older imported post")] : []);
   };
   const result = await syncKakerattaTimeline({ ...options, call, entries: [], cursor: { connection: options.connection, complete: true, before: "old-page" } });
   assert.equal(requests[0].before, "old-page");
-  assert.equal(requests[1].before, "");
+  assert.equal(requests[1].before, undefined);
   assert.equal(result.entries[0].content, "older imported post");
 });
 
@@ -141,11 +117,23 @@ test("replies to local conflict copies remain local and never reach Kakeratta", 
   assert.equal(result.entries[0].metadata["local-only"], "true");
 });
 
-test("a definitive missing creation is acknowledged as deleted and its content is retained", async () => {
-  const call: KakerattaCall = async (_name, args) => ({ records: [], missing: [], next: "", results: ((args.entries ?? []) as { id: string }[]).map(change => ({ id: change.id, status: "missing" })) });
-  const result = await syncKakerattaTimeline({ ...options, call, entries: [local("uncertain", "retained content")] });
-  assert.equal(result.entries[0].deleted, true);
-  assert.equal(JSON.parse(result.entries[0].metadata["kakeratta-base"]).deleted, true);
-  assert.equal(result.entries[1].content, "retained content");
-  assert.equal(result.entries[1].metadata["local-only"], "true");
+test("legacy unacknowledged local posts become plain local posts when Kakeratta lacks them", async () => {
+  const remote = backend();
+  const entry = local("uncertain", "retained content", { "kakeratta-id": "gh-legacy", "kakeratta-connection": options.connection });
+  const result = await syncKakerattaTimeline({ ...options, call: remote.call, entries: [entry] });
+  assert.equal(remote.writes.length, 0);
+  assert.ok((remote.calls[0].ids as string[]).includes("gh-legacy"));
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].content, "retained content");
+  assert.equal(result.entries[0].metadata["kakeratta-id"], undefined);
+  assert.equal(result.entries[0].metadata["kakeratta-connection"], undefined);
+});
+
+test("legacy unacknowledged posts that did reach Kakeratta are imported", async () => {
+  const remote = backend([record("gh-arrived", "same content")]);
+  const entry = local("arrived", "same content", { "kakeratta-id": "gh-arrived", "kakeratta-connection": options.connection });
+  const result = await syncKakerattaTimeline({ ...options, call: remote.call, entries: [entry] });
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].id, "arrived");
+  assert.ok(result.entries[0].metadata["kakeratta-base"]);
 });

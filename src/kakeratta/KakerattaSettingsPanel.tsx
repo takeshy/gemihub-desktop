@@ -105,15 +105,7 @@ export function KakerattaSettingsPanel(
     ...new Set([...personas.map((p) => p.id), ...Object.keys(config.personas)]),
   ];
   const enableSync = (enabled: boolean) =>
-    update({
-      timelineSync: {
-        ...config.timelineSync,
-        enabled,
-        enabledAt: enabled && !config.timelineSync.enabled
-          ? new Date().toISOString()
-          : config.timelineSync.enabledAt,
-      },
-    });
+    update({ timelineSync: { ...config.timelineSync, enabled } });
   const httpServers = settings.mcpServers.filter((server) =>
     server.enabled && server.transport === "http" && server.id
   );
@@ -210,12 +202,11 @@ export function KakerattaSettingsPanel(
         <div>
           <strong>Timeline synchronization</strong>
           <p>
-            Synchronize posts, replies and author names with Kakeratta. The
-            connected server must provide the sync_timeline tool. Kakeratta
-            wins conflicts; your local version is kept beside it as a
-            conflicting edit and is never sent to Kakeratta. Historical imports
-            do not wake personas; posts and replies added after enabling
-            follow Kakeratta's routing and provider billing.
+            Import posts, replies and author names from Kakeratta. Local posts,
+            replies, edits and deletions are never sent to Kakeratta. Imported
+            posts are read-only here; edit or delete them in Kakeratta.
+            Uses the read-only get_timeline tool of the connected server.
+            History is imported in pages on subsequent checks.
           </p>
         </div>
       </section>
@@ -225,7 +216,7 @@ export function KakerattaSettingsPanel(
           checked={config.timelineSync.enabled}
           onChange={(event) => enableSync(event.target.checked)}
         />
-        Synchronize Timeline with Kakeratta
+        Import Timeline from Kakeratta
       </label>
       <label className="settings-field">
         <span>Timeline name</span>

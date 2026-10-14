@@ -14609,6 +14609,11 @@ body.resizing-modal {
   background: transparent;
 }
 
+/* Posts sit in grid threads, where the editor's height: 100% would resolve
+   to the whole article and push Show more outside it, under the next post. */
+.timeline-feed .markdown-preview {
+  height: auto;
+}
 .timeline-feed .markdown-preview img {
   display: block;
   max-width: 100%;

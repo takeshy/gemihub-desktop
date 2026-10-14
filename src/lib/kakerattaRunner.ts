@@ -27,7 +27,6 @@ export interface KakerattaCycleResult {
   timeline?: {
     files: number;
     conflicts: number;
-    pending: number;
     backfillPending: boolean;
   };
   timelineError?: string;
@@ -52,7 +51,6 @@ function generator(
 /** One check: Timeline synchronization, persona asks, then direct requests. */
 export async function runKakerattaCycle(
   settings: ChatSettings,
-  language: string,
   parent: AbortSignal,
 ): Promise<KakerattaCycleResult> {
   const config = settings.kakeratta;
@@ -79,7 +77,6 @@ export async function runKakerattaCycle(
             config,
             call,
             fingerprint,
-            language,
             controller.signal,
           );
         } catch (error) {

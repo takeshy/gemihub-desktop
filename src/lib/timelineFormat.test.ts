@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { buildEntryBlock } from "./memoTimeline.ts";
+import { buildEntryBlock, serializeMemoFile } from "./memoTimeline.ts";
 import { parseTimeline, changeTimelineEntry, timelineThreads } from "./timelineFormat.ts";
 
 const at = "2026-10-12T10:00:00.000Z";
@@ -58,4 +58,22 @@ test("editing a post leaves unrelated raw blocks and Markdown horizontal rules i
 test("a legacy-looking marker inside a message stays literal", () => {
   const body = `Example:\n<!-- timeline-post: ${at} -->\nend`;
   assert.equal(parseTimeline(block("post", {}, body), "day.md")[0].content, body);
+});
+
+test("Kakeratta imports reject edits and deletions but permit local pinning", () => {
+  const source = block("imported", { "kakeratta-id": "remote-id", "kakeratta-base": JSON.stringify({ content: "imported", deleted: false }) });
+  assert.throws(() => changeTimelineEntry(source, "day.md", "imported", entry => ({ ...entry, content: "changed" })), /Kakeratta/);
+  assert.throws(() => changeTimelineEntry(source, "day.md", "imported", entry => ({ ...entry, deleted: true })), /Kakeratta/);
+  assert.throws(() => changeTimelineEntry(source, "day.md", "imported", () => null), /Kakeratta/);
+  const pinned = changeTimelineEntry(source, "day.md", "imported", entry => ({ ...entry, pinned: true }))!;
+  assert.equal(parseTimeline(pinned, "day.md")[0].pinned, true);
+  const conflict = block("copy", { "local-only": "true", "conflict-of": "imported" });
+  assert.ok(changeTimelineEntry(conflict, "day.md", "copy", entry => ({ ...entry, content: "local" })));
+});
+
+test("posts never acknowledged by Kakeratta stay editable and can be removed", () => {
+  const source = serializeMemoFile("timeline:Timeline", [block("legacy", { "kakeratta-id": "gh-legacy", "kakeratta-connection": "c" }), block("other", {})]);
+  assert.ok(changeTimelineEntry(source, "day.md", "legacy", entry => ({ ...entry, content: "edited" })));
+  const removed = changeTimelineEntry(source, "day.md", "legacy", () => null)!;
+  assert.deepEqual(parseTimeline(removed, "day.md").map(entry => entry.id), ["other"]);
 });

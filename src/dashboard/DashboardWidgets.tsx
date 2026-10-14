@@ -1,3 +1,7 @@
+import { BlueskyDialog } from "../social/BlueskyDialog";
+import { useI18n } from "../i18n/context";
+import { desktopBluesky } from "../lib/wailsBackend";
+import { BLUESKY_CHANGED_EVENT, type BlueskyEntry } from "../lib/bluesky";
 import {
   type DragEvent,
   type FormEvent,
@@ -78,6 +82,7 @@ import {
   appendEntryBlock,
   buildEntryBlock,
   deleteEntry,
+  isKakerattaImport,
   parseMemoFile,
   replaceEntryBody,
   setEntryPinned,
@@ -674,6 +679,7 @@ export function TimelineDashboardWidget(
     initialComposerOpen?: boolean;
   },
 ) {
+  const { language } = useI18n();
   const name = configText(config, "name");
   const folder = timelineFolder(name);
   const composerMode = config.composerMode === "wysiwyg" ? "wysiwyg" : "raw";
@@ -694,6 +700,23 @@ export function TimelineDashboardWidget(
     [from, setFrom] = useState(""),
     [to, setTo] = useState(""),
     [pinnedOnly, setPinnedOnly] = useState(false);
+  const [blueskySelection, setBlueskySelection] = useState<{ entries: BlueskyEntry[]; initialId: string } | null>(null);
+  // Offered only while Bluesky is on in Settings and an account is connected.
+  const blueskyEnabled = settings.bluesky.enabled;
+  const [blueskyReady, setBlueskyReady] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const check = () => {
+      if (!blueskyEnabled) { setBlueskyReady(false); return; }
+      desktopBluesky.status().then(
+        (status) => { if (active) setBlueskyReady(status.connected); },
+        () => { if (active) setBlueskyReady(false); },
+      );
+    };
+    check();
+    window.addEventListener(BLUESKY_CHANGED_EVENT, check);
+    return () => { active = false; window.removeEventListener(BLUESKY_CHANGED_EVENT, check); };
+  }, [blueskyEnabled]);
   const [composerOpen, setComposerOpen] = useState(initialComposerOpen),
     [editing, setEditing] = useState<TimelineItem | null>(null),
     [expandedPosts, setExpandedPosts] = useState<Set<string>>(() => new Set()),
@@ -790,7 +813,7 @@ export function TimelineDashboardWidget(
         path = `${folder}/${now.toISOString().slice(0, 10)}.md`;
       await withTimelineFileLock(path, async () => {
         const current = (await readWorkspaceFile(path))?.content || "";
-        // AI replies stay local: Kakeratta only synchronizes user posts.
+        // Timeline replies stay local; Kakeratta synchronization only imports.
         await writeWorkspaceFile(
           path,
           appendEntryBlock(
@@ -895,30 +918,21 @@ export function TimelineDashboardWidget(
     if (askAI) await answerPost(created);
   };
   const mutate = async (item: TimelineItem, kind: "pin" | "delete") => {
+    if (kind === "delete" && isKakerattaImport(item.metadata)) return;
     if (kind === "delete" && !confirm("Delete this timeline post?")) return;
     await withTimelineFileLock(item.path, async () => {
       const file = await readWorkspaceFile(item.path);
       if (!file) return;
-      // Keep a tombstone even before the first sync so an in-flight upload
-      // cannot restore a post deleted while waiting for its response.
+      // Nothing is sent to Kakeratta, so a deletion needs no tombstone.
       const next = kind === "pin"
         ? setEntryPinned(file.content, item.id, !item.pinned)
-        : changeTimelineEntry(
-          file.content,
-          item.path,
-          item.id,
-          (entry) => ({
-            ...entry,
-            deleted: true,
-            metadata: { ...entry.metadata, deleted: "true" },
-          }),
-        );
+        : changeTimelineEntry(file.content, item.path, item.id, () => null);
       if (next !== null) await writeWorkspaceFile(item.path, next);
     });
     await load();
   };
   const saveEdit = async () => {
-    if (!editing || !editDraft.trim()) return;
+    if (!editing || !editDraft.trim() || isKakerattaImport(editing.metadata)) return;
     // Saving an @ai post asks the AI again, so wait for a running answer.
     const askAI = editing.speaker === "user" && hasAiMention(editDraft);
     if (askAI && aiBusyRef.current) return;
@@ -1059,6 +1073,7 @@ export function TimelineDashboardWidget(
                       <Loader2 size={11} className="spin" /> AI is answering…
                     </span>
                   )}
+                  {isKakerattaImport(item.metadata) && <span title="Edit or delete this post in Kakeratta">Kakeratta · Read-only</span>}
                   <code>{item.id}</code>
                   {!isEditing && (
                     <div>
@@ -1075,6 +1090,10 @@ export function TimelineDashboardWidget(
                       >
                         <MessageSquare size={11} />
                       </button>
+                      {blueskyReady && <button type="button" title="Post to Bluesky" onClick={() => {
+                        const thread = timelineThreads(allEntries).find(thread => [thread.root, ...thread.replies].some(entry => entry.id === item.id));
+                        if (thread) setBlueskySelection({ entries: [thread.root, ...thread.replies].filter(entry => !entry.deleted), initialId: item.id });
+                      }}>Bluesky</button>}
                       <button
                         type="button"
                         className={item.pinned ? "active" : ""}
@@ -1084,6 +1103,8 @@ export function TimelineDashboardWidget(
                       </button>
                       <button
                         type="button"
+                        disabled={isKakerattaImport(item.metadata)}
+                        title={isKakerattaImport(item.metadata) ? "Edit this post in Kakeratta" : "Edit"}
                         onClick={() => {
                           setEditing(item);
                           setEditDraft(item.body);
@@ -1093,6 +1114,8 @@ export function TimelineDashboardWidget(
                       </button>
                       <button
                         type="button"
+                        disabled={isKakerattaImport(item.metadata)}
+                        title={isKakerattaImport(item.metadata) ? "Delete this post in Kakeratta" : "Delete"}
                         onClick={() => void mutate(item, "delete")}
                       >
                         <X size={11} />
@@ -1180,6 +1203,17 @@ export function TimelineDashboardWidget(
   }
   return (
     <div className="dashboard-timeline-widget">
+      {blueskySelection && blueskyReady && (
+        <BlueskyDialog
+          {...blueskySelection}
+          adapter={desktopBluesky}
+          language={language}
+          renderMarkdown={(entry) => (
+            <TimelinePostMarkdown body={entry.content} sourcePath={entry.sourcePath} isDark={false} onLinkClick={() => {}} />
+          )}
+          onClose={() => setBlueskySelection(null)}
+        />
+      )}
       <div className="timeline-toolbar">
         <strong>{name}</strong>
         <select

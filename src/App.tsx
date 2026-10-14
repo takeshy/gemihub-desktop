@@ -40,6 +40,7 @@ import {
   Redo2,
   Rows2,
   Search,
+  Send,
   Server,
   Settings,
   Sun,
@@ -81,6 +82,7 @@ import {
 import type { DashboardFileEntry } from "./dashboard/types";
 import { I18nProvider, useI18n } from "./i18n/context";
 import { KakerattaSettingsPanel } from "./kakeratta/KakerattaSettingsPanel";
+import { BlueskySettingsPanel } from "./social/BlueskySettingsPanel";
 import { useKakeratta } from "./kakeratta/useKakeratta";
 import {
   type LanguageSetting,
@@ -139,6 +141,7 @@ import {
   updateRecentDirectories,
 } from "./lib/recentDirectories";
 import {
+  desktopBluesky,
   listCLIModels,
   selectCLIPath,
   type CLIModelOption,
@@ -1109,6 +1112,7 @@ export default function App() {
     | "mcp"
     | "discord"
     | "kakeratta"
+    | "bluesky"
     | "plugins"
   >("general");
   const [chatSettings, setChatSettings] = useState(loadChatSettings);
@@ -1632,7 +1636,6 @@ export default function App() {
   };
   const { status: kakerattaStatus, runNow: checkKakerattaNow } = useKakeratta(
     kakerattaSettings,
-    language,
   );
 
   useEffect(() => {
@@ -3250,6 +3253,13 @@ export default function App() {
                       </button>
                     </>
                   )}
+                  <button
+                    type="button"
+                    className={settingsSection === "bluesky" ? "active" : ""}
+                    onClick={() => setSettingsSection("bluesky")}
+                  >
+                    <Send size={16} /> Bluesky
+                  </button>
                   <button
                     type="button"
                     className={settingsSection === "plugins" ? "active" : ""}
@@ -6091,6 +6101,14 @@ export default function App() {
                       onChange={(kakeratta) =>
                         setChatSettings((current) => ({ ...current, kakeratta }))}
                       onCheckNow={() => void checkKakerattaNow()}
+                    />
+                  )}
+                  {settingsSection === "bluesky" && (
+                    <BlueskySettingsPanel
+                      enabled={chatSettings.bluesky.enabled}
+                      adapter={desktopBluesky}
+                      onEnabledChange={(enabled) =>
+                        setChatSettings((current) => ({ ...current, bluesky: { enabled } }))}
                     />
                   )}
                   {settingsSection === "discord" && (

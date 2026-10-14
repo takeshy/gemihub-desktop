@@ -7,7 +7,6 @@ import {
 import type { KakerattaCall } from "./kakerattaWorker";
 
 const TOOLS = new Set([
-  "sync_timeline",
   "list_personas",
   "list_asks",
   "claim_ask",

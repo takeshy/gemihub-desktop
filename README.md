@@ -316,7 +316,7 @@ gemihub-desktop note.md research.pdf book.epub
 Requirements:
 
 - Node.js 24 or newer
-- Go 1.25 or newer
+- Go 1.26 or newer
 - Wails v3.0.0-beta.12 (`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.12`)
 - Wails platform dependencies for your OS
 

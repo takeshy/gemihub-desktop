@@ -1,3 +1,5 @@
+import { prepareBlueskyImage, type BlueskyConnection, type BlueskyPost } from "./bluesky";
+
 export interface LocalFileResult {
   path: string;
   fileName: string;
@@ -584,6 +586,12 @@ interface WailsAppApi {
   FinishLiveSpeech: (sessionID: string) => Promise<void>;
   StopLiveSpeech: () => Promise<void>;
   DisconnectVertexOAuth: () => Promise<void>;
+  ReadBlueskyImage: (candidates: string[]) => Promise<{ data: string; mime: string }>;
+  GetBlueskyStatus: () => Promise<BlueskyConnection>;
+  ConnectBluesky: (handle: string) => Promise<BlueskyConnection>;
+  CancelBlueskyConnect: () => Promise<void>;
+  DisconnectBluesky: () => Promise<void>;
+  PublishBluesky: (posts: BlueskyPost[], did: string) => Promise<{ urls: string[] }>;
   ConnectMCPOAuth: (request: MCPOAuthConnectRequest) => Promise<MCPOAuthStatus>;
   GetMCPOAuthStatus: (
     serverID: string,
@@ -1652,3 +1660,12 @@ export function onWailsFileDrop(
     }, 0);
   };
 }
+
+export const desktopBluesky = {
+  async image(candidates: string[], alt: string) { const api = appApi(); if (!api) throw new Error("Open the desktop app to prepare images"); const image = await api.ReadBlueskyImage(candidates); return prepareBlueskyImage(image.data, image.mime, alt); },
+  async status() { return await appApi()?.GetBlueskyStatus() ?? { connected: false }; },
+  async connect(handle: string) { const api = appApi(); if (!api) throw new Error("Open the desktop app to connect Bluesky"); await api.ConnectBluesky(handle); },
+  async cancelConnect() { await appApi()?.CancelBlueskyConnect(); },
+  async disconnect() { await appApi()?.DisconnectBluesky(); },
+  async publish(posts: BlueskyPost[], did: string) { const api = appApi(); if (!api) throw new Error("Open the desktop app to publish"); return api.PublishBluesky(posts, did); },
+};

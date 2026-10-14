@@ -16,7 +16,7 @@ export interface KakerattaSettings {
   pollEnabled: boolean;
   url: string;
   headers: Record<string, string>;
-  timelineSync: { enabled: boolean; name: string; enabledAt: string };
+  timelineSync: { enabled: boolean; name: string };
   defaultProfile: KakerattaProfile;
   personas: Record<string, KakerattaProfile>;
   direct: KakerattaDirectProfile;
@@ -36,7 +36,7 @@ export const defaultKakerattaSettings = (): KakerattaSettings => ({
   pollEnabled: true,
   url: "",
   headers: {},
-  timelineSync: { enabled: false, name: "Timeline", enabledAt: "" },
+  timelineSync: { enabled: false, name: "Timeline" },
   defaultProfile: defaultKakerattaProfile(),
   personas: {},
   direct: {
@@ -91,7 +91,6 @@ export function normalizeKakerattaSettings(value: unknown): KakerattaSettings {
       name: name && name.length <= 80 && TIMELINE_NAME.test(name)
         ? name
         : defaults.timelineSync.name,
-      enabledAt: typeof sync.enabledAt === "string" ? sync.enabledAt : "",
     },
     defaultProfile: profile(source.defaultProfile),
     personas,

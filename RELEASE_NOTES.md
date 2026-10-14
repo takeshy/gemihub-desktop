@@ -1,3 +1,25 @@
+# GemiHub Desktop v1.10.0
+
+## What's new
+
+- Post Timeline threads to Bluesky. Turn it on and connect an account in
+  Settings > Bluesky (Bluesky's authorization screen; no password is entered in
+  GemiHub). Timeline posts then show a Bluesky button: pick posts of the
+  conversation, choose Text or Image for each, and publish directly. Image
+  posts show the post as it looks in the Timeline, with links kept in the text.
+
+## Changes
+
+- Kakeratta Timeline synchronization is now import only and uses Kakeratta's
+  read-only `get_timeline` tool. Local posts, replies, edits and deletions are
+  never sent to Kakeratta, and imported posts are read-only here.
+- Local posts that never reached Kakeratta become ordinary editable posts again.
+
+## Fixes
+
+- Fixed the Timeline Show more button appearing under the next post and not
+  responding to clicks.
+
 # GemiHub Desktop v1.9.0
 
 ## What's new
